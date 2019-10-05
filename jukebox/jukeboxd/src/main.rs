@@ -1,4 +1,8 @@
 use failure::Fallible;
+#[macro_use]
+extern crate rust_embed;
+// use rust_embed::{RustEmbed, folder};
+use rust_embed::RustEmbed;
 use signal_hook::{iterator::Signals, SIGINT};
 use slog::{self, o, Drain};
 use slog_async;
@@ -416,7 +420,28 @@ mod server {
         // build a router with the chain & pipeline
         build_router(chain, pipelines, |route| {
             route.get("/access-token").to(access_token_handler);
+            route.get("/player").to(player_handler);
         })
+    }
+
+    #[derive(RustEmbed)]
+    #[folder = "frontend/"]
+    struct Asset;
+
+    pub fn player_handler(mut state: GothamState) -> (GothamState, Response<Body>) {
+        use gotham::helpers::http::response::create_response;
+        use hyper::header::HeaderValue;
+
+        let index_html = Asset::get("index.html").unwrap();
+
+        let mut res = create_response(
+            &state,
+            hyper::StatusCode::OK,
+            mime::TEXT_HTML_UTF_8,
+            index_html,
+        );
+
+        (state, res)
     }
 
     pub fn access_token_handler(mut state: GothamState) -> (GothamState, Response<Body>) {
