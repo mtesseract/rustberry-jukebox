@@ -7,43 +7,82 @@ use slog_term;
 
 mod user_requests {
 
-    use serde::Deserialize;
-    use std::marker::PhantomData;
+    use failure::Fallible;
+    use serde::de::DeserializeOwned;
+    use slog_scope::info;
+    use std::io::BufRead;
     use std::sync::mpsc;
     use std::sync::mpsc::{Receiver, Sender};
+    pub trait UserRequestTransmitter<T: DeserializeOwned> {
+        fn run(&self, tx: Sender<Option<T>>) -> Fallible<()>;
+    }
 
     pub struct UserRequests<T>
     where
         T: Sync + Send + 'static,
     {
-        _phantom: PhantomData<T>,
         rx: Receiver<Option<T>>,
     }
 
-    impl<'de, T: Deserialize<'de> + Clone + PartialEq + Sync + Send + 'static> UserRequests<T> {
-        fn transmit_events(tx: Sender<Option<T>>) {
-            let mut last: Option<T> = None;
-            let def = "\"spotify:album:2Aiv0ThDpFa7lqHphR6MN5\"";
+    pub mod stdin {
+        use super::*;
+        use std::env;
 
-            loop {
-                let req = Some(serde_json::from_str(def).unwrap());
-                if req != last {
-                    tx.send(req.clone()).unwrap();
-                    last = req;
+        pub struct UserRequestTransmitterStdin<T> {
+            first_req: Option<T>,
+        }
+
+        impl<T: DeserializeOwned + std::fmt::Debug> UserRequestTransmitterStdin<T> {
+            pub fn new() -> Self {
+                let first_req = env::var("FIRST_REQUEST")
+                    .ok()
+                    .map(|x| serde_json::from_str(&x).unwrap());
+                if let Some(ref first_req) = first_req {
+                    info!("Using first request {:?}", first_req);
                 }
-                std::thread::sleep(std::time::Duration::from_secs(1));
+                UserRequestTransmitterStdin { first_req }
             }
         }
 
-        pub fn new() -> Self {
-            let (tx, rx): (Sender<Option<T>>, Receiver<Option<T>>) = mpsc::channel();
+        impl<T: DeserializeOwned + PartialEq + Clone> UserRequestTransmitter<T>
+            for UserRequestTransmitterStdin<T>
+        {
+            fn run(&self, tx: Sender<Option<T>>) -> Fallible<()> {
+                let mut last: Option<T> = None;
+                let def = "\"spotify:album:2Aiv0ThDpFa7lqHphR6MN5\"";
 
-            std::thread::spawn(move || Self::transmit_events(tx));
+                if self.first_req.is_some() {
+                    tx.send(self.first_req.clone()).unwrap();
+                }
 
-            Self {
-                rx,
-                _phantom: PhantomData,
+                let stdin = std::io::stdin();
+                for line in stdin.lock().lines() {
+                    if let Ok(ref line) = line {
+                        let req = if line == "" {
+                            None
+                        } else {
+                            Some(serde_json::from_str(line).unwrap())
+                        };
+                        if last != req {
+                            tx.send(req.clone()).unwrap();
+                        }
+                        last = req;
+                    }
+                }
+
+                panic!();
             }
+        }
+    }
+
+    impl<T: DeserializeOwned + Clone + PartialEq + Sync + Send + 'static> UserRequests<T> {
+        pub fn new<TX>(transmitter: TX) -> Self
+        where
+            TX: Send + 'static + UserRequestTransmitter<T>,
+        {
+            let (tx, rx): (Sender<Option<T>>, Receiver<Option<T>>) = mpsc::channel();
+            std::thread::spawn(move || transmitter.run(tx));
+            Self { rx }
         }
     }
 
@@ -297,7 +336,6 @@ mod access_token_provider {
             let rsp_json: RefreshTokenResponse = res.json()?;
             Ok(rsp_json)
         }
-
     }
 }
 
@@ -359,8 +397,10 @@ fn run_application() -> Fallible<()> {
         });
     }
 
+    let transmitter = user_requests::stdin::UserRequestTransmitterStdin::new();
+
     let user_requests_producer: user_requests::UserRequests<String> =
-        user_requests::UserRequests::new();
+        user_requests::UserRequests::new(transmitter);
     user_requests_producer.for_each(|req| match req {
         Some(req) => {
             info!("Starting playback");
@@ -455,5 +495,4 @@ mod server {
 
         Ok(())
     }
-
 }
