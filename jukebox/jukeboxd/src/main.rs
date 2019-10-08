@@ -197,7 +197,7 @@ mod access_token_provider {
 
     use failure::Error;
     use gotham_derive::StateData;
-    use slog_scope::info;
+    use slog_scope::{info, warn};
 
     use spotify_auth::request_fresh_token;
 
@@ -215,7 +215,7 @@ mod access_token_provider {
             (*access_token).as_ref().ok().cloned()
         }
         pub fn get_bearer_token(&mut self) -> Option<String> {
-            self.get_token().map(|token| format!("Bearer {}", token))
+            self.get_token().map(|token| format!("Bearer {}", &token))
         }
 
         pub fn new(
@@ -235,7 +235,11 @@ mod access_token_provider {
                     {
                         let token = request_fresh_token(&client_id, &client_secret, &refresh_token)
                             .map(|x| x.access_token);
-                        info!("Retrieved fresh access token");
+                        if let Ok(ref token) = token {
+                            info!("Retrieved fresh access token"; "access_token" => token);
+                        } else {
+                            warn!("Failed to retrieve access token");
+                        }
                         let mut access_token_write = access_token_clone.write().unwrap();
                         *access_token_write = token;
                     }
@@ -428,7 +432,7 @@ mod server {
     #[folder = "frontend/"]
     struct Asset;
 
-    pub fn player_handler(mut state: GothamState) -> (GothamState, Response<Body>) {
+    pub fn player_handler(state: GothamState) -> (GothamState, Response<Body>) {
         use gotham::helpers::http::response::create_response;
         use hyper::header::HeaderValue;
 
