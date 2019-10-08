@@ -1,8 +1,6 @@
 use failure::Fallible;
 #[macro_use]
 extern crate rust_embed;
-// use rust_embed::{RustEmbed, folder};
-use rust_embed::RustEmbed;
 use signal_hook::{iterator::Signals, SIGINT};
 use slog::{self, o, Drain};
 use slog_async;
