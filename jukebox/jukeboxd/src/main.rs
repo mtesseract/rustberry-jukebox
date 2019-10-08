@@ -53,10 +53,10 @@ mod user_requests {
         {
             fn run(&self, tx: Sender<Option<T>>) -> Fallible<()> {
                 let mut last: Option<T> = None;
-                let def = "\"spotify:album:2Aiv0ThDpFa7lqHphR6MN5\"";
 
                 if self.first_req.is_some() {
                     tx.send(self.first_req.clone()).unwrap();
+                    last = self.first_req.clone();
                 }
 
                 let stdin = std::io::stdin();
@@ -177,7 +177,7 @@ mod spotify_play {
 
     #[derive(Debug, Clone, Serialize)]
     struct StartPlayback {
-        context_uri: String,
+        uris: Vec<String>,
     }
 
     #[derive(Debug, Clone, Serialize)]
@@ -200,7 +200,7 @@ mod spotify_play {
         pub fn start_playback(&mut self, spotify_uri: &str) -> Fallible<()> {
             let access_token = self.access_token_provider.get_bearer_token().unwrap();
             let req = StartPlayback {
-                context_uri: spotify_uri.clone().to_string(),
+                uris: vec![spotify_uri.clone().to_string()],
             };
             let rsp = self
                 .http_client
@@ -209,6 +209,9 @@ mod spotify_play {
                 .header(AUTHORIZATION, &access_token)
                 .json(&req)
                 .send()?;
+            // dbg!(&rsp);
+            // let body = rsp.text();
+            // dbg!(&body);
             assert!(rsp.status().is_success());
 
             Ok(())
