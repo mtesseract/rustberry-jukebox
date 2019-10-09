@@ -77,6 +77,59 @@ mod user_requests {
         }
     }
 
+    pub mod tcp {
+        use super::*;
+        use std::env;
+        use std::io::{BufReader, Read};
+        use std::net::{TcpListener, TcpStream};
+
+        pub struct UserRequestTransmitterTcp<T> {
+            listen_addr: String,
+            phantom: Option<T>,
+        }
+
+        impl<T: DeserializeOwned + std::fmt::Debug> UserRequestTransmitterTcp<T> {
+            pub fn new() -> Self {
+                let listen_addr = env::var("USER_REQUESTS_LISTEN_ADDR").unwrap().clone();
+                info!("Listening on {} for user requests", listen_addr);
+                UserRequestTransmitterTcp {
+                    listen_addr,
+                    phantom: None,
+                }
+            }
+        }
+
+        impl<T: DeserializeOwned + PartialEq + Clone> UserRequestTransmitter<T>
+            for UserRequestTransmitterTcp<T>
+        {
+            fn run(&self, tx: Sender<Option<T>>) -> Fallible<()> {
+                let mut last: Option<T> = None;
+                let listener = TcpListener::bind(&self.listen_addr)?;
+
+                // accept connections and process them serially
+                for stream in listener.incoming() {
+                    let stream = BufReader::new(stream.unwrap());
+
+                    for line in stream.lines() {
+                        if let Ok(ref line) = line {
+                            let req = if line == "" {
+                                None
+                            } else {
+                                Some(serde_json::from_str(line).unwrap())
+                            };
+                            if last != req {
+                                tx.send(req.clone()).unwrap();
+                            }
+                            last = req;
+                        }
+                    }
+                }
+
+                panic!();
+            }
+        }
+    }
+
     impl<T: DeserializeOwned + Clone + PartialEq + Sync + Send + 'static> UserRequests<T> {
         pub fn new<TX>(transmitter: TX) -> Self
         where
@@ -406,7 +459,8 @@ fn run_application() -> Fallible<()> {
         });
     }
 
-    let transmitter = user_requests::stdin::UserRequestTransmitterStdin::new();
+    // let transmitter = user_requests::stdin::UserRequestTransmitterStdin::new();
+    let transmitter = user_requests::tcp::UserRequestTransmitterTcp::new();
 
     let user_requests_producer: user_requests::UserRequests<String> =
         user_requests::UserRequests::new(transmitter);
@@ -423,6 +477,19 @@ fn run_application() -> Fallible<()> {
 
     Ok(())
 }
+
+// mod gpio {
+//     use gpio_cdev::{Chip, LineRequestFlags};
+
+//     struct GpioControl;
+
+//     impl GpioControl {
+//         pub fn new() -> Self {
+//             let mut chip = Chip::new("/dev/gpiochip0")?;
+//             GpioControl
+//         }
+//     }
+// }
 
 fn main() -> Fallible<()> {
     let decorator = slog_term::TermDecorator::new().build();
