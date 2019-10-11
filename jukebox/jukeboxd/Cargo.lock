@@ -638,34 +638,6 @@ version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
-name = "jukeboxd"
-version = "0.1.0"
-dependencies = [
- "base64 0.10.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "dialoguer 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "envy 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "failure 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
- "futures 0.1.29 (registry+https://github.com/rust-lang/crates.io-index)",
- "gotham 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "gotham_derive 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "gpio-cdev 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "hyper 0.12.35 (registry+https://github.com/rust-lang/crates.io-index)",
- "mime 0.3.14 (registry+https://github.com/rust-lang/crates.io-index)",
- "reqwest 0.9.21 (registry+https://github.com/rust-lang/crates.io-index)",
- "rfid-rs 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "rust-embed 5.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde 1.0.101 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde_json 1.0.41 (registry+https://github.com/rust-lang/crates.io-index)",
- "signal-hook 0.1.10 (registry+https://github.com/rust-lang/crates.io-index)",
- "slog 2.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "slog-async 2.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "slog-scope 4.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "slog-term 2.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "spidev 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "url 2.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
 name = "kernel32-sys"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1279,6 +1251,34 @@ version = "5.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "walkdir 2.2.9 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "rustberry"
+version = "0.1.0"
+dependencies = [
+ "base64 0.10.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "dialoguer 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "envy 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "failure 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "futures 0.1.29 (registry+https://github.com/rust-lang/crates.io-index)",
+ "gotham 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "gotham_derive 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "gpio-cdev 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "hyper 0.12.35 (registry+https://github.com/rust-lang/crates.io-index)",
+ "mime 0.3.14 (registry+https://github.com/rust-lang/crates.io-index)",
+ "reqwest 0.9.21 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rfid-rs 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rust-embed 5.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde 1.0.101 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde_json 1.0.41 (registry+https://github.com/rust-lang/crates.io-index)",
+ "signal-hook 0.1.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "slog 2.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "slog-async 2.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "slog-scope 4.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "slog-term 2.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "spidev 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "url 2.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
