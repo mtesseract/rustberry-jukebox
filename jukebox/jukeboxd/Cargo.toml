@@ -1,10 +1,12 @@
 [package]
-name = "jukeboxd"
+name = "rustberry"
 version = "0.1.0"
 authors = ["Moritz Clasmeier <mtesseract@silverratio.net>"]
 edition = "2018"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+name = "rustberry"
+path = "src/lib.rs"
 
 [dependencies]
 gotham = "0.4.0"
@@ -18,7 +20,10 @@ dialoguer = "0.4.0"
 reqwest = "0.9.21"
 failure = "0.1.5"
 base64 = "0.10.1"
-rfid-rs = "0.1.0"
+# rfid-rs = "0.1.0"
+rfid-rs = { git = "https://gitlab.com/mclasmeier/rfid-rs" }
+
+spidev = "0.4.0"
 envy = "0.4.0"
 signal-hook = "0.1.10"
 url = "2.1.0"
@@ -28,3 +33,8 @@ slog-async = "2.3.0"
 slog-scope = "4.1.2"
 rust-embed = "5.1.0"
 gpio-cdev = "0.2"
+rmp = "^0.8"
+
+[[bin]]
+name = "jukeboxd"
+path = "src/main.rs"
