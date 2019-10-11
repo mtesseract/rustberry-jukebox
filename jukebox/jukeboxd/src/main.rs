@@ -82,13 +82,72 @@ mod user_requests {
         }
 
         impl<T: DeserializeOwned + std::fmt::Debug> UserRequestTransmitterStdin<T> {
-            pub fn new() -> Self {
-                UserRequestTransmitterStdin { _phantom: None }
+            pub fn new() -> Fallible<Self> {
+                Ok(UserRequestTransmitterStdin { _phantom: None })
             }
         }
 
         impl<T: DeserializeOwned + PartialEq + Clone> UserRequestTransmitterBackend<T>
             for UserRequestTransmitterStdin<T>
+        {
+            fn run(&self, tx: Sender<Option<T>>) -> Fallible<()> {
+                let mut last: Option<T> = None;
+
+                let stdin = std::io::stdin();
+                for line in stdin.lock().lines() {
+                    if let Ok(ref line) = line {
+                        let req = if line == "" {
+                            None
+                        } else {
+                            Some(serde_json::from_str(line).unwrap())
+                        };
+                        if last != req {
+                            tx.send(req.clone()).unwrap();
+                        }
+                        last = req;
+                    }
+                }
+
+                panic!();
+            }
+        }
+    }
+
+    pub mod rfid {
+        use super::*;
+
+        use spidev::{SpiModeFlags, Spidev, SpidevOptions};
+        use std::io;
+
+        use rfid_rs::{picc, MFRC522};
+
+        pub struct UserRequestTransmitterRfid<T> {
+            mfrc522: MFRC522,
+            _phantom: Option<T>,
+        }
+
+        impl<T: DeserializeOwned + std::fmt::Debug> UserRequestTransmitterRfid<T> {
+            pub fn new() -> Fallible<Self> {
+                let mut spi = Spidev::open("/dev/spidev1.0")?;
+                let options = SpidevOptions::new()
+                    .bits_per_word(8)
+                    .max_speed_hz(20_000)
+                    .mode(SpiModeFlags::SPI_MODE_0)
+                    .build();
+                spi.configure(&options)?;
+
+                let mut mfrc522 = rfid_rs::MFRC522 { spi };
+                mfrc522.init().expect("Init failed!");
+
+                Ok(UserRequestTransmitterRfid {
+                    mfrc522,
+                    _phantom: None,
+                })
+            }
+        }
+
+        impl<T: DeserializeOwned + PartialEq + Clone> UserRequestTransmitterBackend<T>
+            for UserRequestTransmitterRfid<T>
         {
             fn run(&self, tx: Sender<Option<T>>) -> Fallible<()> {
                 let mut last: Option<T> = None;
@@ -469,10 +528,11 @@ fn run_application() -> Fallible<()> {
         });
     }
 
-    let transmitter = user_requests::UserRequestsTransmitter::new(
-        user_requests::stdin::UserRequestTransmitterStdin::new(),
-    )
-    .expect("Failed to create UserRequestsTransmitter");
+    let transmitter_backend = user_requests::rfid::UserRequestTransmitterRfid::new()
+        .expect("Failed to initialize backend");
+
+    let transmitter = user_requests::UserRequestsTransmitter::new(transmitter_backend)
+        .expect("Failed to create UserRequestsTransmitter");
 
     let user_requests_producer: user_requests::UserRequests<String> =
         user_requests::UserRequests::new(transmitter);
