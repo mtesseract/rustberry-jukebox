@@ -1,15 +1,15 @@
 use failure::Fallible;
+use serde::Deserialize;
 use signal_hook::{iterator::Signals, SIGINT};
 use slog::{self, o, Drain};
 use slog_async;
 use slog_scope::{error, info, warn};
 use slog_term;
-use serde::Deserialize;
 
 use rustberry::access_token_provider;
 use rustberry::server;
-use rustberry::spotify_util;
 use rustberry::spotify_play;
+use rustberry::spotify_util;
 use rustberry::user_requests;
 
 #[derive(Deserialize, Debug)]
