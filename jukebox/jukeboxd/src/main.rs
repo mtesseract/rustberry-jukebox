@@ -4,18 +4,19 @@ extern crate rust_embed;
 use signal_hook::{iterator::Signals, SIGINT};
 use slog::{self, o, Drain};
 use slog_async;
-use slog_scope::{info, warn};
+use slog_scope::{error, info, warn};
 use slog_term;
 
 mod user_requests {
-
     use failure::Fallible;
     use serde::de::DeserializeOwned;
-    use slog_scope::info;
+    use slog_scope::{error, info};
+    use std::env;
+    use std::fmt::Display;
     use std::io::BufRead;
     use std::sync::mpsc;
     use std::sync::mpsc::{Receiver, Sender};
-    pub trait UserRequestTransmitter<T: DeserializeOwned> {
+    pub trait UserRequestTransmitterBackend<T: DeserializeOwned> {
         fn run(&self, tx: Sender<Option<T>>) -> Fallible<()>;
     }
 
@@ -26,36 +27,71 @@ mod user_requests {
         rx: Receiver<Option<T>>,
     }
 
+    pub struct UserRequestsTransmitter<
+        T: DeserializeOwned + Display,
+        TB: UserRequestTransmitterBackend<T>,
+    > {
+        backend: TB,
+        first_req: Option<T>,
+    }
+
+    impl<T: Display + DeserializeOwned + Clone, TB: UserRequestTransmitterBackend<T>>
+        UserRequestsTransmitter<T, TB>
+    {
+        pub fn new(backend: TB) -> Fallible<Self> {
+            let first_req = match env::var("FIRST_REQUEST") {
+                Ok(first_req) => match serde_json::from_str(&first_req) {
+                    Ok(first_req) => Some(first_req),
+                    Err(err) => {
+                        error!(
+                            "Failed to deserialize first request '{}': {}",
+                            first_req, err
+                        );
+                        None
+                    }
+                },
+                Err(env::VarError::NotPresent) => None,
+                Err(err) => {
+                    error!("Failed to retrieve FIRST_REQUEST: {}", err.to_string());
+                    None
+                }
+            };
+            Ok(UserRequestsTransmitter { backend, first_req })
+        }
+
+        pub fn run(&self, tx: Sender<Option<T>>) -> Fallible<()> {
+            if let Some(ref first_req) = self.first_req {
+                let first_req = (*first_req).clone();
+                info!(
+                    "Automatically transmitting first user request: {}",
+                    &first_req
+                );
+                if let Err(err) = tx.send(Some(first_req.clone())) {
+                    error!("Failed to transmit first request {}: {}", first_req, err);
+                }
+            }
+            self.backend.run(tx)
+        }
+    }
+
     pub mod stdin {
         use super::*;
-        use std::env;
 
         pub struct UserRequestTransmitterStdin<T> {
-            first_req: Option<T>,
+            _phantom: Option<T>,
         }
 
         impl<T: DeserializeOwned + std::fmt::Debug> UserRequestTransmitterStdin<T> {
             pub fn new() -> Self {
-                let first_req = env::var("FIRST_REQUEST")
-                    .ok()
-                    .map(|x| serde_json::from_str(&x).unwrap());
-                if let Some(ref first_req) = first_req {
-                    info!("Using first request {:?}", first_req);
-                }
-                UserRequestTransmitterStdin { first_req }
+                UserRequestTransmitterStdin { _phantom: None }
             }
         }
 
-        impl<T: DeserializeOwned + PartialEq + Clone> UserRequestTransmitter<T>
+        impl<T: DeserializeOwned + PartialEq + Clone> UserRequestTransmitterBackend<T>
             for UserRequestTransmitterStdin<T>
         {
             fn run(&self, tx: Sender<Option<T>>) -> Fallible<()> {
                 let mut last: Option<T> = None;
-
-                if self.first_req.is_some() {
-                    tx.send(self.first_req.clone()).unwrap();
-                    last = self.first_req.clone();
-                }
 
                 let stdin = std::io::stdin();
                 for line in stdin.lock().lines() {
@@ -78,9 +114,10 @@ mod user_requests {
     }
 
     impl<T: DeserializeOwned + Clone + PartialEq + Sync + Send + 'static> UserRequests<T> {
-        pub fn new<TX>(transmitter: TX) -> Self
+        pub fn new<TX>(transmitter: UserRequestsTransmitter<T, TX>) -> Self
         where
-            TX: Send + 'static + UserRequestTransmitter<T>,
+            TX: Send + 'static + UserRequestTransmitterBackend<T>,
+            T: DeserializeOwned + Display,
         {
             let (tx, rx): (Sender<Option<T>>, Receiver<Option<T>>) = mpsc::channel();
             std::thread::spawn(move || transmitter.run(tx));
@@ -89,12 +126,19 @@ mod user_requests {
     }
 
     impl<T: Sync + Send + 'static> Iterator for UserRequests<T> {
-        // we will be counting with usize
         type Item = Option<T>;
 
-        // next() is the only required method
         fn next(&mut self) -> Option<Self::Item> {
-            Some(self.rx.recv().unwrap())
+            match self.rx.recv() {
+                Ok(next_item) => Some(next_item),
+                Err(err) => {
+                    error!(
+                        "Failed to receive next user request from UserRequestsTransmitter: {}",
+                        err
+                    );
+                    None
+                }
+            }
         }
     }
 }
@@ -249,6 +293,30 @@ mod access_token_provider {
         access_token: Arc<RwLock<Result<String, Error>>>,
     }
 
+    fn token_refresh_thread(
+        client_id: String,
+        client_secret: String,
+        refresh_token: String,
+        access_token: Arc<RwLock<Result<String, Error>>>,
+    ) {
+        loop {
+            {
+                let token = request_fresh_token(&client_id, &client_secret, &refresh_token)
+                    .map(|x| x.access_token);
+                if let Ok(ref token) = token {
+                    info!("Retrieved fresh access token"; "access_token" => token);
+                } else {
+                    warn!("Failed to retrieve access token");
+                }
+                let mut access_token_write = access_token.write().unwrap();
+                *access_token_write = token;
+            }
+            thread::sleep(std::time::Duration::from_secs(600));
+        }
+        // error!("Token refresh thread terminated unexpectedly");
+        // panic!()
+    }
+
     impl AccessTokenProvider {
         pub fn get_token(&mut self) -> Option<String> {
             let access_token = self.access_token.read().unwrap();
@@ -271,19 +339,13 @@ mod access_token_provider {
                 let client_secret = client_secret.clone().to_string();
                 let refresh_token = refresh_token.clone().to_string();
 
-                thread::spawn(move || loop {
-                    {
-                        let token = request_fresh_token(&client_id, &client_secret, &refresh_token)
-                            .map(|x| x.access_token);
-                        if let Ok(ref token) = token {
-                            info!("Retrieved fresh access token"; "access_token" => token);
-                        } else {
-                            warn!("Failed to retrieve access token");
-                        }
-                        let mut access_token_write = access_token_clone.write().unwrap();
-                        *access_token_write = token;
-                    }
-                    thread::sleep(std::time::Duration::from_secs(600));
+                thread::spawn(move || {
+                    token_refresh_thread(
+                        client_id,
+                        client_secret,
+                        refresh_token,
+                        access_token_clone,
+                    )
                 });
             }
 
@@ -356,6 +418,7 @@ struct Config {
     client_id: String,
     client_secret: String,
     device_name: String,
+    first_request: String,
 }
 
 fn run_application() -> Fallible<()> {
@@ -406,18 +469,32 @@ fn run_application() -> Fallible<()> {
         });
     }
 
-    let transmitter = user_requests::stdin::UserRequestTransmitterStdin::new();
+    let transmitter = user_requests::UserRequestsTransmitter::new(
+        user_requests::stdin::UserRequestTransmitterStdin::new(),
+    )
+    .expect("Failed to create UserRequestsTransmitter");
 
     let user_requests_producer: user_requests::UserRequests<String> =
         user_requests::UserRequests::new(transmitter);
     user_requests_producer.for_each(|req| match req {
-        Some(req) => {
-            info!("Starting playback");
-            player.start_playback(&req).unwrap();
-        }
+        Some(req) => match player.start_playback(&req) {
+            Ok(_) => {
+                info!("Started playback");
+            }
+            Err(err) => {
+                error!("Failed to start playback: {}", err);
+            }
+        },
         None => {
             info!("Stopping playback");
-            player.stop_playback().unwrap();
+            match player.stop_playback() {
+                Ok(_) => {
+                    info!("Stopped playback");
+                }
+                Err(err) => {
+                    error!("Failed to stop playback: {}", err);
+                }
+            }
         }
     });
 
@@ -475,11 +552,10 @@ mod server {
 
     pub fn player_handler(state: GothamState) -> (GothamState, Response<Body>) {
         use gotham::helpers::http::response::create_response;
-        use hyper::header::HeaderValue;
 
         let index_html = Asset::get("index.html").unwrap();
 
-        let mut res = create_response(
+        let res = create_response(
             &state,
             hyper::StatusCode::OK,
             mime::TEXT_HTML_UTF_8,
