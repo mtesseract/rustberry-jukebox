@@ -12,7 +12,7 @@
 
         impl RfidController {
             pub fn new() -> Fallible<Self> {
-                let mut spi = Spidev::open("/dev/spidev1.0")?;
+                let mut spi = Spidev::open("/dev/spidev0.0")?;
                 let options = SpidevOptions::new()
                     .bits_per_word(8)
                     .max_speed_hz(20_000)
