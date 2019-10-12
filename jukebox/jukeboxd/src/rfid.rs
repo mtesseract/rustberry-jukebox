@@ -29,7 +29,7 @@ impl RfidController {
 
     pub fn read_card(&mut self) -> Fallible<Option<String>> {
 
-            let mut block = 4;
+            let mut block = 0;
             let len = 18;
 
             let key: rfid_rs::MifareKey = [0xffu8; 6];
