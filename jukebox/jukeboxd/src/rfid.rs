@@ -28,18 +28,25 @@ impl RfidController {
     }
 
     pub fn read_card(&mut self) -> Fallible<Option<String>> {
+
+            let mut block = 4;
+            let len = 18;
+
+            let key: rfid_rs::MifareKey = [0xffu8; 6];
+
         let new_card = self.mfrc522.new_card_present().is_ok();
         if new_card {
-            match self.mfrc522.read_card_serial() {
-                Ok(u) => {
-                    println!("New card: {:?}", u);
-                    Ok(Some(format!("{:?}", u)))
-                }
-                Err(e) => {
-                    println!("Could not read card: {:?}", e);
-                    Ok(None)
-                }
-            }
+            let uid = self.mfrc522.read_card_serial().expect("read_card_serial");
+            println!("uid = {:?}", uid);
+
+            self.mfrc522.authenticate(picc::Command::MfAuthKeyA, block, key, &uid).expect("authenticate");
+            println!("Authenticated card");
+
+            let response = self.mfrc522.mifare_read(block, len).expect("mifare_read");
+            println!("Read block {}: {:?}", block, response.data);
+
+            let s = std::str::from_utf8(&response.data).expect("from utf8");
+            Ok(Some(s.to_string()))
         } else {
             println!("new_card_present() returned false");
             Ok(None)

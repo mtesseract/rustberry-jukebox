@@ -1,12 +1,29 @@
 
 use failure::Fallible;
-use serde::de::DeserializeOwned;
+use serde::{Serialize, Deserialize, de::{DeserializeOwned}};
 use slog_scope::{error, info};
 use std::env;
 use std::fmt::Display;
 use std::io::BufRead;
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum UserRequest {
+    SpotifyUri(String)
+}
+
+mod tests {
+    use super::*;
+    #[test]
+    fn test_user_request_spotify_uri_serialization() {
+        let user_req = UserRequest::SpotifyUri("foo".to_string());
+        let serialized = serde_json::to_string(&user_req).unwrap();
+        assert_eq!(serialized, "".to_string());
+    }
+
+}
+
 pub trait UserRequestTransmitterBackend<T: DeserializeOwned> {
     fn run(&mut self, tx: Sender<Option<T>>) -> Fallible<()>;
 }
