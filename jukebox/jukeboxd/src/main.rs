@@ -10,7 +10,7 @@ use rustberry::access_token_provider;
 use rustberry::server;
 use rustberry::spotify_play;
 use rustberry::spotify_util;
-use rustberry::user_requests;
+use rustberry::user_requests::{self, UserRequest};
 
 #[derive(Deserialize, Debug)]
 struct Config {
@@ -18,7 +18,6 @@ struct Config {
     client_id: String,
     client_secret: String,
     device_name: String,
-    first_request: String,
 }
 
 fn run_application() -> Fallible<()> {
@@ -75,17 +74,22 @@ fn run_application() -> Fallible<()> {
     let transmitter = user_requests::UserRequestsTransmitter::new(transmitter_backend)
         .expect("Failed to create UserRequestsTransmitter");
 
-    let user_requests_producer: user_requests::UserRequests<String> =
+    let user_requests_producer: user_requests::UserRequests<UserRequest> =
         user_requests::UserRequests::new(transmitter);
     user_requests_producer.for_each(|req| match req {
-        Some(req) => match player.start_playback(&req) {
-            Ok(_) => {
-                info!("Started playback");
+        Some(req) => {
+            let res = match req {
+                UserRequest::SpotifyUri(uri) => player.start_playback(&uri),
+            };
+            match res {
+                Ok(_) => {
+                    info!("Started playback");
+                }
+                Err(err) => {
+                    error!("Failed to start playback: {}", err);
+                }
             }
-            Err(err) => {
-                error!("Failed to start playback: {}", err);
-            }
-        },
+        }
         None => {
             info!("Stopping playback");
             match player.stop_playback() {

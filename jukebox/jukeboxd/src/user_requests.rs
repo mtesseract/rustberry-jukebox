@@ -7,7 +7,7 @@ use std::io::BufRead;
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum UserRequest {
     SpotifyUri(String),
 }
@@ -35,14 +35,14 @@ where
 }
 
 pub struct UserRequestsTransmitter<
-    T: DeserializeOwned + Display,
+    T: DeserializeOwned + std::fmt::Debug,
     TB: UserRequestTransmitterBackend<T>,
 > {
     backend: TB,
     first_req: Option<T>,
 }
 
-impl<T: Display + DeserializeOwned + Clone, TB: UserRequestTransmitterBackend<T>>
+impl<T: std::fmt::Debug + DeserializeOwned + Clone, TB: UserRequestTransmitterBackend<T>>
     UserRequestsTransmitter<T, TB>
 {
     pub fn new(backend: TB) -> Fallible<Self> {
@@ -70,11 +70,11 @@ impl<T: Display + DeserializeOwned + Clone, TB: UserRequestTransmitterBackend<T>
         if let Some(ref first_req) = self.first_req {
             let first_req = (*first_req).clone();
             info!(
-                "Automatically transmitting first user request: {}",
+                "Automatically transmitting first user request: {:?}",
                 &first_req
             );
             if let Err(err) = tx.send(Some(first_req.clone())) {
-                error!("Failed to transmit first request {}: {}", first_req, err);
+                error!("Failed to transmit first request {:?}: {}", first_req, err);
             }
         }
         self.backend.run(tx)
@@ -171,11 +171,15 @@ pub mod rfid {
                             let mut tag_reader = tag.new_reader();
                             match tag_reader.read_string() {
                                 Ok(s) => {
-                                    let req: T = serde_json::from_str(&s).expect("Deserializing user request");
+                                    let req: T = serde_json::from_str(&s)
+                                        .expect("Deserializing user request");
                                     tx.send(Some(req.clone())).expect("tx send");
                                 }
                                 Err(err) => {
-                                    error!("Failed to retrieve data from RFID Tag {}: {}", &current_uid, err);
+                                    error!(
+                                        "Failed to retrieve data from RFID Tag {}: {}",
+                                        &current_uid, err
+                                    );
                                 }
                             }
                             last_uid = Some(current_uid);
@@ -192,7 +196,7 @@ impl<T: DeserializeOwned + Clone + PartialEq + Sync + Send + 'static> UserReques
     pub fn new<TX>(mut transmitter: UserRequestsTransmitter<T, TX>) -> Self
     where
         TX: Send + 'static + UserRequestTransmitterBackend<T>,
-        T: DeserializeOwned + Display,
+        T: DeserializeOwned + std::fmt::Debug,
     {
         let (tx, rx): (Sender<Option<T>>, Receiver<Option<T>>) = mpsc::channel();
         std::thread::spawn(move || transmitter.run(tx));

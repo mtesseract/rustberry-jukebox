@@ -7,7 +7,6 @@ use std::sync::{Arc, Mutex};
 
 use rfid_rs::{picc, Uid, MFRC522};
 
-
 #[derive(Clone)]
 pub struct RfidController {
     mfrc522: Arc<Mutex<MFRC522>>,
