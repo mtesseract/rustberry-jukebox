@@ -94,7 +94,7 @@ impl Tag {
 
 impl Write for TagWriter {
     fn write(&mut self, buf: &[u8]) -> Result<usize, std::io::Error> {
-        dbg!("buf.len() = {}", buf.len());
+        dbg!(buf.len());
         let mut n_written = 0;
         let key: rfid_rs::MifareKey = [0xffu8; 6];
 
@@ -109,7 +109,7 @@ impl Write for TagWriter {
                 .copy_from_slice(&buf[..to_copy_into_buffered_data as usize]);
             self.current_pos_in_buffered_data += to_copy_into_buffered_data;
 
-            if self.current_pos_in_buffered_data as usize == self.buffered_data.len() {
+            if self.current_pos_in_buffered_data == N_BLOCK_SIZE {
                 self.flush()?;
                 n_written += to_copy_into_buffered_data as usize;
             } else {
