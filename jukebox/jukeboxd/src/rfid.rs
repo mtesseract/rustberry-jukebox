@@ -164,9 +164,6 @@ impl Write for TagWriter {
                     dbg!(self.current_block);
                     dbg!(&block);
 
-                    mfrc522.halt_a().expect("Could not halt");
-                    mfrc522.stop_crypto1().expect("Could not stop crypto1");
-
                     self.current_block += 1;
                 // n_written += N_BLOCK_SIZE as usize;
                 } else {
@@ -209,9 +206,6 @@ impl Write for TagWriter {
             dbg!("mifare_write during flush:");
             dbg!(self.current_block);
             dbg!(&buffer);
-
-            mfrc522.halt_a().expect("Could not halt");
-            mfrc522.stop_crypto1().expect("Could not stop crypto1");
 
             self.current_pos_in_buffered_data = 0;
             self.current_block += 1;
