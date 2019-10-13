@@ -144,7 +144,9 @@ impl Write for TagWriter {
                     mfrc522
                         .mifare_write(self.current_block, &block)
                         .expect("mifare_write");
-                    dbg!("mifare_write");
+                    dbg!("mifare_write:");
+                    dbg!(self.current_block);
+                    dbg!(&block);
                     self.current_block += 1;
                 // n_written += N_BLOCK_SIZE as usize;
                 } else {
@@ -166,7 +168,7 @@ impl Write for TagWriter {
 
         dbg!("In flush");
         dbg!(self.current_pos_in_buffered_data);
-        
+
         if self.current_pos_in_buffered_data > 0 {
             mfrc522
                 .authenticate(
@@ -184,7 +186,10 @@ impl Write for TagWriter {
             mfrc522
                 .mifare_write(self.current_block, &buffer)
                 .expect("mifare_write");
-            dbg!("mifare_write during flush");
+            dbg!("mifare_write during flush:");
+            dbg!(self.current_block);
+            dbg!(&buffer);
+            
             self.current_pos_in_buffered_data = 0;
             self.current_block += 1;
             self.buffered_data
@@ -239,8 +244,9 @@ impl Read for TagReader {
         let response = (*mfrc522)
             .mifare_read(self.current_block, N_BLOCK_SIZE + 2)
             .expect("mifare_read");
-
-        dbg!(response.data.len());
+        dbg!("mifare_read:");
+        dbg!(self.current_block);
+        dbg!(&response.data);
 
         // println!("Read block {}: {:?}", block, response.data);
 
@@ -255,6 +261,7 @@ impl Read for TagReader {
         let src: &[u8] = &response.data[self.current_pos_in_block as usize
             ..(self.current_pos_in_block + bytes_to_copy) as usize];
         buf[..bytes_to_copy as usize].copy_from_slice(src);
+        dbg!(&src);
 
 
         self.current_pos_in_block = (self.current_pos_in_block + bytes_to_copy) % N_BLOCK_SIZE;
