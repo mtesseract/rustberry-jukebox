@@ -164,6 +164,9 @@ impl Write for TagWriter {
         let mut mfrc522 = self.mfrc522.lock().unwrap();
         let key: rfid_rs::MifareKey = [0xffu8; 6];
 
+        dbg!("In flush");
+        dbg!(self.current_pos_in_buffered_data);
+        
         if self.current_pos_in_buffered_data > 0 {
             mfrc522
                 .authenticate(
