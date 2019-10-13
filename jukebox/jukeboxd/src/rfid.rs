@@ -150,6 +150,7 @@ impl Write for TagWriter {
                     self.buffered_data[0..block.len()].copy_from_slice(&block);
                     self.current_pos_in_buffered_data += block.len() as u8;
                     n_written += block.len();
+                    dbg!(n_written);
                 }
             });
         dbg!(n_written);
