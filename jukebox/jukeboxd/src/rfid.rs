@@ -144,6 +144,7 @@ impl Write for TagWriter {
                     mfrc522
                         .mifare_write(self.current_block, &block)
                         .expect("mifare_write");
+                    dbg!("mifare_write");
                     self.current_block += 1;
                 // n_written += N_BLOCK_SIZE as usize;
                 } else {
@@ -180,7 +181,7 @@ impl Write for TagWriter {
             mfrc522
                 .mifare_write(self.current_block, &buffer)
                 .expect("mifare_write");
-
+            dbg!("mifare_write during flush");
             self.current_pos_in_buffered_data = 0;
             self.current_block += 1;
             self.buffered_data
