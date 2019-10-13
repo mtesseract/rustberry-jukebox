@@ -1,6 +1,5 @@
-
 use failure::Fallible;
-use serde::{Serialize, Deserialize, de::{DeserializeOwned}};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use slog_scope::{error, info};
 use std::env;
 use std::fmt::Display;
@@ -10,7 +9,7 @@ use std::sync::mpsc::{Receiver, Sender};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum UserRequest {
-    SpotifyUri(String)
+    SpotifyUri(String),
 }
 
 mod tests {

@@ -1,4 +1,3 @@
-
 use crate::access_token_provider::AccessTokenProvider;
 
 use failure::Fallible;

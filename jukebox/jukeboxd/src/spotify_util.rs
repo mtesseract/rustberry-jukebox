@@ -1,4 +1,3 @@
-
 use failure::{Fail, Fallible};
 use hyper::header::AUTHORIZATION;
 use reqwest::Client;
