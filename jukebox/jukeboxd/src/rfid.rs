@@ -7,6 +7,7 @@ use std::sync::{Arc, Mutex};
 
 use rfid_rs::{picc, Uid, MFRC522};
 
+
 #[derive(Clone)]
 pub struct RfidController {
     mfrc522: Arc<Mutex<MFRC522>>,
@@ -32,7 +33,8 @@ pub struct TagWriter {
     pub current_pos_in_buffered_data: u8,
 }
 
-const N_BLOCKS: u8 = 4;
+const DATA_BLOCKS: [u8; 9] = [4, 5, 6, 8, 9, 10, 12, 13, 14];
+const N_BLOCKS: u8 = 9;
 const N_BLOCK_SIZE: u8 = 16;
 
 impl RfidController {
@@ -77,7 +79,7 @@ impl Tag {
     pub fn new_reader(&self) -> TagReader {
         TagReader {
             mfrc522: Arc::clone(&self.mfrc522),
-            current_block: 8,
+            current_block: 0,
             current_pos_in_block: 0,
             uid: Arc::clone(&self.uid),
         }
@@ -86,7 +88,7 @@ impl Tag {
     pub fn new_writer(&self) -> TagWriter {
         TagWriter {
             mfrc522: self.mfrc522.clone(),
-            current_block: 8,
+            current_block: 0,
             buffered_data: [0; N_BLOCK_SIZE as usize],
             current_pos_in_buffered_data: 0,
             uid: Arc::clone(&self.uid),
@@ -141,14 +143,14 @@ impl Write for TagWriter {
                     mfrc522
                         .authenticate(
                             picc::Command::MfAuthKeyA,
-                            self.current_block,
+                            DATA_BLOCKS[self.current_block as usize],
                             key,
                             &(*self.uid),
                         )
                         .expect("authenticate for writing");
 
                     mfrc522
-                        .mifare_write(self.current_block, &block)
+                        .mifare_write(DATA_BLOCKS[self.current_block as usize], &block)
                         .expect("mifare_write");
                     dbg!("mifare_write:");
                     dbg!(self.current_block);
@@ -183,7 +185,7 @@ impl Write for TagWriter {
             mfrc522
                 .authenticate(
                     picc::Command::MfAuthKeyA,
-                    self.current_block,
+                    DATA_BLOCKS[self.current_block as usize],
                     key,
                     &(*self.uid),
                 )
@@ -194,7 +196,7 @@ impl Write for TagWriter {
                 .copy_from_slice(&self.buffered_data[..self.current_pos_in_buffered_data as usize]);
 
             mfrc522
-                .mifare_write(self.current_block, &buffer)
+                .mifare_write(DATA_BLOCKS[self.current_block as usize], &buffer)
                 .expect("mifare_write");
             dbg!("mifare_write during flush:");
             dbg!(self.current_block);
@@ -245,7 +247,7 @@ impl Read for TagReader {
         (*mfrc522)
             .authenticate(
                 picc::Command::MfAuthKeyA,
-                self.current_block,
+                DATA_BLOCKS[self.current_block as usize],
                 key,
                 &self.uid,
             )
@@ -255,7 +257,7 @@ impl Read for TagReader {
 
         // Read current block.
         let response = (*mfrc522)
-            .mifare_read(self.current_block, N_BLOCK_SIZE + 2)
+            .mifare_read(DATA_BLOCKS[self.current_block as usize], N_BLOCK_SIZE + 2)
             .expect("mifare_read");
         dbg!("mifare_read:");
         dbg!(self.current_block);
