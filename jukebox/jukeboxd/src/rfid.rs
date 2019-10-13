@@ -5,7 +5,7 @@ use spidev::{SpiModeFlags, Spidev, SpidevOptions};
 use std::io::{self, Read, Write};
 use std::sync::{Arc, Mutex};
 
-use rfid_rs::{Uid, picc, MFRC522};
+use rfid_rs::{picc, Uid, MFRC522};
 
 #[derive(Clone)]
 pub struct RfidController {
@@ -13,10 +13,23 @@ pub struct RfidController {
 }
 
 pub struct Tag {
-    pub uid: Uid,
+    pub uid: Arc<Uid>,
+    pub mfrc522: Arc<Mutex<MFRC522>>,
+}
+
+pub struct TagReader {
+    pub uid: Arc<Uid>,
     pub mfrc522: Arc<Mutex<MFRC522>>,
     pub current_block: u8,
     pub current_pos_in_block: u8,
+}
+
+pub struct TagWriter {
+    pub uid: Arc<Uid>,
+    pub mfrc522: Arc<Mutex<MFRC522>>,
+    pub current_block: u8,
+    pub buffered_data: [u8; N_BLOCK_SIZE as usize],
+    pub current_pos_in_buffered_data: u8,
 }
 
 const N_BLOCKS: u8 = 4;
@@ -48,10 +61,8 @@ impl RfidController {
             println!("uid = {:?}", uid);
 
             Ok(Some(Tag {
-                uid,
+                uid: Arc::new(uid),
                 mfrc522: Arc::clone(&self.mfrc522),
-                current_block: 0,
-                current_pos_in_block: 0,
             }))
         } else {
             println!("new_card_present() returned false");
@@ -60,7 +71,127 @@ impl RfidController {
     }
 }
 
-impl Read for Tag {
+impl Tag {
+    pub fn new_reader(&self) -> TagReader {
+        TagReader {
+            mfrc522: Arc::clone(&self.mfrc522),
+            current_block: 0,
+            current_pos_in_block: 0,
+            uid: Arc::clone(&self.uid),
+        }
+    }
+
+    pub fn new_writer(&self) -> TagWriter {
+        TagWriter {
+            mfrc522: self.mfrc522.clone(),
+            current_block: 0,
+            buffered_data: [0; N_BLOCK_SIZE as usize],
+            current_pos_in_buffered_data: 0,
+            uid: Arc::clone(&self.uid),
+        }
+    }
+}
+
+impl Write for TagWriter {
+    fn write(&mut self, buf: &[u8]) -> Result<usize, std::io::Error> {
+        let mut n_written = 0;
+        let key: rfid_rs::MifareKey = [0xffu8; 6];
+
+        if self.current_pos_in_buffered_data > 0 {
+            let n_space_left_in_buffered_data =
+                [self.current_pos_in_buffered_data as usize..self.buffered_data.len()].len();
+            let to_copy_into_buffered_data: u8 =
+                std::cmp::min(buf.len(), n_space_left_in_buffered_data) as u8;
+            self.buffered_data[self.current_pos_in_buffered_data as usize
+                ..(self.current_pos_in_buffered_data as usize
+                    + to_copy_into_buffered_data as usize)]
+                .copy_from_slice(&buf[..to_copy_into_buffered_data as usize]);
+            self.current_pos_in_buffered_data += to_copy_into_buffered_data;
+
+            if self.current_pos_in_buffered_data as usize == self.buffered_data.len() {
+                self.flush()?;
+                n_written += to_copy_into_buffered_data as usize;
+            } else {
+                return Ok(buf.len());
+            }
+        }
+
+        let mut mfrc522 = self.mfrc522.clone();
+
+        buf[n_written..]
+            .chunks(N_BLOCK_SIZE as usize)
+            .for_each(move |block| {
+                if block.len() == N_BLOCK_SIZE as usize {
+                    let mut mfrc522 = mfrc522.lock().unwrap();
+
+                    mfrc522
+                        .authenticate(
+                            picc::Command::MfAuthKeyA,
+                            self.current_block,
+                            key,
+                            &(*self.uid),
+                        )
+                        .expect("authenticate for writing");
+                    mfrc522
+                        .mifare_write(self.current_block, &block)
+                        .expect("mifare_write");
+                    self.current_block += 1;
+                    n_written += N_BLOCK_SIZE as usize;
+                } else {
+                    self.buffered_data[0..block.len()].copy_from_slice(&block);
+                    self.current_pos_in_buffered_data += block.len() as u8;
+                    n_written += block.len();
+                }
+            });
+        Ok(n_written)
+    }
+
+    fn flush(&mut self) -> Result<(), std::io::Error> {
+        let mut mfrc522 = self.mfrc522.lock().unwrap();
+        let key: rfid_rs::MifareKey = [0xffu8; 6];
+
+        mfrc522
+            .authenticate(
+                picc::Command::MfAuthKeyA,
+                self.current_block,
+                key,
+                &(*self.uid),
+            )
+            .expect("authenticate for flushing");
+
+        let mut buffer: [u8; N_BLOCK_SIZE as usize] = [0; N_BLOCK_SIZE as usize];
+        buffer[..self.current_pos_in_buffered_data as usize]
+            .copy_from_slice(&self.buffered_data[..self.current_pos_in_buffered_data as usize]);
+
+        mfrc522
+            .mifare_write(self.current_block, &buffer)
+            .expect("mifare_write");
+
+        self.current_pos_in_buffered_data = 0;
+        self.current_block += 1;
+        self.buffered_data
+            .copy_from_slice(&[0; N_BLOCK_SIZE as usize]);
+        Ok(())
+    }
+}
+
+impl TagReader {
+    pub fn read_string(&mut self) -> Result<String, std::io::Error> {
+        let mut bytes: Vec<u8> = Vec::new();
+        let string = rmp::decode::read_str(self,&mut bytes).unwrap();
+        Ok(string.to_string())
+    }
+}
+
+impl TagWriter {
+    pub fn write_string(&mut self, s: &str) -> Result<(), std::io::Error> {
+        let mut buf: Vec<u8> = Vec::new();
+        rmp::encode::write_str(self, s).unwrap();
+        Ok(())
+    }
+}
+
+impl Read for TagReader {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, std::io::Error> {
         let mut mfrc522 = self.mfrc522.lock().unwrap();
         let key: rfid_rs::MifareKey = [0xffu8; 6];
@@ -88,14 +219,20 @@ impl Read for Tag {
             .mifare_read(self.current_block, N_BLOCK_SIZE + 2)
             .expect("mifare_read");
 
+        dbg!(response.data.len());
+
         // println!("Read block {}: {:?}", block, response.data);
 
-        let bytes_to_copy = std::cmp::min(buf.len(), (N_BLOCK_SIZE - self.current_pos_in_block) as usize) as u8;
+        let bytes_to_copy = std::cmp::min(
+            buf.len(),
+            (N_BLOCK_SIZE - self.current_pos_in_block) as usize,
+        ) as u8;
         dbg!(buf.len());
         dbg!(bytes_to_copy);
         dbg!(self.current_pos_in_block);
 
-        let src: &[u8] = &response.data[self.current_pos_in_block as usize.. (self.current_pos_in_block + bytes_to_copy) as usize];
+        let src: &[u8] = &response.data[self.current_pos_in_block as usize
+            ..(self.current_pos_in_block + bytes_to_copy) as usize];
         buf[..bytes_to_copy as usize].copy_from_slice(src);
 
         self.current_block += 1;
@@ -103,28 +240,3 @@ impl Read for Tag {
         Ok(bytes_to_copy as usize)
     }
 }
-
-//     pub fn read_card(&mut self) -> Fallible<Option<String>> {
-
-//             let mut block = 8;
-//             let len = 18;
-
-//         let new_card = self.mfrc522.new_card_present().is_ok();
-//         if new_card {
-//             let uid = self.mfrc522.read_card_serial().expect("read_card_serial");
-//             println!("uid = {:?}", uid);
-
-//             self.mfrc522.authenticate(picc::Command::MfAuthKeyA, block, key, &uid).expect("authenticate");
-//             println!("Authenticated card");
-
-//             let response = self.mfrc522.mifare_read(block, len).expect("mifare_read");
-//             println!("Read block {}: {:?}", block, response.data);
-
-//             let s = std::str::from_utf8(&response.data).expect("from utf8");
-//             Ok(Some(s.to_string()))
-//         } else {
-//             println!("new_card_present() returned false");
-//             Ok(None)
-//         }
-//     }
-// }
