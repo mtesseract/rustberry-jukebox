@@ -102,6 +102,7 @@ impl Write for TagWriter {
         dbg!(&self.buffered_data.len());
 
         if self.current_pos_in_buffered_data > 0 {
+            // Need to fill currently buffered data first.
             let n_space_left_in_buffered_data =
                 [self.current_pos_in_buffered_data as usize..N_BLOCK_SIZE as usize].len();
             let to_copy_into_buffered_data: u8 =
@@ -113,6 +114,7 @@ impl Write for TagWriter {
             self.current_pos_in_buffered_data += to_copy_into_buffered_data;
 
             if self.current_pos_in_buffered_data == N_BLOCK_SIZE {
+                // Completed a block. flush it and continue.
                 self.flush()?;
                 n_written += to_copy_into_buffered_data as usize;
             } else {
@@ -125,7 +127,9 @@ impl Write for TagWriter {
         buf[n_written..]
             .chunks(N_BLOCK_SIZE as usize)
             .for_each(move |block| {
+                dbg!(block.len());
                 if block.len() == N_BLOCK_SIZE as usize {
+                    // Another complete block.
                     let mut mfrc522 = mfrc522.lock().unwrap();
 
                     mfrc522
@@ -142,11 +146,13 @@ impl Write for TagWriter {
                     self.current_block += 1;
                     n_written += N_BLOCK_SIZE as usize;
                 } else {
+                    // Partial block.
                     self.buffered_data[0..block.len()].copy_from_slice(&block);
                     self.current_pos_in_buffered_data += block.len() as u8;
                     n_written += block.len();
                 }
             });
+        dbg!(n_written);
         Ok(n_written)
     }
 
