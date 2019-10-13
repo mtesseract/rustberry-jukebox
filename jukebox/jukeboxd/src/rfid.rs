@@ -97,6 +97,9 @@ impl Write for TagWriter {
         dbg!(buf.len());
         let mut n_written = 0;
         let key: rfid_rs::MifareKey = [0xffu8; 6];
+        dbg!(&self.current_pos_in_buffered_data);
+        dbg!(&self.current_pos_in_buffered_data);
+        dbg!(&self.buffered_data.len());
 
         if self.current_pos_in_buffered_data > 0 {
             let n_space_left_in_buffered_data =
