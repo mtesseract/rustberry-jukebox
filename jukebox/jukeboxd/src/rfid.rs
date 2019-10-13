@@ -156,7 +156,7 @@ impl Write for TagWriter {
                     dbg!(self.current_block);
                     dbg!(&block);
 
-                    mfrc522.halt_a().expect("Could not halt");
+                    // mfrc522.halt_a().expect("Could not halt");
                     mfrc522.stop_crypto1().expect("Could not stop crypto1");
 
                     self.current_block += 1;
@@ -202,7 +202,7 @@ impl Write for TagWriter {
             dbg!(self.current_block);
             dbg!(&buffer);
 
-            mfrc522.halt_a().expect("Could not halt");
+            // mfrc522.halt_a().expect("Could not halt");
             mfrc522.stop_crypto1().expect("Could not stop crypto1");
 
             self.current_pos_in_buffered_data = 0;
@@ -265,7 +265,7 @@ impl Read for TagReader {
 
         // println!("Read block {}: {:?}", block, response.data);
 
-        mfrc522.halt_a().expect("Could not halt");
+        // mfrc522.halt_a().expect("Could not halt");
         mfrc522.stop_crypto1().expect("Could not stop crypto1");
 
         let bytes_to_copy = std::cmp::min(
