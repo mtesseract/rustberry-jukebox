@@ -75,7 +75,7 @@ impl Tag {
     pub fn new_reader(&self) -> TagReader {
         TagReader {
             mfrc522: Arc::clone(&self.mfrc522),
-            current_block: 1,
+            current_block: 8,
             current_pos_in_block: 0,
             uid: Arc::clone(&self.uid),
         }
@@ -84,7 +84,7 @@ impl Tag {
     pub fn new_writer(&self) -> TagWriter {
         TagWriter {
             mfrc522: self.mfrc522.clone(),
-            current_block: 1,
+            current_block: 8,
             buffered_data: [0; N_BLOCK_SIZE as usize],
             current_pos_in_buffered_data: 0,
             uid: Arc::clone(&self.uid),
@@ -260,7 +260,7 @@ impl Read for TagReader {
 
         dbg!(self.current_block);
         dbg!(self.current_pos_in_block);
-        
+
         Ok(bytes_to_copy as usize)
     }
 }
