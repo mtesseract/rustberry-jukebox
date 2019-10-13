@@ -33,7 +33,7 @@ pub struct TagWriter {
     pub current_pos_in_buffered_data: u8,
 }
 
-const DATA_BLOCKS: [u8; 9] = [4, 5, 6, 8, 9, 10, 12, 13, 14];
+const DATA_BLOCKS: [u8; 9] = [8, 9, 10, 12, 13, 14, 16, 17, 18];
 const N_BLOCKS: u8 = 9;
 const N_BLOCK_SIZE: u8 = 16;
 
