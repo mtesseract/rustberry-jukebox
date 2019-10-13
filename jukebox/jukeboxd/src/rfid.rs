@@ -4,6 +4,7 @@ use failure::Fallible;
 use spidev::{SpiModeFlags, Spidev, SpidevOptions};
 use std::io::{self, Read, Write};
 use std::sync::{Arc, Mutex};
+use slog_scope::{error, info};
 
 use rfid_rs::{picc, Uid, MFRC522};
 
@@ -64,23 +65,34 @@ impl RfidController {
 
     pub fn open_tag(&mut self) -> Fallible<Option<Tag>> {
         let mut mfrc522 = self.mfrc522.lock().unwrap();
-        let new_card = (*mfrc522).new_card_present();
-        dbg!(&new_card);
-        let new_card = new_card.is_ok();
-        if new_card {
-            let uid = (*mfrc522).read_card_serial().expect("read_card_serial");
-            println!("uid = {:?}", uid);
-
-            // (*mfrc522).halt_a().expect("Failed to halt_a during open_tag");
-            // (*mfrc522).stop_crypto1().expect("Failed to stop_crypto1 during open_tag");
-            Ok(Some(Tag {
+        match (*mfrc522).read_card_serial() {
+            Ok(uid) => Ok(Some(Tag {
                 uid: Arc::new(uid),
                 mfrc522: Arc::clone(&self.mfrc522),
-            }))
-        } else {
-            println!("new_card_present() returned false");
-            Ok(None)
+            })),
+            Err(err) => {
+                error!("read_card_serial err = {:?}", err);
+                Ok(None)
+            }
         }
+
+        // let new_card = (*mfrc522).new_card_present();
+        // dbg!(&new_card);
+        // let new_card = new_card.is_ok();
+        // if new_card {
+        //     let uid = (*mfrc522).read_card_serial().expect("read_card_serial");
+        //     println!("uid = {:?}", uid);
+
+        //     // (*mfrc522).halt_a().expect("Failed to halt_a during open_tag");
+        //     // (*mfrc522).stop_crypto1().expect("Failed to stop_crypto1 during open_tag");
+        //     Ok(Some(Tag {
+        //         uid: Arc::new(uid),
+        //         mfrc522: Arc::clone(&self.mfrc522),
+        //     }))
+        // } else {
+        //     println!("new_card_present() returned false");
+        //     Ok(None)
+        // }
     }
 }
 
