@@ -85,7 +85,7 @@ impl Read for Tag {
 
         // Read current block.
         let response = (*mfrc522)
-            .mifare_read(self.current_block, N_BLOCK_SIZE)
+            .mifare_read(self.current_block, N_BLOCK_SIZE + 2)
             .expect("mifare_read");
         // println!("Read block {}: {:?}", block, response.data);
 
@@ -93,7 +93,7 @@ impl Read for Tag {
         dbg!(buf.len());
         dbg!(bytes_to_copy);
         dbg!(self.current_pos_in_block);
-        
+
         let src: &[u8] = &response.data[self.current_pos_in_block as usize..];
         // std::ptr::copy_nonoverlapping(src, buf, bytes_to_copy);
         buf.copy_from_slice(src);
