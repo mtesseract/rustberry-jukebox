@@ -126,28 +126,21 @@ pub mod rfid {
     use spidev::{SpiModeFlags, Spidev, SpidevOptions};
     use std::io;
 
-    use rfid_rs::{picc, MFRC522};
+    use crate::rfid::*;
+
+    // use rfid_rs::{picc, MFRC522};
 
     pub struct UserRequestTransmitterRfid<T> {
-        mfrc522: MFRC522,
+        picc: RfidController,
         _phantom: Option<T>,
     }
 
     impl<T: DeserializeOwned + std::fmt::Debug> UserRequestTransmitterRfid<T> {
         pub fn new() -> Fallible<Self> {
-            let mut spi = Spidev::open("/dev/spidev1.0")?;
-            let options = SpidevOptions::new()
-                .bits_per_word(8)
-                .max_speed_hz(20_000)
-                .mode(SpiModeFlags::SPI_MODE_0)
-                .build();
-            spi.configure(&options)?;
-
-            let mut mfrc522 = rfid_rs::MFRC522 { spi };
-            mfrc522.init().expect("Init failed!");
+            let mut picc = RfidController::new()?;
 
             Ok(UserRequestTransmitterRfid {
-                mfrc522,
+                picc,
                 _phantom: None,
             })
         }
@@ -157,19 +150,37 @@ pub mod rfid {
         for UserRequestTransmitterRfid<T>
     {
         fn run(&mut self, tx: Sender<Option<T>>) -> Fallible<()> {
+            let mut last_uid: Option<String> = None;
+
             loop {
-                let new_card = self.mfrc522.new_card_present().is_ok();
-                if new_card {
-                    let _uid = match self.mfrc522.read_card_serial() {
-                        Ok(u) => {
-                            info!("New card: {:?}", u);
+                match self.picc.open_tag() {
+                    Err(err) => {
+                        error!("Failed to open RFID tag: {}", err);
+                    }
+                    Ok(None) => {
+                        if last_uid.is_some() {
+                            info!("RFID Tag gone");
+                            last_uid = None;
+                            tx.send(None).expect("tx send");
                         }
-                        Err(e) => {
-                            error!("Could not read card: {:?}", e);
+                    }
+                    Ok(Some(tag)) => {
+                        let current_uid = format!("{:?}", tag.uid);
+                        if last_uid != Some(current_uid.clone()) {
+                            // new tag!
+                            let mut tag_reader = tag.new_reader();
+                            match tag_reader.read_string() {
+                                Ok(s) => {
+                                    let req: T = serde_json::from_str(&s).expect("Deserializing user request");
+                                    tx.send(Some(req.clone())).expect("tx send");
+                                }
+                                Err(err) => {
+                                    error!("Failed to retrieve data from RFID Tag {}: {}", &current_uid, err);
+                                }
+                            }
+                            last_uid = Some(current_uid);
                         }
-                    };
-                } else {
-                    info!("new_card_present() returned false");
+                    }
                 }
                 std::thread::sleep(std::time::Duration::from_secs(1));
             }
