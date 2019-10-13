@@ -252,8 +252,15 @@ impl Read for TagReader {
             ..(self.current_pos_in_block + bytes_to_copy) as usize];
         buf[..bytes_to_copy as usize].copy_from_slice(src);
 
-        self.current_block += 1;
+
         self.current_pos_in_block = (self.current_pos_in_block + bytes_to_copy) % N_BLOCK_SIZE;
+        if self.current_pos_in_block == 0 {
+            self.current_block += 1;
+        }
+
+        dbg!(self.current_block);
+        dbg!(self.current_pos_in_block);
+        
         Ok(bytes_to_copy as usize)
     }
 }
