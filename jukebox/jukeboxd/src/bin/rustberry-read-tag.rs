@@ -1,6 +1,6 @@
 use failure::Fallible;
-use std::io::Read;
 use serde::Serialize;
+use std::io::Read;
 
 use rustberry::rfid::*;
 use rustberry::user_requests::UserRequest;

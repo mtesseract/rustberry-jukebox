@@ -100,8 +100,7 @@ impl Write for TagWriter {
         dbg!(&self.current_pos_in_buffered_data);
         dbg!(&self.current_pos_in_buffered_data);
         dbg!(&self.buffered_data.len());
-        let n_to_skip =
-        if self.current_pos_in_buffered_data > 0 {
+        let n_to_skip = if self.current_pos_in_buffered_data > 0 {
             // Need to fill currently buffered data first.
             let n_space_left_in_buffered_data =
                 [self.current_pos_in_buffered_data as usize..N_BLOCK_SIZE as usize].len();
@@ -120,7 +119,9 @@ impl Write for TagWriter {
             } else {
                 return Ok(buf.len());
             }
-        } else { 0 };
+        } else {
+            0
+        };
 
         let mut mfrc522 = self.mfrc522.clone();
 
@@ -144,7 +145,7 @@ impl Write for TagWriter {
                         .mifare_write(self.current_block, &block)
                         .expect("mifare_write");
                     self.current_block += 1;
-                    // n_written += N_BLOCK_SIZE as usize;
+                // n_written += N_BLOCK_SIZE as usize;
                 } else {
                     // Partial block.
                     self.buffered_data[0..block.len()].copy_from_slice(&block);
@@ -162,27 +163,29 @@ impl Write for TagWriter {
         let mut mfrc522 = self.mfrc522.lock().unwrap();
         let key: rfid_rs::MifareKey = [0xffu8; 6];
 
-        mfrc522
-            .authenticate(
-                picc::Command::MfAuthKeyA,
-                self.current_block,
-                key,
-                &(*self.uid),
-            )
-            .expect("authenticate for flushing");
+        if self.current_pos_in_buffered_data > 0 {
+            mfrc522
+                .authenticate(
+                    picc::Command::MfAuthKeyA,
+                    self.current_block,
+                    key,
+                    &(*self.uid),
+                )
+                .expect("authenticate for flushing");
 
-        let mut buffer: [u8; N_BLOCK_SIZE as usize] = [0; N_BLOCK_SIZE as usize];
-        buffer[..self.current_pos_in_buffered_data as usize]
-            .copy_from_slice(&self.buffered_data[..self.current_pos_in_buffered_data as usize]);
+            let mut buffer: [u8; N_BLOCK_SIZE as usize] = [0; N_BLOCK_SIZE as usize];
+            buffer[..self.current_pos_in_buffered_data as usize]
+                .copy_from_slice(&self.buffered_data[..self.current_pos_in_buffered_data as usize]);
 
-        mfrc522
-            .mifare_write(self.current_block, &buffer)
-            .expect("mifare_write");
+            mfrc522
+                .mifare_write(self.current_block, &buffer)
+                .expect("mifare_write");
 
-        self.current_pos_in_buffered_data = 0;
-        self.current_block += 1;
-        self.buffered_data
-            .copy_from_slice(&[0; N_BLOCK_SIZE as usize]);
+            self.current_pos_in_buffered_data = 0;
+            self.current_block += 1;
+            self.buffered_data
+                .copy_from_slice(&[0; N_BLOCK_SIZE as usize]);
+        }
         Ok(())
     }
 }
@@ -190,7 +193,8 @@ impl Write for TagWriter {
 impl TagReader {
     pub fn read_string(&mut self) -> Result<String, std::io::Error> {
         let mut bytes: Vec<u8> = Vec::new();
-        let string = rmp::decode::read_str(self,&mut bytes).unwrap();
+        // let n = rmp::decode::read_u32(self).expect("read u32")
+        let string = rmp::decode::read_str(self, &mut bytes).unwrap();
         Ok(string.to_string())
     }
 }
@@ -199,6 +203,7 @@ impl TagWriter {
     pub fn write_string(&mut self, s: &str) -> Result<(), std::io::Error> {
         let mut buf: Vec<u8> = Vec::new();
         rmp::encode::write_str(self, s).unwrap();
+        self.flush();
         Ok(())
     }
 }
