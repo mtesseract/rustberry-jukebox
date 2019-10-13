@@ -60,6 +60,8 @@ impl RfidController {
             let uid = (*mfrc522).read_card_serial().expect("read_card_serial");
             println!("uid = {:?}", uid);
 
+            (*mfrc522).halt_a().expect("Failed to halt_a during open_tag");
+            (*mfrc522).stop_crypto1().expect("Failed to stop_crypto1 during open_tag");
             Ok(Some(Tag {
                 uid: Arc::new(uid),
                 mfrc522: Arc::clone(&self.mfrc522),
