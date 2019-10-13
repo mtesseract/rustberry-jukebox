@@ -192,10 +192,10 @@ impl Write for TagWriter {
 
 impl TagReader {
     pub fn read_string(&mut self) -> Result<String, std::io::Error> {
-        let mut bytes: Vec<u8> = Vec::new();
+        let mut bytes: [u8; 1024] = [0; 1024];
         // let n = rmp::decode::read_u32(self).expect("read u32")
         let string = rmp::decode::read_str(self, &mut bytes).unwrap();
-        Ok(string.to_string())
+        Ok(string.to_string().clone())
     }
 }
 
