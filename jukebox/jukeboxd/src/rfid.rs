@@ -90,7 +90,10 @@ impl Read for Tag {
         // println!("Read block {}: {:?}", block, response.data);
 
         let bytes_to_copy = std::cmp::min(buf.len(), (N_BLOCK_SIZE - self.current_pos_in_block) as usize) as u8;
-
+        dbg!(buf.len());
+        dbg!(bytes_to_copy);
+        dbg!(self.current_pos_in_block);
+        
         let src: &[u8] = &response.data[self.current_pos_in_block as usize..];
         // std::ptr::copy_nonoverlapping(src, buf, bytes_to_copy);
         buf.copy_from_slice(src);
