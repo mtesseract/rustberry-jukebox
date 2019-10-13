@@ -11,7 +11,7 @@ fn main() -> Fallible<()> {
     println!("{:?}", tag.uid);
     let mut tag_reader = tag.new_reader();
     let s = tag_reader.read_string().expect("read_string");
-    println!("s = {}", s);
-
+    let req = serde_json::from_str(&s).expect("UserRequest Deserialization");
+    dbg!(&req);
     Ok(())
 }
