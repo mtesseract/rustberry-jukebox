@@ -64,7 +64,9 @@ impl RfidController {
 
     pub fn open_tag(&mut self) -> Fallible<Option<Tag>> {
         let mut mfrc522 = self.mfrc522.lock().unwrap();
-        let new_card = (*mfrc522).new_card_present().is_ok();
+        let new_card = (*mfrc522).new_card_present();
+        dbg!(&new_card);
+        let new_card = new_card.is_ok();
         if new_card {
             let uid = (*mfrc522).read_card_serial().expect("read_card_serial");
             println!("uid = {:?}", uid);
