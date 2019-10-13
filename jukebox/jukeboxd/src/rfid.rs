@@ -99,13 +99,14 @@ impl Write for TagWriter {
         let key: rfid_rs::MifareKey = [0xffu8; 6];
         dbg!(&self.current_pos_in_buffered_data);
         dbg!(&self.current_pos_in_buffered_data);
-        dbg!(&self.buffered_data.len());
+        // dbg!(&self.buffered_data.len());
         let n_to_skip = if self.current_pos_in_buffered_data > 0 {
             // Need to fill currently buffered data first.
             let n_space_left_in_buffered_data =
                 [self.current_pos_in_buffered_data as usize..N_BLOCK_SIZE as usize].len();
             let to_copy_into_buffered_data: u8 =
                 std::cmp::min(buf.len(), n_space_left_in_buffered_data) as u8;
+            dbg!(to_copy_into_buffered_data);
             self.buffered_data[self.current_pos_in_buffered_data as usize
                 ..(self.current_pos_in_buffered_data as usize
                     + to_copy_into_buffered_data as usize)]
