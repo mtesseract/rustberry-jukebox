@@ -100,7 +100,7 @@ impl Write for TagWriter {
         dbg!(&self.current_pos_in_buffered_data);
         dbg!(&self.current_pos_in_buffered_data);
         dbg!(&self.buffered_data.len());
-
+        let n_to_skip =
         if self.current_pos_in_buffered_data > 0 {
             // Need to fill currently buffered data first.
             let n_space_left_in_buffered_data =
@@ -116,15 +116,15 @@ impl Write for TagWriter {
             if self.current_pos_in_buffered_data == N_BLOCK_SIZE {
                 // Completed a block. flush it and continue.
                 self.flush()?;
-                n_written += to_copy_into_buffered_data as usize;
+                to_copy_into_buffered_data as usize
             } else {
                 return Ok(buf.len());
             }
-        }
+        } else { 0 };
 
         let mut mfrc522 = self.mfrc522.clone();
 
-        buf[n_written..]
+        buf[n_to_skip..]
             .chunks(N_BLOCK_SIZE as usize)
             .for_each(move |block| {
                 dbg!(block.len());
@@ -144,17 +144,18 @@ impl Write for TagWriter {
                         .mifare_write(self.current_block, &block)
                         .expect("mifare_write");
                     self.current_block += 1;
-                    n_written += N_BLOCK_SIZE as usize;
+                    // n_written += N_BLOCK_SIZE as usize;
                 } else {
                     // Partial block.
                     self.buffered_data[0..block.len()].copy_from_slice(&block);
                     self.current_pos_in_buffered_data += block.len() as u8;
-                    n_written += block.len();
-                    dbg!(n_written);
+                    // n_written += block.len();
+                    // dbg!(n_written);
                 }
             });
-        dbg!(n_written);
-        Ok(n_written)
+        // n_written += buf.len
+        // dbg!(n_written);
+        Ok(buf.len())
     }
 
     fn flush(&mut self) -> Result<(), std::io::Error> {
