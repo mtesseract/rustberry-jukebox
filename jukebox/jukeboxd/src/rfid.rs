@@ -206,7 +206,6 @@ impl Write for TagWriter {
 impl TagReader {
     pub fn read_string(&mut self) -> Result<String, std::io::Error> {
         let mut bytes: [u8; 1024] = [0; 1024];
-        // let n = rmp::decode::read_u32(self).expect("read u32")
         let string = rmp::decode::read_str(self, &mut bytes).unwrap();
         Ok(string.to_string().clone())
     }
@@ -224,8 +223,6 @@ impl Read for TagReader {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, std::io::Error> {
         let mut mfrc522 = self.mfrc522.lock().unwrap();
         let key: rfid_rs::MifareKey = [0xffu8; 6];
-        // let bytes_to_read = min_bytes_to_read; // FIXME
-        // let block: [u8; N_BLOCK_SIZE] = [0; N_BLOCK_SIZE];
 
         if self.current_block == N_BLOCKS {
             return Ok(0);
@@ -240,8 +237,6 @@ impl Read for TagReader {
                 &self.uid,
             )
             .expect("authenticate");
-
-        println!("Authenticated card");
 
         // Read current block.
         let response = (*mfrc522)
