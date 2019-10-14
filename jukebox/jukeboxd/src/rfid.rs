@@ -1,10 +1,10 @@
 use super::*;
 
 use failure::Fallible;
+use slog_scope::{error, info};
 use spidev::{SpiModeFlags, Spidev, SpidevOptions};
 use std::io::{self, Read, Write};
 use std::sync::{Arc, Mutex};
-use slog_scope::{error, info};
 
 use rfid_rs::{picc, Uid, MFRC522};
 
@@ -73,20 +73,18 @@ impl RfidController {
 
     pub fn open_tag(&mut self) -> Fallible<Option<Tag>> {
         let mut mfrc522 = self.mfrc522.lock().unwrap();
-        if mfrc522.new_card_present().is_ok() {
-        match mfrc522.read_card_serial() {
-            Ok(uid) => Ok(Some(Tag {
-                uid: Arc::new(uid),
-                mfrc522: Arc::clone(&self.mfrc522),
-            })),
-            Err(err) => {
-                error!("read_card_serial err = {:?}", err);
-                Ok(None)
-            }
-        }
-
-        } else {
-            Ok(None)
+        match mfrc522.new_card_present() {
+            Ok(()) => match mfrc522.read_card_serial() {
+                Ok(uid) => Ok(Some(Tag {
+                    uid: Arc::new(uid),
+                    mfrc522: Arc::clone(&self.mfrc522),
+                })),
+                Err(err) => {
+                    error!("read_card_serial err = {:?}", err);
+                    Err(err)
+                }
+            },
+            Err(err) => Err(err),
         }
 
         // let new_card = (*mfrc522).new_card_present();

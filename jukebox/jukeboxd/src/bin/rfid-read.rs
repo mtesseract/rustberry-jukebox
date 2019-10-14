@@ -1,4 +1,4 @@
-use spidev::{Spidev, SpidevOptions, SpiModeFlags};
+use spidev::{SpiModeFlags, Spidev, SpidevOptions};
 use std::io;
 
 extern crate rfid_rs;
@@ -16,8 +16,8 @@ fn create_spi() -> io::Result<Spidev> {
 }
 
 fn main() {
-        let spi = create_spi().unwrap();
-        let mut mfrc522 = rfid_rs::MFRC522 { spi };
+    let spi = create_spi().unwrap();
+    let mut mfrc522 = rfid_rs::MFRC522 { spi };
 
     loop {
         mfrc522.init().expect("Init failed!");
@@ -31,8 +31,8 @@ fn main() {
                 Ok(u) => u,
                 Err(e) => {
                     println!("Could not read card: {:?}", e);
-                    continue
-                },
+                    continue;
+                }
             };
 
             dbg!(&uid);
