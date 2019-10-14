@@ -16,11 +16,12 @@ fn create_spi() -> io::Result<Spidev> {
 }
 
 fn main() {
-    let spi = create_spi().unwrap();
-    let mut mfrc522 = rfid_rs::MFRC522 { spi };
-    mfrc522.init().expect("Init failed!");
 
     loop {
+        let spi = create_spi().unwrap();
+        let mut mfrc522 = rfid_rs::MFRC522 { spi };
+        mfrc522.init().expect("Init failed!");
+
         let new_card = mfrc522.new_card_present().is_ok();
 
         if new_card {
