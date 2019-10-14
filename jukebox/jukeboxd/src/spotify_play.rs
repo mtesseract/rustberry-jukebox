@@ -52,7 +52,7 @@ impl Player {
             .header(AUTHORIZATION, &access_token)
             .json(&req)
             .send()?;
-        assert!(rsp.status().is_success());
+        // assert!(rsp.status().is_success());
 
         Ok(())
     }
@@ -66,7 +66,7 @@ impl Player {
             .body("")
             .header(AUTHORIZATION, &access_token)
             .send()?;
-        assert!(rsp.status().is_success());
+        // assert!(rsp.status().is_success());
         Ok(())
     }
 }
