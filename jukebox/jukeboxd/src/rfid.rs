@@ -18,7 +18,15 @@ pub struct Tag {
     pub mfrc522: Arc<Mutex<MFRC522>>,
 }
 
-impl Drop for Tag {
+impl Drop for TagReader {
+    fn drop(&mut self) {
+        let mut mfrc522 = self.mfrc522.lock().unwrap();
+        mfrc522.halt_a().expect("Could not halt");
+        mfrc522.stop_crypto1().expect("Could not stop crypto1");
+    }
+}
+
+impl Drop for TagWriter {
     fn drop(&mut self) {
         let mut mfrc522 = self.mfrc522.lock().unwrap();
         mfrc522.halt_a().expect("Could not halt");
@@ -65,7 +73,8 @@ impl RfidController {
 
     pub fn open_tag(&mut self) -> Fallible<Option<Tag>> {
         let mut mfrc522 = self.mfrc522.lock().unwrap();
-        match (*mfrc522).read_card_serial() {
+        if mfrc522.new_card_present().is_ok() {
+        match mfrc522.read_card_serial() {
             Ok(uid) => Ok(Some(Tag {
                 uid: Arc::new(uid),
                 mfrc522: Arc::clone(&self.mfrc522),
@@ -74,6 +83,10 @@ impl RfidController {
                 error!("read_card_serial err = {:?}", err);
                 Ok(None)
             }
+        }
+
+        } else {
+            Ok(None)
         }
 
         // let new_card = (*mfrc522).new_card_present();
