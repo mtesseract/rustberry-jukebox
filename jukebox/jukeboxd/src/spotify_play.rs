@@ -52,9 +52,6 @@ impl Player {
             .header(AUTHORIZATION, &access_token)
             .json(&req)
             .send()?;
-        // dbg!(&rsp);
-        // let body = rsp.text();
-        // dbg!(&body);
         assert!(rsp.status().is_success());
 
         Ok(())
