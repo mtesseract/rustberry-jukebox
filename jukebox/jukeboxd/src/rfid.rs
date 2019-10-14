@@ -140,7 +140,7 @@ impl Write for TagWriter {
             0
         };
 
-        let mut mfrc522 = self.mfrc522.clone();
+        let mfrc522 = self.mfrc522.clone();
 
         buf[n_to_skip..]
             .chunks(N_BLOCK_SIZE as usize)

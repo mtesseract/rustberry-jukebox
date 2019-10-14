@@ -137,7 +137,7 @@ pub mod rfid {
 
     impl<T: DeserializeOwned + std::fmt::Debug> UserRequestTransmitterRfid<T> {
         pub fn new() -> Fallible<Self> {
-            let mut picc = RfidController::new()?;
+            let picc = RfidController::new()?;
 
             Ok(UserRequestTransmitterRfid {
                 picc,
@@ -186,7 +186,7 @@ pub mod rfid {
                         }
                     }
                 }
-                std::thread::sleep(std::time::Duration::from_millis(500));
+                std::thread::sleep(std::time::Duration::from_secs(2));
             }
         }
     }
