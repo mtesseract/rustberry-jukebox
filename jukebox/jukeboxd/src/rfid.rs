@@ -64,7 +64,6 @@ impl RfidController {
         spi.configure(&options)?;
 
         let mut mfrc522 = rfid_rs::MFRC522 { spi };
-        mfrc522.init().expect("Init failed!");
 
         Ok(RfidController {
             mfrc522: Arc::new(Mutex::new(mfrc522)),
@@ -73,6 +72,7 @@ impl RfidController {
 
     pub fn open_tag(&mut self) -> Fallible<Option<Tag>> {
         let mut mfrc522 = self.mfrc522.lock().unwrap();
+        mfrc522.init().expect("Init failed!");
         match mfrc522.new_card_present() {
             Ok(()) => match mfrc522.read_card_serial() {
                 Ok(uid) => Ok(Some(Tag {
@@ -81,10 +81,13 @@ impl RfidController {
                 })),
                 Err(err) => {
                     error!("read_card_serial err = {:?}", err);
-                    Err(err)
+                    Ok(None)
                 }
             },
-            Err(err) => Err(err),
+            Err(err) => {
+                error!("new_card_present err = {:?}", err);
+                Ok(None)
+            }
         }
 
         // let new_card = (*mfrc522).new_card_present();
