@@ -1,7 +1,7 @@
 use super::*;
 
 use failure::Fallible;
-use slog_scope::{error, info};
+use slog_scope::{error, warn, info};
 use spidev::{SpiModeFlags, Spidev, SpidevOptions};
 use std::io::{self, Read, Write};
 use std::sync::{Arc, Mutex};
@@ -80,12 +80,13 @@ impl RfidController {
                     mfrc522: Arc::clone(&self.mfrc522),
                 })),
                 Err(err) => {
-                    error!("read_card_serial err = {:?}", err);
+                    warn!("Failed to retrieve RFID tag serial: {:?}", err);
                     Ok(None)
                 }
             },
+            Err(rfid_rs::Error::Timeout) => Ok(None),
             Err(err) => {
-                error!("new_card_present err = {:?}", err);
+                warn!("Failed to test if RFID tag is present: {:?}", err);
                 Ok(None)
             }
         }
@@ -115,7 +116,6 @@ impl Tag {
 
 impl Write for TagWriter {
     fn write(&mut self, buf: &[u8]) -> Result<usize, std::io::Error> {
-        let mut n_written = 0;
         let key: rfid_rs::MifareKey = [0xffu8; 6];
         let n_to_skip = if self.current_pos_in_buffered_data > 0 {
             // Need to fill currently buffered data first.
@@ -214,7 +214,6 @@ impl TagReader {
 
 impl TagWriter {
     pub fn write_string(&mut self, s: &str) -> Result<(), std::io::Error> {
-        let mut buf: Vec<u8> = Vec::new();
         rmp::encode::write_str(self, s).unwrap();
         self.flush();
         Ok(())
