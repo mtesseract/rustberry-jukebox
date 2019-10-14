@@ -16,10 +16,10 @@ fn create_spi() -> io::Result<Spidev> {
 }
 
 fn main() {
-
-    loop {
         let spi = create_spi().unwrap();
         let mut mfrc522 = rfid_rs::MFRC522 { spi };
+
+    loop {
         mfrc522.init().expect("Init failed!");
 
         let new_card = mfrc522.new_card_present().is_ok();
@@ -37,44 +37,8 @@ fn main() {
 
             dbg!(&uid);
 
-
-            // let mut block = 4;
-            // let len = 18;
-
-            // match mfrc522.authenticate(picc::Command::MfAuthKeyA, block, key, &uid) {
-            //     Ok(_) => println!("Authenticated card"),
-            //     Err(e) => {
-            //         println!("Could not authenticate card {:?}", e);
-            //         continue
-            //     }
-            // }
-            // match mfrc522.mifare_read(block, len) {
-            //     Ok(response) => println!("Read block {}: {:?}", block, response.data),
-            //     Err(e) => {
-            //         println!("Failed reading block {}: {:?}", block, e);
-            //         continue
-            //     }
-            // }
-
-            // block = 1;
-
-            // match mfrc522.authenticate(picc::Command::MfAuthKeyA, block, key, &uid) {
-            //     Ok(_) => println!("Authenticated card"),
-            //     Err(e) => {
-            //         println!("Could not authenticate card {:?}", e);
-            //         continue
-            //     }
-            // }
-            // match mfrc522.mifare_read(block, len) {
-            //     Ok(response) => println!("Read block {}: {:?}", block, response.data),
-            //     Err(e) => {
-            //         println!("Failed reading block {}: {:?}", block, e);
-            //         continue
-            //     }
-            // }
-
-            mfrc522.halt_a().expect("Could not halt");
-            mfrc522.stop_crypto1().expect("Could not stop crypto1");
+            // mfrc522.halt_a().expect("Could not halt");
+            // mfrc522.stop_crypto1().expect("Could not stop crypto1");
 
             std::thread::sleep(std::time::Duration::from_secs(1));
         }
