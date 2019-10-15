@@ -183,7 +183,7 @@ pub mod rfid {
                                 }
                             }
                             last_uid = Some(current_uid);
-                        }
+                        } // FIXME
                     }
                 }
                 std::thread::sleep(std::time::Duration::from_secs(1));
