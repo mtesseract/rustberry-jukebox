@@ -11,6 +11,21 @@ struct Config {
     shutdown_pin: Option<u32>,
 }
 
+#[derive(Debug)]
+pub enum Error {
+    IO(String),
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::IO(s) => write!(f, "IO Error: {}", s),
+        }
+    }
+}
+
+impl std::error::Error for Error {}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
     Shutdown,
@@ -35,11 +50,18 @@ impl GpioTransmitter {
     }
 
     pub fn run_with_result(&self) -> Fallible<()> {
-        let mut chip = Chip::new("/dev/gpiochip0")?;
+        let mut chip = Chip::new("/dev/gpiochip0")
+            .map_err(|_fixme| Error::IO("Failed to open Chip".to_string()))?;
         let line_ids: Vec<u32> = self.map.keys().cloned().collect();
-        let lines = chip.get_lines(&line_ids)?;
+        let n_lines = line_ids.len();
+        let line_defaults: Vec<u8> = (0..n_lines).map(|_| 0).collect();
+        let lines = chip
+            .get_lines(&line_ids)
+            .map_err(|_fixme| Error::IO("Failed to get GPIO lines".to_string()))?;
 
-        //     .request(LineRequestFlags::INPUT, 0, "read-input")?;
+        let req = lines
+            .request(LineRequestFlags::INPUT, &line_defaults, "read-input")
+            .map_err(|_fixme| Error::IO("Failed to request events from line".to_string()))?;
         // for _ in 1..4 {
         //     println!("Value: {:?}", handle.get_value()?);
         // }
@@ -76,7 +98,7 @@ impl GpioController {
         let config = (*config).clone();
         let transmitter = GpioTransmitter::new(tx, &config);
 
-        std::thread::spawn(|| transmitter.run());
+        std::thread::spawn(move || transmitter.run());
 
         Ok(Self { rx })
     }
