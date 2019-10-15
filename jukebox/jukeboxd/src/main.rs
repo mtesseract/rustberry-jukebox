@@ -7,7 +7,7 @@ use slog_scope::{error, info, warn};
 use slog_term;
 
 use rustberry::access_token_provider;
-use rustberry::gpio;
+use rustberry::gpio::{self, GpioController};
 use rustberry::server;
 use rustberry::spotify_play;
 use rustberry::spotify_util;
@@ -19,6 +19,16 @@ struct Config {
     client_id: String,
     client_secret: String,
     device_name: String,
+}
+
+fn execute_shutdown() {
+    use std::process::Command;
+    let _output = Command::new("sudo")
+        .arg("shutdown")
+        .arg("-h")
+        .arg("now")
+        .output()
+        .expect("failed to execute shutdown");
 }
 
 fn run_application() -> Fallible<()> {
@@ -33,16 +43,26 @@ fn run_application() -> Fallible<()> {
         &config.refresh_token,
     );
 
+    let gpio_controller = GpioController::new_from_env()?;
+    info!("Created GPIO Controller");
+    std::thread::spawn(move || {
+        for cmd in gpio_controller {
+            info!("Received {:?} command from GPIO Controller", cmd);
+            match cmd {
+                gpio::Command::Shutdown => {
+                    info!("Shutting down");
+                    execute_shutdown();
+                }
+            }
+        }
+    });
+
     std::thread::sleep(std::time::Duration::from_secs(2));
 
     let _ = server::spawn(LOCAL_SERVER_PORT, access_token_provider.clone());
 
     let device = loop {
         match spotify_util::lookup_device_by_name(&mut access_token_provider, &config.device_name) {
-            // Err(JukeboxError::DeviceNotFound {..}) => {
-            //     println!("Device '{}' not found, waiting", "fixme");
-            //     std::thread::sleep(std::time::Duration::from_secs(2));
-            // }
             Err(err) => {
                 warn!("Failed to lookup device: {}", err.to_string());
                 std::thread::sleep(std::time::Duration::from_secs(5));

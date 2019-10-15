@@ -1,5 +1,5 @@
 use failure::Fallible;
-use gpio_cdev::{Chip, LineRequestFlags};
+use gpio_cdev::{Chip, EventRequestFlags, LineRequestFlags};
 use serde::Deserialize;
 use slog_scope::error;
 use std::collections::HashMap;
@@ -7,7 +7,7 @@ use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
 
 #[derive(Deserialize, Debug, Clone)]
-struct Config {
+pub struct Config {
     shutdown_pin: Option<u32>,
 }
 
@@ -52,23 +52,28 @@ impl GpioTransmitter {
     pub fn run_with_result(&self) -> Fallible<()> {
         let mut chip = Chip::new("/dev/gpiochip0")
             .map_err(|_fixme| Error::IO("Failed to open Chip".to_string()))?;
-        let line_ids: Vec<u32> = self.map.keys().cloned().collect();
-        let n_lines = line_ids.len();
-        let line_defaults: Vec<u8> = (0..n_lines).map(|_| 0).collect();
-        let lines = chip
-            .get_lines(&line_ids)
-            .map_err(|_fixme| Error::IO("Failed to get GPIO lines".to_string()))?;
 
-        let req = lines
-            .request(LineRequestFlags::INPUT, &line_defaults, "read-input")
-            .map_err(|_fixme| Error::IO("Failed to request events from line".to_string()))?;
-        // for _ in 1..4 {
-        //     println!("Value: {:?}", handle.get_value()?);
-        // }
+        for (line_id, cmd) in self.map.iter() {
+            let line = chip
+                .get_line(*line_id)
+                .map_err(|_fixme| Error::IO("Failed to get GPIO line".to_string()))?;
+            let tx = self.tx.clone();
+            let cmd = (*cmd).clone();
+            std::thread::spawn(move || {
+                for event in line.events(
+                    LineRequestFlags::INPUT,
+                    EventRequestFlags::RISING_EDGE,
+                    "read-input",
+                ) {
+                    tx.send(cmd.clone()).expect("Failed to send GPIO command");
+                }
+            });
+        }
         Ok(())
     }
 }
-struct GpioController {
+
+pub struct GpioController {
     rx: Receiver<Command>,
     // config: Config,
 }
