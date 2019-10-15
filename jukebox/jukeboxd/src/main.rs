@@ -7,6 +7,8 @@ use slog_async;
 use slog_scope::{error, info, warn};
 use slog_term;
 
+mod gpio;
+
 mod user_requests {
     use failure::Fallible;
     use serde::de::DeserializeOwned;
