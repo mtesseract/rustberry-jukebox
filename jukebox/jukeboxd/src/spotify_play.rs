@@ -41,12 +41,24 @@ impl Player {
         }
     }
 
+    fn derive_start_playback_payload_from_spotify_uri(spotify_uri: &str) -> StartPlayback {
+        if &spotify_uri[0..10] == "spotify:album:" {
+            StartPlayback {
+                uris: None,
+                context_uri: Some(spotify_uri.clone().to_string()),
+            }
+        } else {
+            StartPlayback {
+                uris: Some(vec![spotify_uri.clone().to_string()]),
+                context_uri: None,
+            }
+        }
+    }
+
     pub fn start_playback(&mut self, spotify_uri: &str) -> Fallible<()> {
         let access_token = self.access_token_provider.get_bearer_token().unwrap();
-        let req = StartPlayback {
-            uris: Some(vec![spotify_uri.clone().to_string()]),
-            context_uri: None,
-        };
+
+        let req = Self::derive_start_playback_payload_from_spotify_uri(spotify_uri);
         let rsp = self
             .http_client
             .put("https://api.spotify.com/v1/me/player/play")

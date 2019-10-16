@@ -11,6 +11,7 @@ pub enum UserRequest {
     SpotifyUri(String),
 }
 
+#[test]
 mod test {
     use super::*;
     #[test]

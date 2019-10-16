@@ -94,7 +94,7 @@ impl RfidController {
                     Ok(None)
                 }
             },
-            Err(rfid_rs::Error::Timeout) => Ok(None),
+            Err(rfid_rs::Error::Timeout) | Err(rfid_rs::Error::Communication) => Ok(None),
             Err(err) => {
                 warn!("Failed to test if RFID tag is present: {:?}", err);
                 Ok(None)
