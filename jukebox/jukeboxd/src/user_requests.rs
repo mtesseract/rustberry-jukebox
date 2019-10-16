@@ -2,7 +2,6 @@ use failure::Fallible;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use slog_scope::{error, info};
 use std::env;
-use std::fmt::Display;
 use std::io::BufRead;
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
@@ -12,15 +11,14 @@ pub enum UserRequest {
     SpotifyUri(String),
 }
 
-mod tests {
+mod test {
     use super::*;
     #[test]
     fn test_user_request_spotify_uri_serialization() {
         let user_req = UserRequest::SpotifyUri("foo".to_string());
         let serialized = serde_json::to_string(&user_req).unwrap();
-        assert_eq!(serialized, "".to_string());
+        assert_eq!(serialized, "{\"SpotifyUri\":\"foo\"}".to_string());
     }
-
 }
 
 pub trait UserRequestTransmitterBackend<T: DeserializeOwned> {
@@ -122,10 +120,6 @@ pub mod stdin {
 
 pub mod rfid {
     use super::*;
-
-    use spidev::{SpiModeFlags, Spidev, SpidevOptions};
-    use std::io;
-
     use crate::rfid::*;
 
     // use rfid_rs::{picc, MFRC522};
@@ -161,7 +155,9 @@ pub mod rfid {
                         if last_uid.is_some() {
                             info!("RFID Tag gone");
                             last_uid = None;
-                            tx.send(None).expect("tx send");
+                            if let Err(err) = tx.send(None) {
+                                error!("Failed to transmit User Request: {}", err);
+                            }
                         }
                     }
                     Ok(Some(tag)) => {

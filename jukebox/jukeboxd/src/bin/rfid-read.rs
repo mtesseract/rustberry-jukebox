@@ -2,7 +2,6 @@ use spidev::{SpiModeFlags, Spidev, SpidevOptions};
 use std::io;
 
 extern crate rfid_rs;
-use rfid_rs::picc;
 
 fn create_spi() -> io::Result<Spidev> {
     let mut spi = Spidev::open("/dev/spidev0.0")?;
@@ -25,8 +24,6 @@ fn main() {
         let new_card = mfrc522.new_card_present().is_ok();
 
         if new_card {
-            let key: rfid_rs::MifareKey = [0xffu8; 6];
-
             let uid = match mfrc522.read_card_serial() {
                 Ok(u) => u,
                 Err(e) => {

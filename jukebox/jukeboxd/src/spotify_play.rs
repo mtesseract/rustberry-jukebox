@@ -13,22 +13,23 @@ pub struct Player {
 
 impl Drop for Player {
     fn drop(&mut self) {
-        println!("Destroying Player, stopping music");
+        println!("Destroying Player, stopping Music");
         let _ = self.stop_playback();
     }
 }
 
 #[derive(Debug, Clone, Serialize)]
 struct StartPlayback {
-    uris: Vec<String>,
+    context_uri: Option<String>,
+    uris: Option<Vec<String>>,
 }
 
-#[derive(Debug, Clone, Serialize)]
-struct TransferPlayback {
-    play: bool,
-    device_ids: Vec<String>,
-    context_uri: String,
-}
+// #[derive(Debug, Clone, Serialize)]
+// struct TransferPlayback {
+//     play: bool,
+//     device_ids: Vec<String>,
+//     context_uri: String,
+// }
 
 impl Player {
     pub fn new(access_token_provider: AccessTokenProvider, device_id: &str) -> Self {
@@ -43,7 +44,8 @@ impl Player {
     pub fn start_playback(&mut self, spotify_uri: &str) -> Fallible<()> {
         let access_token = self.access_token_provider.get_bearer_token().unwrap();
         let req = StartPlayback {
-            uris: vec![spotify_uri.clone().to_string()],
+            uris: Some(vec![spotify_uri.clone().to_string()]),
+            context_uri: None,
         };
         let rsp = self
             .http_client

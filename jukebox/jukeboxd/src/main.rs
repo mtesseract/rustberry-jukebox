@@ -13,6 +13,8 @@ use rustberry::spotify_play;
 use rustberry::spotify_util;
 use rustberry::user_requests::{self, UserRequest};
 
+const LOCAL_SERVER_PORT: u32 = 8000;
+
 #[derive(Deserialize, Debug)]
 struct Config {
     refresh_token: String,
@@ -32,17 +34,19 @@ fn execute_shutdown() {
 }
 
 fn run_application() -> Fallible<()> {
-    info!("Rustberry/Spotify Starting.");
+    info!("** Rustberry/Spotify Starting **");
 
     let config = envy::from_env::<Config>()?;
     info!("Configuration"; o!("device_name" => &config.device_name));
 
+    // Create Access Token Provider
     let mut access_token_provider = access_token_provider::AccessTokenProvider::new(
         &config.client_id,
         &config.client_secret,
         &config.refresh_token,
     );
 
+    // Create GPIO Controller.
     let gpio_controller = GpioController::new_from_env()?;
     info!("Created GPIO Controller");
     std::thread::spawn(move || {
@@ -64,7 +68,7 @@ fn run_application() -> Fallible<()> {
     let device = loop {
         match spotify_util::lookup_device_by_name(&mut access_token_provider, &config.device_name) {
             Err(err) => {
-                warn!("Failed to lookup device: {}", err.to_string());
+                warn!("Failed to lookup device, will retry: {}", err);
                 std::thread::sleep(std::time::Duration::from_secs(5));
             }
             Ok(device) => {
@@ -136,5 +140,3 @@ fn main() -> Fallible<()> {
 
     slog_scope::scope(&slog_scope::logger().new(o!()), || run_application())
 }
-
-const LOCAL_SERVER_PORT: u32 = 8000;

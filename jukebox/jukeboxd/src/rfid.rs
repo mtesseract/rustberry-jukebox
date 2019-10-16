@@ -1,9 +1,7 @@
-use super::*;
-
 use failure::Fallible;
 use slog_scope::{error, info, warn};
 use spidev::{SpiModeFlags, Spidev, SpidevOptions};
-use std::io::{self, Read, Write};
+use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 
 use rfid_rs::{picc, Uid, MFRC522};
@@ -71,8 +69,8 @@ impl RfidController {
             .build();
         spi.configure(&options)?;
 
-        let mut mfrc522 = rfid_rs::MFRC522 { spi };
-
+        let mfrc522 = rfid_rs::MFRC522 { spi };
+        info!("Create new MFRC522 Controller");
         Ok(RfidController {
             mfrc522: Arc::new(Mutex::new(mfrc522)),
         })
@@ -126,9 +124,10 @@ impl Tag {
     }
 }
 
+pub const MIFARE_KEY_A: rfid_rs::MifareKey = [0xffu8; 6];
+
 impl Write for TagWriter {
     fn write(&mut self, buf: &[u8]) -> Result<usize, std::io::Error> {
-        let key: rfid_rs::MifareKey = [0xffu8; 6];
         let n_to_skip = if self.current_pos_in_buffered_data > 0 {
             // Need to fill currently buffered data first.
             let n_space_left_in_buffered_data =
@@ -163,7 +162,7 @@ impl Write for TagWriter {
                     .authenticate(
                         picc::Command::MfAuthKeyA,
                         DATA_BLOCKS[self.current_block as usize],
-                        key,
+                        MIFARE_KEY_A,
                         &(*self.uid),
                     )
                     .map_err(|err| {
@@ -191,14 +190,13 @@ impl Write for TagWriter {
 
     fn flush(&mut self) -> Result<(), std::io::Error> {
         let mut mfrc522 = self.mfrc522.lock().unwrap();
-        let key: rfid_rs::MifareKey = [0xffu8; 6];
 
         if self.current_pos_in_buffered_data > 0 {
             mfrc522
                 .authenticate(
                     picc::Command::MfAuthKeyA,
                     DATA_BLOCKS[self.current_block as usize],
-                    key,
+                    MIFARE_KEY_A,
                     &(*self.uid),
                 )
                 .map_err(|err| {
@@ -236,15 +234,13 @@ impl TagReader {
 impl TagWriter {
     pub fn write_string(&mut self, s: &str) -> Result<(), std::io::Error> {
         rmp::encode::write_str(self, s).unwrap();
-        self.flush();
-        Ok(())
+        self.flush()
     }
 }
 
 impl Read for TagReader {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, std::io::Error> {
         let mut mfrc522 = self.mfrc522.lock().unwrap();
-        let key: rfid_rs::MifareKey = [0xffu8; 6];
 
         if self.current_block == N_BLOCKS {
             return Ok(0);
@@ -255,7 +251,7 @@ impl Read for TagReader {
             .authenticate(
                 picc::Command::MfAuthKeyA,
                 DATA_BLOCKS[self.current_block as usize],
-                key,
+                MIFARE_KEY_A,
                 &self.uid,
             )
             .map_err(|err| {

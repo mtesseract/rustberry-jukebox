@@ -46,7 +46,14 @@ impl GpioTransmitter {
     }
 
     pub fn run(&self) {
-        self.run_with_result().expect("run with result");
+        match self.run_with_result() {
+            Ok(_) => {
+                error!("GPIO Event Transmitter terminated.");
+            }
+            Err(err) => {
+                error!("GPIO Event Transmitter terminated with error: {}", err);
+            }
+        }
     }
 
     pub fn run_with_result(&self) -> Fallible<()> {
@@ -60,12 +67,14 @@ impl GpioTransmitter {
             let tx = self.tx.clone();
             let cmd = (*cmd).clone();
             std::thread::spawn(move || {
-                for event in line.events(
+                for _event in line.events(
                     LineRequestFlags::INPUT,
                     EventRequestFlags::RISING_EDGE,
                     "read-input",
                 ) {
-                    tx.send(cmd.clone()).expect("Failed to send GPIO command");
+                    if let Err(err) = tx.send(cmd.clone()) {
+                        error!("Failed to transmit GPIO event: {}", err);
+                    }
                 }
             });
         }
