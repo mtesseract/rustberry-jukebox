@@ -5,6 +5,7 @@ use slog::{self, o, Drain};
 use slog_async;
 use slog_scope::{error, info, warn};
 use slog_term;
+use std::process::Command;
 
 use rustberry::access_token_provider;
 use rustberry::gpio::{self, GpioController};
@@ -21,10 +22,10 @@ struct Config {
     client_id: String,
     client_secret: String,
     device_name: String,
+    post_init_command: Option<String>,
 }
 
 fn execute_shutdown() {
-    use std::process::Command;
     let _output = Command::new("sudo")
         .arg("shutdown")
         .arg("-h")
@@ -95,12 +96,21 @@ fn run_application() -> Fallible<()> {
 
     let transmitter_backend = user_requests::rfid::UserRequestTransmitterRfid::new()
         .expect("Failed to initialize backend");
-
     let transmitter = user_requests::UserRequestsTransmitter::new(transmitter_backend)
         .expect("Failed to create UserRequestsTransmitter");
-
     let user_requests_producer: user_requests::UserRequests<UserRequest> =
         user_requests::UserRequests::new(transmitter);
+
+    // Execute post-init-command, if set in the environment.
+    if let Some(ref post_init_command) = config.post_init_command {
+        if let Err(err) = Command::new(post_init_command).output() {
+            error!(
+                "Failed to execute post init command '{}': {}",
+                post_init_command, err
+            );
+        }
+    }
+    // Enter loop processing user requests (via RFID tag).
     user_requests_producer.for_each(|req| match req {
         Some(req) => {
             let res = match req {
@@ -128,7 +138,7 @@ fn run_application() -> Fallible<()> {
         }
     });
 
-    Ok(())
+    unreachable!()
 }
 
 fn main() -> Fallible<()> {
