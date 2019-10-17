@@ -58,12 +58,12 @@ impl GpioTransmitter {
 
     pub fn run_with_result(&self) -> Fallible<()> {
         let mut chip = Chip::new("/dev/gpiochip0")
-            .map_err(|_fixme| Error::IO("Failed to open Chip".to_string()))?;
+            .map_err(|err| Error::IO(format!("Failed to open Chip: {:?}", err)))?;
 
         for (line_id, cmd) in self.map.iter() {
             let line = chip
                 .get_line(*line_id)
-                .map_err(|_fixme| Error::IO("Failed to get GPIO line".to_string()))?;
+                .map_err(|err| Error::IO(format!("Failed to get GPIO line: {:?}", err)))?;
             let tx = self.tx.clone();
             let cmd = (*cmd).clone();
             std::thread::spawn(move || {

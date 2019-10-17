@@ -1,7 +1,7 @@
 use std::sync::{Arc, RwLock};
 use std::thread;
 
-use failure::Error;
+use failure::Fallible;
 use gotham_derive::StateData;
 use slog_scope::{info, warn};
 
@@ -12,14 +12,14 @@ pub struct AccessTokenProvider {
     client_id: String,
     client_secret: String,
     refresh_token: String,
-    access_token: Arc<RwLock<Result<String, Error>>>,
+    access_token: Arc<RwLock<Option<String>>>,
 }
 
 fn token_refresh_thread(
     client_id: String,
     client_secret: String,
     refresh_token: String,
-    access_token: Arc<RwLock<Result<String, Error>>>,
+    access_token: Arc<RwLock<Option<String>>>,
 ) {
     loop {
         {
@@ -31,7 +31,10 @@ fn token_refresh_thread(
                 warn!("Failed to retrieve access token");
             }
             let mut access_token_write = access_token.write().unwrap();
-            *access_token_write = token;
+
+            if let Ok(token) = token {
+                *access_token_write = Some(token);
+            }
         }
         thread::sleep(std::time::Duration::from_secs(600));
     }
@@ -39,17 +42,39 @@ fn token_refresh_thread(
     // panic!()
 }
 
-impl AccessTokenProvider {
-    pub fn get_token(&mut self) -> Option<String> {
-        let access_token = self.access_token.read().unwrap();
-        (*access_token).as_ref().ok().cloned()
+#[derive(Clone, Copy, Debug)]
+pub enum AtpError {
+    NoTokenReceivedYet,
+}
+
+impl std::fmt::Display for AtpError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use AtpError::*;
+
+        match self {
+            NoTokenReceivedYet => write!(f, "No initial token received yet"),
+        }
     }
-    pub fn get_bearer_token(&mut self) -> Option<String> {
+}
+
+impl std::error::Error for AtpError {}
+
+impl AccessTokenProvider {
+    pub fn get_token(&mut self) -> Fallible<String> {
+        let access_token = self.access_token.read().unwrap();
+
+        match &*access_token {
+            Some(token) => Ok(token.clone()),
+            None => Err(AtpError::NoTokenReceivedYet.into()),
+        }
+    }
+
+    pub fn get_bearer_token(&mut self) -> Fallible<String> {
         self.get_token().map(|token| format!("Bearer {}", &token))
     }
 
     pub fn new(client_id: &str, client_secret: &str, refresh_token: &str) -> AccessTokenProvider {
-        let access_token = Arc::new(RwLock::new(Ok("fixme".to_string())));
+        let access_token = Arc::new(RwLock::new(None));
 
         {
             let access_token_clone = Arc::clone(&access_token);
