@@ -1,0 +1,16 @@
+# Store as ~/.config/systemd/user/jukebox.service
+# Activate: systemctl --user enable meine_unit.service; sudo loginctl enable-linger NUTZER 
+# Logs: journalctl --user 
+
+[Unit]
+Description=Rustberry Jukebox
+Requires=raspotify.service
+
+[Service]
+Type=simple
+Restart=always
+ExecStart=/home/pi/jukebox/jukeboxd
+EnvironmentFile=/home/pi/jukebox/env
+
+[Install]
+WantedBy=multi-user.target
