@@ -226,14 +226,15 @@ impl Write for TagWriter {
 impl TagReader {
     pub fn read_string(&mut self) -> Result<String, std::io::Error> {
         let mut bytes: [u8; 1024] = [0; 1024];
-        let string = rmp::decode::read_str(self, &mut bytes).unwrap();
+        let string = rmp::decode::read_str(self, &mut bytes).expect("read_str failed");
+        //map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))?;
         Ok(string.to_string().clone())
     }
 }
 
 impl TagWriter {
     pub fn write_string(&mut self, s: &str) -> Result<(), std::io::Error> {
-        rmp::encode::write_str(self, s).unwrap();
+        rmp::encode::write_str(self, s).expect("write_str failed");
         self.flush()
     }
 }

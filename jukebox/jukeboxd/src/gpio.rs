@@ -52,13 +52,8 @@ impl GpioTransmitter {
     }
 
     pub fn run(&self) {
-        match self.run_with_result() {
-            Ok(_) => {
-                error!("GPIO Event Transmitter terminated.");
-            }
-            Err(err) => {
-                error!("GPIO Event Transmitter terminated with error: {}", err);
-            }
+        if let Err(err) = self.run_with_result() {
+            error!("GPIO Event Transmitter terminated with error: {}", err);
         }
     }
 
@@ -122,7 +117,8 @@ impl GpioController {
         let config = (*config).clone();
         let transmitter = GpioTransmitter::new(tx, &config);
 
-        std::thread::spawn(move || transmitter.run());
+        // Spawn threads per GPIO line.
+        transmitter.run();
 
         Ok(Self { rx })
     }
