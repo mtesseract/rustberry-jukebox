@@ -31,13 +31,19 @@ pub enum Command {
     Shutdown,
 }
 
+#[derive(Debug, Clone)]
+enum TransmitterMessage {
+    Command(Command),
+    TransmitterTerminated,
+}
+
 struct GpioTransmitter {
     map: HashMap<u32, Command>,
-    tx: Sender<Command>,
+    tx: Sender<TransmitterMessage>,
 }
 
 impl GpioTransmitter {
-    pub fn new(tx: Sender<Command>, config: &Config) -> Self {
+    pub fn new(tx: Sender<TransmitterMessage>, config: &Config) -> Self {
         let mut map = HashMap::new();
         if let Some(shutdown_pin) = config.shutdown_pin {
             map.insert(shutdown_pin, Command::Shutdown);
@@ -59,20 +65,21 @@ impl GpioTransmitter {
     pub fn run_with_result(&self) -> Fallible<()> {
         let mut chip = Chip::new("/dev/gpiochip0")
             .map_err(|err| Error::IO(format!("Failed to open Chip: {:?}", err)))?;
-
+        let n_lines = self.map.len();
+        // Spawn per-line threads;
         for (line_id, cmd) in self.map.iter() {
             let line = chip
                 .get_line(*line_id)
                 .map_err(|err| Error::IO(format!("Failed to get GPIO line: {:?}", err)))?;
             let tx = self.tx.clone();
             let cmd = (*cmd).clone();
-            std::thread::spawn(move || {
+            let _handle = std::thread::spawn(move || {
                 for _event in line.events(
                     LineRequestFlags::INPUT,
                     EventRequestFlags::RISING_EDGE,
                     "read-input",
                 ) {
-                    if let Err(err) = tx.send(cmd.clone()) {
+                    if let Err(err) = tx.send(TransmitterMessage::Command(cmd.clone())) {
                         error!("Failed to transmit GPIO event: {}", err);
                     }
                 }
@@ -83,8 +90,7 @@ impl GpioTransmitter {
 }
 
 pub struct GpioController {
-    rx: Receiver<Command>,
-    // config: Config,
+    rx: Receiver<TransmitterMessage>,
 }
 
 impl Iterator for GpioController {
@@ -92,7 +98,11 @@ impl Iterator for GpioController {
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.rx.recv() {
-            Ok(next_item) => Some(next_item),
+            Ok(TransmitterMessage::Command(next_command)) => Some(next_command),
+            Ok(TransmitterMessage::TransmitterTerminated) => {
+                error!("Transmitter terminated");
+                None
+            }
             Err(err) => {
                 error!("Failed to receive next command: {}", err);
                 None
@@ -108,7 +118,7 @@ impl GpioController {
     }
 
     pub fn new(config: &Config) -> Fallible<Self> {
-        let (tx, rx): (Sender<Command>, Receiver<Command>) = mpsc::channel();
+        let (tx, rx): (Sender<TransmitterMessage>, Receiver<TransmitterMessage>) = mpsc::channel();
         let config = (*config).clone();
         let transmitter = GpioTransmitter::new(tx, &config);
 
