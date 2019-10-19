@@ -1,6 +1,6 @@
 use failure::Fallible;
 use serde::Deserialize;
-use signal_hook::{iterator::Signals, SIGINT};
+use signal_hook::{iterator::Signals, SIGINT, SIGTERM};
 use slog::{self, o, Drain};
 use slog_async;
 use slog_scope::{error, info, warn};
@@ -84,11 +84,11 @@ fn run_application() -> Fallible<()> {
     info!("Initialized Player");
 
     {
-        let signals = Signals::new(&[SIGINT])?;
+        let signals = Signals::new(&[SIGINT, SIGTERM])?;
         let mut player_clone = player.clone();
         std::thread::spawn(move || {
-            let _ = signals.into_iter().next();
-            info!("Received signal SIGINT, exiting");
+            let sig = signals.into_iter().next();
+            info!("Received signal {:?}, exiting", sig);
             let _ = player_clone.stop_playback();
             std::process::exit(0);
         });
