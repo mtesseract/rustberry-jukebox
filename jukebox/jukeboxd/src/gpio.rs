@@ -71,7 +71,7 @@ impl GpioTransmitter {
             let _handle = std::thread::spawn(move || {
                 for _event in line.events(
                     LineRequestFlags::INPUT,
-                    EventRequestFlags::RISING_EDGE,
+                    EventRequestFlags::FALLING_EDGE,
                     "read-input",
                 ) {
                     if let Err(err) = tx.send(TransmitterMessage::Command(cmd.clone())) {
