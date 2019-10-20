@@ -1,7 +1,7 @@
 use failure::Fallible;
-use gpio_cdev::{Chip, Line, EventRequestFlags, LineRequestFlags};
+use gpio_cdev::{Chip, EventRequestFlags, Line, LineRequestFlags};
 use serde::Deserialize;
-use slog_scope::{info,error};
+use slog_scope::{error, info};
 use std::collections::HashMap;
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
@@ -57,20 +57,32 @@ impl GpioTransmitter {
         }
     }
 
-    fn event_listener(tx: Sender<TransmitterMessage>, line: Line, line_id: u32, cmd: Command) -> Fallible<()> {
-                info!("Listening for GPIO events on line {}", line_id);
-                for event in line.events(
-                    LineRequestFlags::INPUT,
-                    EventRequestFlags::FALLING_EDGE,
-                    "read-input",
-                ).map_err(|err| Error::IO(format!("Failed to request events from GPIO line {}: {}", line_id, err)))? {
-                    info!("Received GPIO event {:?} on line {}", event, line_id);
-                    if let Err(err) = tx.send(TransmitterMessage::Command(cmd.clone())) {
-                        error!("Failed to transmit GPIO event: {}", err);
-                    }
-                }
-                Ok(())
-
+    fn event_listener(
+        tx: Sender<TransmitterMessage>,
+        line: Line,
+        line_id: u32,
+        cmd: Command,
+    ) -> Fallible<()> {
+        info!("Listening for GPIO events on line {}", line_id);
+        for event in line
+            .events(
+                LineRequestFlags::INPUT,
+                EventRequestFlags::BOTH_EDGES,
+                "read-input",
+            )
+            .map_err(|err| {
+                Error::IO(format!(
+                    "Failed to request events from GPIO line {}: {}",
+                    line_id, err
+                ))
+            })?
+        {
+            info!("Received GPIO event {:?} on line {}", event, line_id);
+            if let Err(err) = tx.send(TransmitterMessage::Command(cmd.clone())) {
+                error!("Failed to transmit GPIO event: {}", err);
+            }
+        }
+        Ok(())
     }
 
     pub fn run_with_result(&self) -> Fallible<()> {
