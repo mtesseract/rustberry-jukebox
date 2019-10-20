@@ -1,5 +1,5 @@
 use failure::Fallible;
-use gpio_cdev::{Chip, EventRequestFlags, LineRequestFlags};
+use gpio_cdev::{Chip, Line, EventRequestFlags, LineRequestFlags};
 use serde::Deserialize;
 use slog_scope::{info,error};
 use std::collections::HashMap;
@@ -57,6 +57,22 @@ impl GpioTransmitter {
         }
     }
 
+    fn event_listener(tx: Sender<TransmitterMessage>, line: Line, line_id: u32, cmd: Command) -> Fallible<()> {
+                info!("Listening for GPIO events on line {}", line_id);
+                for event in line.events(
+                    LineRequestFlags::INPUT,
+                    EventRequestFlags::FALLING_EDGE,
+                    "read-input",
+                ).map_err(|err| Error::IO(format!("Failed to request events from GPIO line {}: {}", line_id, err)))? {
+                    info!("Received GPIO event {:?} on line {}", event, line_id);
+                    if let Err(err) = tx.send(TransmitterMessage::Command(cmd.clone())) {
+                        error!("Failed to transmit GPIO event: {}", err);
+                    }
+                }
+                Ok(())
+
+    }
+
     pub fn run_with_result(&self) -> Fallible<()> {
         let mut chip = Chip::new("/dev/gpiochip0")
             .map_err(|err| Error::IO(format!("Failed to open Chip: {:?}", err)))?;
@@ -71,18 +87,8 @@ impl GpioTransmitter {
             let cmd = (*cmd).clone();
             let line_id = *line_id;
             let _handle = std::thread::spawn(move || {
-                info!("Listening for GPIO events on line {}", line_id);
-                for event in line.events(
-                    LineRequestFlags::INPUT,
-                    EventRequestFlags::FALLING_EDGE,
-                    "read-input",
-                ) {
-                    info!("Received GPIO event {:?} on line {}", event, line_id);
-                    if let Err(err) = tx.send(TransmitterMessage::Command(cmd.clone())) {
-                        error!("Failed to transmit GPIO event: {}", err);
-                    }
-                }
-                error!("GPIO Listener loop terminated");
+                let res = Self::event_listener(tx, line, line_id, cmd);
+                error!("GPIO Listener loop terminated: {:?}", res);
             });
         }
         Ok(())
