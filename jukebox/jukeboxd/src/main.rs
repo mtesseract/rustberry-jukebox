@@ -8,7 +8,7 @@ use slog_term;
 use std::process::Command;
 
 use rustberry::access_token_provider;
-use rustberry::gpio::{self, GpioController};
+use rustberry::gpio_sysfs::{self, GpioController};
 use rustberry::server;
 use rustberry::spotify_play;
 use rustberry::spotify_util;
@@ -54,7 +54,7 @@ fn run_application() -> Fallible<()> {
         for cmd in gpio_controller {
             info!("Received {:?} command from GPIO Controller", cmd);
             match cmd {
-                gpio::Command::Shutdown => {
+                gpio_sysfs::Command::Shutdown => {
                     info!("Shutting down");
                     // execute_shutdown();
                 }
