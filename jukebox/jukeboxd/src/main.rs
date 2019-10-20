@@ -16,22 +16,32 @@ use rustberry::user_requests::{self, UserRequest};
 
 const LOCAL_SERVER_PORT: u32 = 8000;
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 struct Config {
     refresh_token: String,
     client_id: String,
     client_secret: String,
     device_name: String,
     post_init_command: Option<String>,
+    shutdown_command: Option<String>,
 }
 
-fn execute_shutdown() {
-    let _output = Command::new("sudo")
-        .arg("shutdown")
-        .arg("-h")
-        .arg("now")
-        .output()
-        .expect("failed to execute shutdown");
+fn execute_shutdown(config: &Config) {
+    match config.shutdown_command {
+        Some(ref cmd) => {
+            Command::new(cmd)
+                .status()
+                .expect(&format!("failed to execute shutdown command '{}'", cmd));
+        }
+        None => {
+            Command::new("sudo")
+                .arg("shutdown")
+                .arg("-h")
+                .arg("now")
+                .status()
+                .expect("failed to execute default shutdown command");
+        }
+    }
 }
 
 fn run_application() -> Fallible<()> {
@@ -50,13 +60,14 @@ fn run_application() -> Fallible<()> {
     // Create GPIO Controller.
     let gpio_controller = GpioController::new_from_env()?;
     info!("Created GPIO Controller");
+    let config_copy = config.clone();
     std::thread::spawn(move || {
         for cmd in gpio_controller {
             info!("Received {:?} command from GPIO Controller", cmd);
             match cmd {
                 gpio_sysfs::Command::Shutdown => {
                     info!("Shutting down");
-                    execute_shutdown();
+                    execute_shutdown(&config_copy);
                 }
             }
         }

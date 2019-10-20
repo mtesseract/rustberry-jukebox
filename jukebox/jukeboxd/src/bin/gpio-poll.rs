@@ -1,8 +1,8 @@
 use failure::Fallible;
 
-use sysfs_gpio::{Direction, Pin};
 use rustberry::rfid::*;
 use rustberry::user_requests::UserRequest;
+use sysfs_gpio::{Direction, Pin};
 
 fn main() -> Fallible<()> {
     let line_id = 5;

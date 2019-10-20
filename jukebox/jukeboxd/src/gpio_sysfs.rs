@@ -67,7 +67,7 @@ impl GpioTransmitter {
 
         input.with_exported(|| {
             input.set_direction(Direction::In)?;
-            input.set_edge(Edge::BothEdges)?;
+            input.set_edge(Edge::FallingEdge)?;
             let mut poller = input.get_poller()?;
             loop {
                 match poller.poll(1000) {
