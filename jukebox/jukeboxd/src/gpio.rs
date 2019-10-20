@@ -1,7 +1,7 @@
 use failure::Fallible;
 use gpio_cdev::{Chip, EventRequestFlags, LineRequestFlags};
 use serde::Deserialize;
-use slog_scope::error;
+use slog_scope::{info,error};
 use std::collections::HashMap;
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
@@ -68,16 +68,20 @@ impl GpioTransmitter {
                 .map_err(|err| Error::IO(format!("Failed to get GPIO line: {:?}", err)))?;
             let tx = self.tx.clone();
             let cmd = (*cmd).clone();
+            let line_id = *line_id;
             let _handle = std::thread::spawn(move || {
-                for _event in line.events(
+                info!("Listening for GPIO events on line {}", line_id);
+                for event in line.events(
                     LineRequestFlags::INPUT,
                     EventRequestFlags::FALLING_EDGE,
                     "read-input",
                 ) {
+                    info!("Received GPIO event {:?} on line {}", event, line_id);
                     if let Err(err) = tx.send(TransmitterMessage::Command(cmd.clone())) {
                         error!("Failed to transmit GPIO event: {}", err);
                     }
                 }
+                error!("GPIO Listener loop terminated");
             });
         }
         Ok(())
