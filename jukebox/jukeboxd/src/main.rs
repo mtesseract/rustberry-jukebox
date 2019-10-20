@@ -113,12 +113,13 @@ fn run_application() -> Fallible<()> {
     // Enter loop processing user requests (via RFID tag).
     user_requests_producer.for_each(|req| match req {
         Some(req) => {
+            info!("Received playback request {:?}", &req);
             let res = match req {
-                UserRequest::SpotifyUri(uri) => player.start_playback(&uri),
+                UserRequest::SpotifyUri(ref uri) => player.start_playback(uri),
             };
             match res {
                 Ok(_) => {
-                    info!("Started playback");
+                    info!("Started playback: {:?}", &req);
                 }
                 Err(err) => {
                     error!("Failed to start playback: {}", err);
