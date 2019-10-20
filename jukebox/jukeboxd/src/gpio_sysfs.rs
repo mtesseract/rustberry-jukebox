@@ -86,7 +86,8 @@ impl GpioTransmitter {
                     }
                 }
             }
-        });
+        })?;
+        
         Ok(())
     }
 
