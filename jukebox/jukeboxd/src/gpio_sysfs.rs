@@ -1,10 +1,10 @@
 use failure::Fallible;
-use sysfs_gpio::{Direction, Pin, Edge};
 use serde::Deserialize;
-use slog_scope::{error, warn, info};
+use slog_scope::{error, info, warn};
 use std::collections::HashMap;
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
+use sysfs_gpio::{Direction, Edge, Pin};
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Config {
@@ -70,24 +70,26 @@ impl GpioTransmitter {
             input.set_edge(Edge::BothEdges)?;
             let mut poller = input.get_poller()?;
             loop {
-                info!("Polling for event");
                 match poller.poll(1000) {
                     Ok(Some(value)) => {
                         info!("Received GPIO event {} on line {}", value, line_id);
                         if let Err(err) = tx.send(TransmitterMessage::Command(cmd.clone())) {
                             error!("Failed to transmit GPIO event: {}", err);
-                        }                   
+                        }
                     }
                     Ok(None) => {
                         continue;
                     }
                     Err(err) => {
-                        warn!("Polling for GPIO events for line {} failed: {}", line_id, err);
+                        warn!(
+                            "Polling for GPIO events for line {} failed: {}",
+                            line_id, err
+                        );
                     }
                 }
             }
         })?;
-        
+
         Ok(())
     }
 

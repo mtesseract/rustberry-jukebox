@@ -56,7 +56,7 @@ fn run_application() -> Fallible<()> {
             match cmd {
                 gpio_sysfs::Command::Shutdown => {
                     info!("Shutting down");
-                    // execute_shutdown();
+                    execute_shutdown();
                 }
             }
         }
