@@ -63,6 +63,7 @@ impl GpioTransmitter {
         let n_lines = self.map.len();
         // Spawn per-line threads;
         for (line_id, cmd) in self.map.iter() {
+            info!("Listening for {:?} on GPIO line {}", cmd, line_id);
             let line = chip
                 .get_line(*line_id)
                 .map_err(|err| Error::IO(format!("Failed to get GPIO line: {:?}", err)))?;
