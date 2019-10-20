@@ -70,6 +70,7 @@ impl GpioTransmitter {
             input.set_edge(Edge::BothEdges)?;
             let mut poller = input.get_poller()?;
             loop {
+                info!("Polling for event");
                 match poller.poll(1000) {
                     Ok(Some(value)) => {
                         info!("Received GPIO event {} on line {}", value, line_id);
