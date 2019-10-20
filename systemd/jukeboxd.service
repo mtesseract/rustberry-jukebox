@@ -4,13 +4,12 @@
 
 [Unit]
 Description=Rustberry Jukebox
-Requires=raspotify.service
+#Requires=raspotify.service
 
 [Service]
 Type=simple
 Restart=always
-ExecStart=/home/pi/jukebox/jukeboxd
-EnvironmentFile=/home/pi/jukebox/env
+ExecStart=/home/pi/jukebox/jukeboxd.wrapper
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target

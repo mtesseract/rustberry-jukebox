@@ -1,0 +1,3 @@
+#!/bin/sh
+. /home/pi/jukebox/.env
+sudo -E /home/pi/jukebox/jukeboxd
