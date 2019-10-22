@@ -141,8 +141,27 @@ pub mod rfid {
         }
     }
 
-    impl<T: DeserializeOwned + PartialEq + Clone> UserRequestTransmitterBackend<T>
-        for UserRequestTransmitterRfid<T>
+    fn handle_tag<T: DeserializeOwned + 'static + PartialEq + Clone + Send + Sync>(
+        tag: Tag,
+        tx: &Sender<Option<T>>,
+    ) -> Fallible<()> {
+        let current_uid = format!("{:?}", tag.uid);
+        let mut tag_reader = tag.new_reader();
+        let request_string = tag_reader.read_string()?;
+        let request_deserialized: T = serde_json::from_str(&request_string)?;
+        let res = tx.send(Some(request_deserialized.clone()));
+        match res {
+            Ok(_) => Ok(()),
+            Err(err) => {
+                let serr: std::sync::mpsc::SendError<Option<T>> = err;
+                let ferr: failure::Error = serr.into();
+                Err(ferr)
+            }
+        }
+    }
+
+    impl<T: DeserializeOwned + 'static + Send + Sync + PartialEq + Clone>
+        UserRequestTransmitterBackend<T> for UserRequestTransmitterRfid<T>
     {
         fn run(&mut self, tx: Sender<Option<T>>) -> Fallible<()> {
             let mut last_uid: Option<String> = None;
@@ -163,24 +182,18 @@ pub mod rfid {
                     }
                     Ok(Some(tag)) => {
                         let current_uid = format!("{:?}", tag.uid);
-                        if last_uid != Some(current_uid.clone()) {
-                            // new tag!
-                            let mut tag_reader = tag.new_reader();
-                            match tag_reader.read_string() {
-                                Ok(s) => {
-                                    let req: T = serde_json::from_str(&s)
-                                        .expect("Deserializing user request");
-                                    tx.send(Some(req.clone())).expect("tx send");
-                                }
-                                Err(err) => {
-                                    error!(
-                                        "Failed to retrieve data from RFID Tag {}: {}",
-                                        &current_uid, err
-                                    );
-                                }
+                        if last_uid == Some(current_uid.clone()) {
+                            continue;
+                        }
+                        // new tag!
+                        match handle_tag(tag, &tx) {
+                            Ok(_) => {
+                                last_uid = Some(current_uid);
                             }
-                            last_uid = Some(current_uid);
-                        } // FIXME
+                            Err(err) => {
+                                error!("");
+                            }
+                        }
                     }
                 }
                 std::thread::sleep(std::time::Duration::from_secs(1));
