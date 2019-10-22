@@ -46,6 +46,7 @@ fn execute_shutdown(config: &Config) {
 
 fn run_application() -> Fallible<()> {
     info!("** Rustberry/Spotify Starting **");
+    let start_time = std::time::Instant::now();
 
     let config = envy::from_env::<Config>()?;
     info!("Configuration"; o!("device_name" => &config.device_name));
@@ -58,7 +59,14 @@ fn run_application() -> Fallible<()> {
     );
 
     // Create GPIO Controller.
-    let gpio_controller = GpioController::new_from_env()?;
+    let gpio_config = {
+        let mut gpio_config =
+            gpio_sysfs::Config::new_from_env().expect("Failed to create GPIO Config");
+        gpio_config.start_time = Some(start_time);
+        gpio_config
+    };
+
+    let gpio_controller = GpioController::new(&gpio_config)?;
     info!("Created GPIO Controller");
     let config_copy = config.clone();
     std::thread::spawn(move || {

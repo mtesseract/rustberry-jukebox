@@ -34,7 +34,7 @@ pub enum Command {
 #[derive(Debug, Clone)]
 enum TransmitterMessage {
     Command(Command),
-    TransmitterTerminated,
+    // TransmitterTerminated,
 }
 
 struct GpioTransmitter {
@@ -67,7 +67,7 @@ impl GpioTransmitter {
         for event in line
             .events(
                 LineRequestFlags::INPUT,
-                EventRequestFlags::BOTH_EDGES,
+                EventRequestFlags::FALLING_EDGE,
                 "read-input",
             )
             .map_err(|err| {
@@ -88,7 +88,6 @@ impl GpioTransmitter {
     pub fn run_with_result(&self) -> Fallible<()> {
         let mut chip = Chip::new("/dev/gpiochip0")
             .map_err(|err| Error::IO(format!("Failed to open Chip: {:?}", err)))?;
-        let n_lines = self.map.len();
         // Spawn per-line threads;
         for (line_id, cmd) in self.map.iter() {
             info!("Listening for {:?} on GPIO line {}", cmd, line_id);
@@ -117,10 +116,10 @@ impl Iterator for GpioController {
     fn next(&mut self) -> Option<Self::Item> {
         match self.rx.recv() {
             Ok(TransmitterMessage::Command(next_command)) => Some(next_command),
-            Ok(TransmitterMessage::TransmitterTerminated) => {
-                error!("Transmitter terminated");
-                None
-            }
+            // Ok(TransmitterMessage::TransmitterTerminated) => {
+            //     error!("Transmitter terminated");
+            //     None
+            // }
             Err(err) => {
                 error!("Failed to receive next command: {}", err);
                 None
