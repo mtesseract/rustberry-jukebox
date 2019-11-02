@@ -1,6 +1,6 @@
 use failure::Fallible;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use slog_scope::{error, warn, info};
+use slog_scope::{error, info, warn};
 use std::env;
 use std::io::BufRead;
 use std::sync::mpsc;

@@ -21,8 +21,8 @@ fn derive_spotify_uri_from_url(url: &str) -> Fallible<String> {
 }
 
 struct Written {
-    request: PlaybackRequest,
-    uid: String,
+    _request: PlaybackRequest,
+    _uid: String,
 }
 
 fn run_application() -> Fallible<Written> {
@@ -39,7 +39,7 @@ fn run_application() -> Fallible<Written> {
     println!("RFID Tag UID: {}", uid);
     let mut tag_writer = tag.new_writer();
     tag_writer.write_string(&request_deserialized)?;
-    Ok(Written { request, uid })
+    Ok(Written { _request: request, _uid: uid })
 }
 
 fn main() {
