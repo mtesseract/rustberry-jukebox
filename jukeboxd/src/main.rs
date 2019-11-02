@@ -8,7 +8,8 @@ use slog_term;
 use std::process::Command;
 
 use rustberry::access_token_provider;
-use rustberry::gpio_sysfs::{self, GpioController};
+// use rustberry::gpio_sysfs::{self, GpioController};
+use rustberry::button_controller::{ButtonController, self};
 use rustberry::playback_requests::{self, PlaybackRequest};
 use rustberry::spotify_play;
 use rustberry::spotify_util;
@@ -43,8 +44,6 @@ fn execute_shutdown(config: &Config) {
 
 fn run_application() -> Fallible<()> {
     info!("** Rustberry/Spotify Starting **");
-    let start_time = std::time::Instant::now();
-
     let config = envy::from_env::<Config>()?;
     info!("Configuration"; o!("device_name" => &config.device_name));
 
@@ -55,22 +54,16 @@ fn run_application() -> Fallible<()> {
         &config.refresh_token,
     );
 
-    // Create GPIO Controller.
-    let gpio_config = {
-        let mut gpio_config =
-            gpio_sysfs::Config::new_from_env().expect("Failed to create GPIO Config");
-        gpio_config.start_time = Some(start_time);
-        gpio_config
-    };
+    let button_controller_backend = button_controller::backends::cdev_gpio::CdevGpio::new_from_env()?;
+    let button_controller = ButtonController::new(button_controller_backend)?;
+    info!("Created Button Controller");
 
-    let gpio_controller = GpioController::new(&gpio_config)?;
-    info!("Created GPIO Controller");
     let config_copy = config.clone();
     std::thread::spawn(move || {
-        for cmd in gpio_controller {
-            info!("Received {:?} command from GPIO Controller", cmd);
+        for cmd in button_controller {
+            info!("Received {:?} command from Button Controller", cmd);
             match cmd {
-                gpio_sysfs::Command::Shutdown => {
+                button_controller::Command::Shutdown => {
                     info!("Shutting down");
                     execute_shutdown(&config_copy);
                 }

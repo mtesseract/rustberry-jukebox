@@ -26,7 +26,7 @@ set -x && \
 . ~/.cargo/env && \
 cd $DIR && \
 git clone https://github.com/mtesseract/rustberry.git && \
-cd rustberry/jukebox/jukeboxd && \
+cd rustberry/jukeboxd && \
 ln -sf /cache target
 export OPENSSL_LIB_DIR=/usr/local/openssl && \
 export OPENSSL_INCLUDE_DIR=/usr/local/openssl/include && \
@@ -35,4 +35,4 @@ export OPENSSL_INCLUDE_DIR=/usr/local/openssl/include && \
 cargo build --release --bin $PROGRAM --target=armv7-unknown-linux-gnueabihf
 "
 
-scp rustberry-builder:$DIR/rustberry/jukebox/jukeboxd/target/armv7-unknown-linux-gnueabihf/release/$PROGRAM .
+scp rustberry-builder:$DIR/rustberry/jukeboxd/target/armv7-unknown-linux-gnueabihf/release/$PROGRAM .

@@ -95,9 +95,7 @@ impl RfidController {
         match self.try_open_tag() {
             Ok(tag) => Ok(Some(tag)),
             Err(rfid_rs::Error::Timeout) => Ok(None),
-            Err(err) => {
-                Err(err.into())
-            }
+            Err(err) => Err(err.into()),
         }
     }
 }
