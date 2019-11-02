@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 
 pub trait ButtonControllerBackend {
     fn run_event_listener(&mut self, tx: Sender<TransmitterMessage>) -> Fallible<()>;
+    fn description(&self) -> String;
 }
 
 #[derive(Debug, Clone)]
@@ -130,6 +131,10 @@ pub mod backends {
         }
 
         impl ButtonControllerBackend for SysFsGpio {
+            fn description(&self) -> String {
+                "SysFS GPIO Backend".to_string()
+            }
+
             fn run_event_listener(&mut self, tx: Sender<TransmitterMessage>) -> Fallible<()> {
                 for (line_id, cmd) in self.map.iter() {
                     info!("Listening for {:?} on GPIO line {}", cmd, line_id);
@@ -255,6 +260,10 @@ pub mod backends {
         }
 
         impl ButtonControllerBackend for CdevGpio {
+            fn description(&self) -> String {
+                "cdev GPIO Backend".to_string()
+            }
+
             fn run_event_listener(&mut self, tx: Sender<TransmitterMessage>) -> Fallible<()> {
                 for (line_id, cmd) in self.map.iter() {
                     info!("Listening for {:?} on GPIO line {}", cmd, line_id);
@@ -330,6 +339,7 @@ impl Iterator for ButtonController {
 
 impl ButtonController {
     pub fn new<BCB: ButtonControllerBackend>(mut backend: BCB) -> Fallible<Self> {
+        info!("Creating Button Controller with backend {}", backend.description());
         let (tx, rx): (Sender<TransmitterMessage>, Receiver<TransmitterMessage>) = mpsc::channel();
         backend.run_event_listener(tx)?;
         Ok(Self { rx })

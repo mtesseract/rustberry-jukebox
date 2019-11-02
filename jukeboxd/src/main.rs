@@ -44,8 +44,6 @@ fn execute_shutdown(config: &Config) {
 
 fn run_application() -> Fallible<()> {
     info!("** Rustberry/Spotify Starting **");
-    let start_time = std::time::Instant::now();
-
     let config = envy::from_env::<Config>()?;
     info!("Configuration"; o!("device_name" => &config.device_name));
 
@@ -56,7 +54,7 @@ fn run_application() -> Fallible<()> {
         &config.refresh_token,
     );
 
-    let button_controller_backend = button_controller::backends::sysfs_gpio::SysFsGpio::new_from_env()?;
+    let button_controller_backend = button_controller::backends::cdev_gpio::CdevGpio::new_from_env()?;
     let button_controller = ButtonController::new(button_controller_backend)?;
     info!("Created Button Controller");
 
