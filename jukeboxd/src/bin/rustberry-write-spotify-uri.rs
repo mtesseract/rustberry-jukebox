@@ -39,7 +39,10 @@ fn run_application() -> Fallible<Written> {
     println!("RFID Tag UID: {}", uid);
     let mut tag_writer = tag.new_writer();
     tag_writer.write_string(&request_deserialized)?;
-    Ok(Written { _request: request, _uid: uid })
+    Ok(Written {
+        _request: request,
+        _uid: uid,
+    })
 }
 
 fn main() {
