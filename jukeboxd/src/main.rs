@@ -8,8 +8,8 @@ use slog_term;
 use std::process::Command;
 
 use rustberry::access_token_provider;
-// use rustberry::gpio_sysfs::{self, GpioController};
 use rustberry::button_controller::{ButtonController, self};
+use rustberry::led_controller::{self, LedController};
 use rustberry::playback_requests::{self, PlaybackRequest};
 use rustberry::spotify_play;
 use rustberry::spotify_util;
@@ -57,6 +57,9 @@ fn run_application() -> Fallible<()> {
     let button_controller_backend = button_controller::backends::cdev_gpio::CdevGpio::new_from_env()?;
     let button_controller = ButtonController::new(button_controller_backend)?;
     info!("Created Button Controller");
+
+    let led_controller_backend = led_controller::backends::gpio_cdev::GpioCdev::new()?;
+    let led_controller = led_controller::LedController::new(led_controller_backend)?;
 
     let config_copy = config.clone();
     std::thread::spawn(move || {
