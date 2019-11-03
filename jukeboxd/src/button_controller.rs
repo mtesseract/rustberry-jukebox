@@ -341,7 +341,10 @@ impl Iterator for ButtonController {
 
 impl ButtonController {
     pub fn new<BCB: ButtonControllerBackend>(mut backend: BCB) -> Fallible<Self> {
-        info!("Creating Button Controller with backend {}", backend.description());
+        info!(
+            "Creating Button Controller with backend {}",
+            backend.description()
+        );
         let (tx, rx): (Sender<TransmitterMessage>, Receiver<TransmitterMessage>) = mpsc::channel();
         backend.run_event_listener(tx)?;
         Ok(Self { rx })

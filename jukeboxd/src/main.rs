@@ -8,8 +8,8 @@ use slog_term;
 use std::process::Command;
 
 use rustberry::access_token_provider;
-use rustberry::button_controller::{ButtonController, self};
-use rustberry::led_controller::{self, LedController};
+use rustberry::button_controller::{self, ButtonController};
+use rustberry::led_controller;
 use rustberry::playback_requests::{self, PlaybackRequest};
 use rustberry::spotify_play;
 use rustberry::spotify_util;
@@ -54,12 +54,13 @@ fn run_application() -> Fallible<()> {
         &config.refresh_token,
     );
 
-    let button_controller_backend = button_controller::backends::cdev_gpio::CdevGpio::new_from_env()?;
+    let button_controller_backend =
+        button_controller::backends::cdev_gpio::CdevGpio::new_from_env()?;
     let button_controller = ButtonController::new(button_controller_backend)?;
     info!("Created Button Controller");
 
     let led_controller_backend = led_controller::backends::gpio_cdev::GpioCdev::new()?;
-    let led_controller = led_controller::LedController::new(led_controller_backend)?;
+    let mut led_controller = led_controller::LedController::new(led_controller_backend)?;
 
     let config_copy = config.clone();
     std::thread::spawn(move || {
@@ -124,6 +125,7 @@ fn run_application() -> Fallible<()> {
     user_requests_producer.for_each(|req| match req {
         Some(req) => {
             info!("Received playback request {:?}", &req);
+            led_controller.switch_on(led_controller::Led::Playback);
             let res = match req {
                 PlaybackRequest::SpotifyUri(ref uri) => player.start_playback(uri),
             };
@@ -138,6 +140,7 @@ fn run_application() -> Fallible<()> {
         }
         None => {
             info!("Stopping playback");
+            led_controller.switch_off(led_controller::Led::Playback);
             match player.stop_playback() {
                 Ok(_) => {
                     info!("Stopped playback");
