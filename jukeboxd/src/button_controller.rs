@@ -63,6 +63,7 @@ pub mod backends {
 
         impl SysFsGpio {
             pub fn new_from_env() -> Fallible<Self> {
+                info!("Using SysFsGpio backend in Button Controller");
                 let env_config = EnvConfig::new_from_env()?;
                 let config: Config = env_config.into();
                 let mut map = HashMap::new();
@@ -198,6 +199,7 @@ pub mod backends {
 
         impl CdevGpio {
             pub fn new_from_env() -> Fallible<Self> {
+                info!("Using CdevGpio backend in Button Controller");
                 let env_config = EnvConfig::new_from_env()?;
                 let config: Config = env_config.into();
                 let mut map = HashMap::new();
