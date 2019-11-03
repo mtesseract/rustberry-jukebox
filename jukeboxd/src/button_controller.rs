@@ -1,8 +1,5 @@
 use failure::Fallible;
-use serde::Deserialize;
-use slog_scope::{error, info, warn};
-use std::collections::HashMap;
-use std::convert::From;
+use slog_scope::{error, info};
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
 use std::time::{Duration, Instant};
@@ -25,8 +22,7 @@ pub mod backends {
         use slog_scope::{error, info, warn};
         use std::collections::HashMap;
         use std::convert::From;
-        use std::sync::mpsc;
-        use std::sync::mpsc::{Receiver, Sender};
+        use std::sync::mpsc::Sender;
         use std::time::{Duration, Instant};
         use sysfs_gpio::{Direction, Edge, Pin};
 
@@ -165,8 +161,7 @@ pub mod backends {
         use slog_scope::{error, info, warn};
         use std::collections::HashMap;
         use std::convert::From;
-        use std::sync::mpsc::{Receiver, Sender};
-        use std::sync::{mpsc, Arc};
+        use std::sync::mpsc::Sender;
         use std::time::{Duration, Instant};
 
         #[derive(Debug)]
@@ -341,7 +336,10 @@ impl Iterator for ButtonController {
 
 impl ButtonController {
     pub fn new<BCB: ButtonControllerBackend>(mut backend: BCB) -> Fallible<Self> {
-        info!("Creating Button Controller with backend {}", backend.description());
+        info!(
+            "Creating Button Controller with backend {}",
+            backend.description()
+        );
         let (tx, rx): (Sender<TransmitterMessage>, Receiver<TransmitterMessage>) = mpsc::channel();
         backend.run_event_listener(tx)?;
         Ok(Self { rx })

@@ -1,5 +1,5 @@
 use failure::Fallible;
-use slog_scope::{error, info, warn};
+use slog_scope::{error, info};
 use spidev::{SpiModeFlags, Spidev, SpidevOptions};
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};

@@ -9,7 +9,7 @@ use std::process::Command;
 
 use rustberry::access_token_provider;
 // use rustberry::gpio_sysfs::{self, GpioController};
-use rustberry::button_controller::{ButtonController, self};
+use rustberry::button_controller::{self, ButtonController};
 use rustberry::playback_requests::{self, PlaybackRequest};
 use rustberry::spotify_play;
 use rustberry::spotify_util;
@@ -54,7 +54,8 @@ fn run_application() -> Fallible<()> {
         &config.refresh_token,
     );
 
-    let button_controller_backend = button_controller::backends::cdev_gpio::CdevGpio::new_from_env()?;
+    let button_controller_backend =
+        button_controller::backends::cdev_gpio::CdevGpio::new_from_env()?;
     let button_controller = ButtonController::new(button_controller_backend)?;
     info!("Created Button Controller");
 
