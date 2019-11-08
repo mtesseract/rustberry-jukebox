@@ -16,7 +16,7 @@ impl std::fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Led {
     Playback,
 }
@@ -62,6 +62,7 @@ pub mod backends {
         use gpio_cdev::{Chip, LineHandle, LineRequestFlags};
         use serde::Deserialize;
         use slog_scope::{info, warn};
+        use std::collections::HashMap;
 
         #[derive(Deserialize)]
         struct Config {
@@ -71,74 +72,75 @@ pub mod backends {
         pub struct GpioCdev {
             config: Config,
             chip: Chip,
-            playback_led: Option<LineHandle>,
+            leds: HashMap<Led, LineHandle>,
+            // playback_led: Option<LineHandle>,
         }
 
         impl GpioCdev {
+            fn request_gpio_line(
+                leds: &mut HashMap<Led, LineHandle>,
+                chip: &mut Chip,
+                led: Led,
+                line_id: u32,
+            ) -> Fallible<()> {
+                let line = chip.get_line(line_id).map_err(|err| {
+                    Error::IO(format!(
+                        "Failed to get GPIO line for LED {:?}/{}: {:?}",
+                        led, line_id, err
+                    ))
+                })?;
+                let handle = line
+                    .request(LineRequestFlags::OUTPUT, 0, "led-gpio")
+                    .map_err(|err| {
+                        Error::IO(format!(
+                            "Failed to request GPIO output handle for LED {:?}/{}:: {:?}",
+                            led, line_id, err
+                        ))
+                    })?;
+                leds.insert(led, handle);
+                Ok(())
+            }
+
             pub fn new() -> Fallible<Self> {
                 let config: Config = envy::from_env()?;
-                if !led_to_line(&config, Led::Playback).is_some() {
-                    warn!("No GPIO line configured for LED {:?}. Skipping all future requests for this LED.", Led::Playback);
-                }
                 let mut chip = Chip::new("/dev/gpiochip0")
                     .map_err(|err| Error::IO(format!("Failed to open Chip: {:?}", err)))?;
-                let playback_led = match config.playback_led_gpio_line {
-                    Some(line) => {
-                        let output = chip.get_line(line).map_err(|err| {
-                            Error::IO(format!("Failed to get Playback LED GPIO line: {:?}", err))
-                        })?;
-                        let playback_led = output
-                            .request(LineRequestFlags::OUTPUT, 0, "led-gpio")
-                            .map_err(|err| {
-                                Error::IO(format!(
-                                    "Failed to request output handle for GPIO line: {:?}",
-                                    err
-                                ))
-                            })?;
-                        Some(playback_led)
-                    }
-                    None => None,
-                };
+                let mut leds = HashMap::new();
+                if let Some(playback_line) = config.playback_led_gpio_line {
+                    Self::request_gpio_line(&mut leds, &mut chip, Led::Playback, playback_line)?;
+                } else {
+                    warn!("No GPIO line configured for LED {:?}. Skipping all future requests for this LED.", Led::Playback);
+                }
 
-                Ok(GpioCdev {
-                    chip,
-                    config,
-                    playback_led,
-                })
+                Ok(GpioCdev { chip, config, leds })
             }
         }
 
-        fn led_to_line(config: &Config, led: Led) -> Option<u32> {
-            match led {
-                Led::Playback => config.playback_led_gpio_line,
-            }
-        }
+        // fn led_to_line(config: &Config, led: Led) -> Option<u32> {
+        //     match led {
+        //         Led::Playback => config.playback_led_gpio_line,
+        //     }
+        // }
 
         impl LedControllerBackend for GpioCdev {
             fn description(&self) -> String {
                 "gpio-cdev backend".to_string()
             }
             fn switch_on(&mut self, led: Led) -> Fallible<()> {
-                if let Some(ref playback_led) = self.playback_led {
-                    playback_led.set_value(1).map_err(|err| {
-                        Error::IO(format!(
-                            "Failed to activate Playback LED GPIO line, {:?}",
-                            err
-                        ))
+                if let Some(ref led_handle) = self.leds.get(&led) {
+                    led_handle.set_value(1).map_err(|err| {
+                        Error::IO(format!("Failed to switch on LED {:?}: {:?}", &led, err))
                     })?;
-                    info!("Switched on GPIO line for LED {:?}", led);
+                    info!("Switched on LED {:?}", &led);
                 }
                 Ok(())
             }
             fn switch_off(&mut self, led: Led) -> Fallible<()> {
-                if let Some(ref playback_led) = self.playback_led {
-                    playback_led.set_value(0).map_err(|err| {
-                        Error::IO(format!(
-                            "Failed to deactivate Playback LED GPIO line {:?}",
-                            err
-                        ))
+                if let Some(ref led_handle) = self.leds.get(&led) {
+                    led_handle.set_value(0).map_err(|err| {
+                        Error::IO(format!("Failed to switch off LED {:?}: {:?}", &led, err))
                     })?;
-                    info!("Switched off GPIO line for LED {:?}", led);
+                    info!("Switched off LED {:?}", &led);
                 }
                 Ok(())
             }
