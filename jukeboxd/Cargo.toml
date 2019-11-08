@@ -1,6 +1,6 @@
 [package]
 name = "rustberry"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Moritz Clasmeier <mtesseract@silverratio.net>"]
 edition = "2018"
 
@@ -20,10 +20,8 @@ dialoguer = "0.4.0"
 reqwest = "0.9.21"
 failure = "0.1.5"
 base64 = "0.10.1"
-# rfid-rs = "0.1.0"
 rfid-rs = { git = "https://gitlab.com/mclasmeier/rfid-rs" }
 regex = "1"
-
 spidev = "0.4.0"
 envy = "0.4.0"
 signal-hook = "0.1.10"
@@ -34,7 +32,6 @@ slog-async = "2.3.0"
 slog-scope = "4.1.2"
 gpio-cdev = "0.2"
 sysfs_gpio = "0.5"
-
 rmp = "^0.8"
 
 [[bin]]

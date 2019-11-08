@@ -11,7 +11,7 @@ pub enum PlaybackRequest {
     SpotifyUri(String),
 }
 
-#[test]
+#[cfg(test)]
 mod test {
     use super::*;
     #[test]
