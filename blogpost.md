@@ -19,18 +19,17 @@ The feature set I had in mind for the jukebox:
 * Status LEDs (Jukebox running and Jukebox playing)
 * Software wise, the code should be conveniently cross-compilable for a Raspberry Pi.
 
-This is the resulting device:
+This is the resulting jukebox:
 IMG
 
 ## Components
 
 ### The Case
 
-Initially I had no precise idea of the intended look of the device -- what should
-the case me made of, given that I am not particularly experienced when it
-comes to physical manufacturing? Fortunately I found something, which seemed
-promising an old looking [suitcase / treasure
-hest](https://www.amazon.de/BRYNNBERG-Schatztruhe-Marco-38x27x14cm-Aufbewahrungsbox/dp/B07CMPTSD9/ref=sr_1_3?__mk_de_DE=%C3%85M%C3%85%C5%BD%C3%95%C3%91&crid=2X2CTDPJTEGAA&keywords=holzkiste+verschlie%C3%9Fbar&qid=1570263909&s=kitchen&sprefix=holzkiste+vers%2Ckitchen%2C165&sr=1-3).
+Initially I had no precise idea of the intended look of the device -- especially given the fact that I am unexperienced when it
+comes to physical manufacturing. Fortunately I found something, which seemed
+promising: an old looking [suitcase / treasure
+chest](https://www.amazon.de/BRYNNBERG-Schatztruhe-Marco-38x27x14cm-Aufbewahrungsbox/dp/B07CMPTSD9/ref=sr_1_3?__mk_de_DE=%C3%85M%C3%85%C5%BD%C3%95%C3%91&crid=2X2CTDPJTEGAA&keywords=holzkiste+verschlie%C3%9Fbar&qid=1570263909&s=kitchen&sprefix=holzkiste+vers%2Ckitchen%2C165&sr=1-3).
 I thought it might be feasible to build a double bottom into this suitcase,
 having enough hidden space for all the tech stuff inside (Raspberry Pi,
 speakers, power, circuits, cables / adapters) and providing enough space above
@@ -40,7 +39,7 @@ IMG
 
 ### The Records
 
-What should the RFID tags be attached to, if one does not want to use uninspired RFID
+What should the RFID tags be attached to, if one does not want to use plain RFID
 cards or transponders? Again, I was lucky to find a product, which
 matches the intended rustic aesthetics and allows for cheap extensibility:
 [wooden
@@ -54,7 +53,7 @@ IMG
 
 I had an old Raspberry Pi 2 laying around, which I intended to use as a
 technological foundation for the jukebox. The playback should be controllable
-using RFID tags, but I was not familiar with this technology at all. After some
+via RFID tags -- a technology, which I am not familiar with at all. After some
 research I had identified the [MIFARE
 RC522](http://wiki.sunfounder.cc/index.php?title=Mifare_RC522_Module_RFID_Reader)
 as a common and well-supported RFID reader/writerfor suitable for [use with a
@@ -66,7 +65,7 @@ For enabling audio output, I went with the [Trust Leto 2.0 USB
 Speakers](https://www.amazon.de/gp/product/B00JRW0M32). I was somewhat worried
 about the energy consumption (6W) of these speakers, since I prefer to not use
 additional power sources besides the Raspberry Pi's own USB connectors for
-compactness reasons. But they seem to work fine. The USB speakers connect to
+compactness reasons. But they seem to work fine at medium volume. The USB speakers connect to
 the computer via a standard stereo jack, but as is well-known the stereo jack
 output of the Raspberry Pi offers poor quality. Therefore I have decided to
 extract the audio signal from the Raspberry HDMI output using a simple
@@ -75,18 +74,17 @@ extract the audio signal from the Raspberry HDMI output using a simple
 ## The Software
 
 As mentioned above there are in fact already software solutions for an
-RFID-controllable jukebox. But after a quick look at the [Phoniebox
-Software](https://github.com/MiczFlor/RPi-Jukebox-RFID) I decided to build my
+RFID-controllable jukebox. But after a quick look at the [Phoniebox](https://www.phoniebox.de) software [RPi-Jukebox-RFID](https://github.com/MiczFlor/RPi-Jukebox-RFID) I decided to build my
 own project. The primary motives for this include the following:
 
-* RPi-Jukebox-RFID seems like a rather huge Python project and I am not familiar
-  with Python tooling. Also, I have not had the best experiences with Python
+* RPi-Jukebox-RFID seems like a rather huge Python project and I am neither familiar
+  with Python tooling, nor with the Python ecosystem. Also, I have not had the best experiences with Python
   codebases in the past, though I cannot judge about the quality of this
   particular project.
   
 * Currently I am primarily interested in one particular
   use-case: Spotify integration -- which is labelled as "experimental" for
-  RPio-Jukebox-RFID. I wanted something more compact and simple.
+  RPi-Jukebox-RFID. I wanted something more compact and simple.
 
 * From the introductory video of the Phoniebox it seems that the RFID-control
   logic is such that an RFID tag is used only for *triggering* playback. What I
@@ -97,7 +95,9 @@ own project. The primary motives for this include the following:
 After evaluation of a few options I decided to build the software with Rust,
 since I learned to like that language, it performs well, has a great package
 ecosystem, can be used for lower-level hardware access, comes with a low memory
-footprint and it has a pretty good cross-compilation story.
+footprint and it has a pretty good cross-compilation story. Besides, I have never worked on a similar project and it seemed like a fun learning opportunity.
+
+### Spotify Playback
 
 Regarding Spotify Playback, my initial plan was to run Firefox on the Raspberry
 Pi and use the [Spotify Web
@@ -106,7 +106,8 @@ providing the Spotify streaming capabilities. This worked pretty well on my
 development machine. But once I tried it out on the Raspberry I had learn the
 hard way that the Spotify Web SDK requires Widevine DRM Support, which the
 non-official Firefox builds do not contain (and for ARM there are no official
-Firefox builds). So, how do stream from Spotify? Well,
+Firefox builds). So this was my daily lesson in the category "Integrate early".
+So, how do I stream from Spotify? Well,
 [Librespot](https://github.com/librespot-org/librespot) comes to the rescue:
 
     librespot is an open source client library for Spotify. It enables applications to use Spotify's service, without using the official but closed-source libspotify. Additionally, it will provide extra features which are not available in the official library.
@@ -118,16 +119,18 @@ configured to use a specific Spotify Premium account, the Raspberry is ready to
 be used as Spotify client through the [Spotify Web
 API](https://developer.spotify.com/documentation/web-api/).
 
-Actually I wanted to use [NixOS](https://nixos.org/) on the Raspberry Pi, but
-unfortunately it was way to rough around the edges for my use-case. The issues I
+### OS
+
+Actually I would have preferred being able to use [NixOS](https://nixos.org/) on the Raspberry Pi, but
+unfortunately the ARM port of NixOS was way to rough around the edges for my use-case. The issues I
 have had with NixOS even on my Raspberry Pi 3, which comes with an AARCH64 CPU
-somewhat supported by NixOS upstream, included:
+somewhat supported by upstream NixOS, included:
 
 * Missing and/or incomplete documentation, in particular when it comes to
   configuring the Raspberry Pi firmware and the boot process (after having
   written a first `configuration.nix` according to the documentation, the
   Raspberry Pi was unable to boot).
-* The boot process is significantly slower than Raspbian's.
+* The boot process is slower than Raspbian's.
 * After about 2h work I was still not able to get audio working -- something
   that just works on Raspbian.
 
@@ -136,3 +139,29 @@ system with all required services and deploy a system configuration to a remote
 NixOS with complete rollback functionality built-in.  Maybe somewhen in the
 future I can write the NixOS derivations for my Jukebox Software and deploy it
 to a Raspberry Pi running NixOS. But this is not today.
+
+Given this unsatisfying situation I have decided to build on **Raspbian**.
+
+...
+
+### RFID IO
+
+A quick search on [crates.io]() revealed the following list of potentially useful crates:
+* [rfid-rs](https://crates.io/crates/rfid-rs)
+* [mfrc522](https://crates.io/crates/mfrc522)
+
+It seems that *mfrc522* is very limited in functionality (see https://docs.rs/mfrc522/0.2.0/mfrc522/struct.Mfrc522.html) and does not yet support reading and writing the data blocks on an RFID tag. *rfid-rs* does support IO to the data blocks, but the [upstream code base](https://gitlab.com/jspngh/rfid-rs) had some issues, which is why I have created my [personal fork](https://gitlab.com/mtesseract/rfid-rs) for the purpose of this project. 
+
+
+### GPIO
+
+
+## The Circuits
+
+For the first vesion of the Jukebox the following hardware related functionality should be be supported:
+
+* A single physical button for switching the box on and shutting it down.
+* Stable RFID tag reading via the RC522 reader.
+* A status LED indicating that the box is running.
+* A status LED for indicating that it is in playback mode (i.e. an RFID tag is near the RFID reader).
+
