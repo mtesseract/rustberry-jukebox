@@ -1,7 +1,7 @@
 # Rustberry Jukebox
 
-So, I am one of those nerds, who wanted to build some kind of Jukebox device for
-a child.
+So, I am one of those tech-affine parents, who wanted to build some kind of Jukebox device for
+their child.
 
 There are [commercial products](https://tonies.de/) and existing [hobbyist
 projects](http://phoniebox.de/index-en.html), but for several reasons I decided
@@ -10,30 +10,31 @@ software is written in [Rust](https://www.rust-lang.org). Even though the name
 might suggest otherwise, please note that this is not related to an existing
 Rust [crate](https://crates.io/crates/rustberry) with a similar name.
 
-The feature set I had in mind for the jukebox:
-* Rustic/old aesthetics
-* Wireless LAN connected
-* Stream music via Spotify
+The feature set I had in mind for the jukebox device:
+* Rustic/old aesthetics (as opposed to the polished modern interface of commercial products)
+* Stream music from Spotify via WLAN
 * Playback controllable via RFID tags
 * Hardware button for switching the jukebox on and off
-* Status LEDs (Jukebox running and Jukebox playing)
-* Software wise, the code should be conveniently cross-compilable for a Raspberry Pi.
+* Status LEDs (jukebox running and jukebox playing)
+* The code should be conveniently cross-compilable for a Raspberry Pi.
 
 This is the resulting jukebox:
 IMG
+
+Let us have a closer look.
 
 ## Components
 
 ### The Case
 
-Initially I had no precise idea of the intended look of the device -- especially given the fact that I am unexperienced when it
-comes to physical manufacturing. Fortunately I found something, which seemed
+Note that I am pretty unexperienced when it
+comes to physical manufacturing. Fortunately I found a potential enclosing online, which seemed
 promising: an old looking [suitcase / treasure
 chest](https://www.amazon.de/BRYNNBERG-Schatztruhe-Marco-38x27x14cm-Aufbewahrungsbox/dp/B07CMPTSD9/ref=sr_1_3?__mk_de_DE=%C3%85M%C3%85%C5%BD%C3%95%C3%91&crid=2X2CTDPJTEGAA&keywords=holzkiste+verschlie%C3%9Fbar&qid=1570263909&s=kitchen&sprefix=holzkiste+vers%2Ckitchen%2C165&sr=1-3).
 I thought it might be feasible to build a double bottom into this suitcase,
 having enough hidden space for all the tech stuff inside (Raspberry Pi,
 speakers, power, circuits, cables / adapters) and providing enough space above
-the double bottom for user controls and RFID tags.
+the double bottom for user controls and RFID-equipped *records*.
 
 IMG
 
@@ -73,11 +74,11 @@ extract the audio signal from the Raspberry HDMI output using a simple
 
 ## The Software
 
-As mentioned above there are in fact already software solutions for an
+As mentioned above there are already software solutions for an
 RFID-controllable jukebox. But after a quick look at the [Phoniebox](https://www.phoniebox.de) software [RPi-Jukebox-RFID](https://github.com/MiczFlor/RPi-Jukebox-RFID) I decided to build my
-own project. The primary motives for this include the following:
+own project. The primary motives for this decision include the following:
 
-* RPi-Jukebox-RFID seems like a rather huge Python project and I am neither familiar
+* RPi-Jukebox-RFID seems like a rather huge Python project and I am neither particularly familiar
   with Python tooling, nor with the Python ecosystem. Also, I have not had the best experiences with Python
   codebases in the past, though I cannot judge about the quality of this
   particular project.
@@ -165,3 +166,7 @@ For the first vesion of the Jukebox the following hardware related functionality
 * A status LED indicating that the box is running.
 * A status LED for indicating that it is in playback mode (i.e. an RFID tag is near the RFID reader).
 
+
+## Cross Compilation
+
+I am currently developing on Darwin/x86_64, but the Raspberry Pi runs Linux/ARMv7.
