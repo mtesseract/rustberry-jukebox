@@ -20,6 +20,7 @@ The feature set I had in mind for the jukebox device:
 
 This is the resulting jukebox:
 IMG
+See below for a video of the jukebox in action.
 
 Let us have a closer look.
 
@@ -143,28 +144,72 @@ to a Raspberry Pi running NixOS. But this is not today.
 
 Given this unsatisfying situation I have decided to build on **Raspbian**.
 
-...
-
 ### RFID IO
 
 A quick search on [crates.io]() revealed the following list of potentially useful crates:
 * [rfid-rs](https://crates.io/crates/rfid-rs)
 * [mfrc522](https://crates.io/crates/mfrc522)
 
-It seems that *mfrc522* is very limited in functionality (see https://docs.rs/mfrc522/0.2.0/mfrc522/struct.Mfrc522.html) and does not yet support reading and writing the data blocks on an RFID tag. *rfid-rs* does support IO to the data blocks, but the [upstream code base](https://gitlab.com/jspngh/rfid-rs) had some issues, which is why I have created my [personal fork](https://gitlab.com/mtesseract/rfid-rs) for the purpose of this project. 
-
+It seems that *mfrc522* is currently very limited in functionality (see https://docs.rs/mfrc522/0.2.0/mfrc522/struct.Mfrc522.html) and does not yet support reading and writing the data blocks on an RFID tag. *rfid-rs* does support IO to the data blocks, but the [upstream code base](https://gitlab.com/jspngh/rfid-rs) had some issues, which is why I have created my [personal fork](https://gitlab.com/mtesseract/rfid-rs) for the purpose of this project. 
 
 ### GPIO
 
+For GPIO access there are multiple crates available, for example:
+* [gpio-cdev](https://crates.io/crates/gpio-cdev)
+* [gpio](https://crates.io/crates/gpio)
+* [sysfs_gpio](https://crates.io/crates/sysfs_gpio)
 
-## The Circuits
+I have decided to go with *gpio-cdev*, since -- according to my understanding -- using the character device API for GPIO is
+recommended for new applications. I have been missing some built-in functionality for
+listening for events on mutliple GPIO lines at the same time, but that was easy
+to implement using threads and channels.
+
+For debugging GPIO, the following command turned out to be very helpful:
+
+
+(At some point I had confused the different GPIO line labeling systems)
+
+
+## Circuits
 
 For the first vesion of the Jukebox the following hardware related functionality should be be supported:
 
 * A single physical button for switching the box on and shutting it down.
 * Stable RFID tag reading via the RC522 reader.
 * A status LED indicating that the box is running.
-* A status LED for indicating that it is in playback mode (i.e. an RFID tag is near the RFID reader).
+* A status LED for indicating that it is in playback mode (i.e. an RFID tag is
+  near the RFID reader).
+
+## Power Switch
+
+I found [an article](https://howchoo.com/g/mwnlytk3zmm/how-to-add-a-power-button-to-your-raspberry-pi), which describes
+the wake-up functionality:
+
+    Simply put, shorting pins 5 and 6 (GPIO3 and GND) together will wake the Pi up from a halt state.
+
+As indicated above, there should be a single physical button for switching the
+device on and shutting it down. Therefore, it is already clear that the power
+button needs to be connected to GPIO3, which needs to be configured as an input
+line. Since pressing the button is required to connect GPIO3 with GND, the
+GPIO3 line needs to be set to high when the button is *not* pressed. In other
+words, we need a [Pull-up
+resistor](https://en.wikipedia.org/wiki/Pull-up_resistor) connecting GPIO3
+through a resistor with a voltage source when the button is not pressed. When
+the button is pressed GPIO3 will be connected with GND.
+
+## Power Status LED
+
+There is a nice hack for building a status LED: Connect a LED to the Raspberry
+Pi's serial console as described in the article [Build a Simple Raspberry Pi LED
+Power/Status
+Indicator](https://howchoo.com/g/ytzjyzy4m2e/build-a-simple-raspberry-pi-led-power-status-indicator).
+
+## Playback Status LED
+
+This is nothing fancy, just another LED conneted to a regular GPIO input line,
+which is configured as output and controlled in software.
+
+## Result
 
 
 ## Cross Compilation
