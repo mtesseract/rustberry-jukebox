@@ -53,9 +53,14 @@ fn run() -> Fallible<()> {
     }
 }
 
-fn try_open_tag(amfrc522: &mut RfidController) -> Result<Tag, rfid_rs::Error> {
+fn try_open_tag(
+    amfrc522: &mut RfidController,
+    check_new_card_present: bool,
+) -> Result<Tag, rfid_rs::Error> {
     let mut mfrc522 = amfrc522.mfrc522.lock().unwrap();
-    mfrc522.new_card_present()?;
+    if check_new_card_present {
+        mfrc522.new_card_present()?;
+    }
     let uid = mfrc522.read_card_serial()?;
     Ok(Tag {
         uid: Arc::new(uid),
@@ -64,7 +69,15 @@ fn try_open_tag(amfrc522: &mut RfidController) -> Result<Tag, rfid_rs::Error> {
 }
 
 fn open_tag(mfrc522: &mut RfidController) -> Fallible<Option<Tag>> {
-    match try_open_tag(mfrc522) {
+    match try_open_tag(mfrc522, true) {
+        Ok(tag) => Ok(Some(tag)),
+        Err(rfid_rs::Error::Timeout) => Ok(None),
+        Err(err) => Err(err.into()),
+    }
+}
+
+fn open_tag_when_none(mfrc522: &mut RfidController) -> Fallible<Option<Tag>> {
+    match try_open_tag(mfrc522, false) {
         Ok(tag) => Ok(Some(tag)),
         Err(rfid_rs::Error::Timeout) => Ok(None),
         Err(err) => Err(err.into()),
@@ -92,7 +105,12 @@ fn run2() -> Fallible<()> {
 
     loop {
         std::thread::sleep(std::time::Duration::from_millis(100));
-        match open_tag(&mut rc) {
+        let res = if last_uid.is_none() {
+            open_tag_when_none(&mut rc)
+        } else {
+            open_tag(&mut rc)
+        };
+        match res {
             Err(err) => {
                 // Do not change playback state in this case.
                 warn!("Failed to open RFID tag: {}", err);
