@@ -19,6 +19,7 @@ fn run() -> Fallible<()> {
     let mut rc = RfidController::new()?;
     let mut last_uid: Option<String> = None;
     loop {
+        std::thread::sleep(std::time::Duration::from_millis(100));
         match rc.open_tag() {
             Err(err) => {
                 // Do not change playback state in this case.
@@ -33,7 +34,6 @@ fn run() -> Fallible<()> {
             Ok(Some(tag)) => {
                 let current_uid = format!("{:?}", tag.uid);
                 if last_uid == Some(current_uid.clone()) {
-                    std::thread::sleep(std::time::Duration::from_millis(1500));
                     continue;
                 }
                 // new tag!
