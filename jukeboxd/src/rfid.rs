@@ -8,7 +8,7 @@ use rfid_rs::{picc, Uid, MFRC522};
 
 #[derive(Clone)]
 pub struct RfidController {
-    mfrc522: Arc<Mutex<MFRC522>>,
+    pub mfrc522: Arc<Mutex<MFRC522>>,
 }
 
 pub struct Tag {
