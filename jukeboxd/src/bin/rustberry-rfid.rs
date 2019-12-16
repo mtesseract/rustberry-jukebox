@@ -1,6 +1,8 @@
 use failure::Fallible;
-use slog::{self, o};
+use slog::{self, o, Drain};
+// use slog_async;
 use slog_scope::{error, info, warn};
+use slog_term;
 
 use rustberry::playback_requests::*;
 use rustberry::rfid::*;
@@ -49,5 +51,10 @@ fn run() -> Fallible<()> {
 }
 
 fn main() -> Fallible<()> {
+    let decorator = slog_term::TermDecorator::new().build();
+    let drain = slog_term::FullFormat::new(decorator).build().fuse();
+    let drain = slog_async::Async::new(drain).build().fuse();
+    let logger = slog::Logger::root(drain, o!());
+    let _guard = slog_scope::set_global_logger(logger);
     slog_scope::scope(&slog_scope::logger().new(o!()), || run())
 }
