@@ -69,7 +69,7 @@ fn try_open_tag(
 }
 
 fn open_tag(mfrc522: &mut RfidController) -> Fallible<Option<Tag>> {
-    match try_open_tag(mfrc522, true) {
+    match try_open_tag(mfrc522, false) {
         Ok(tag) => Ok(Some(tag)),
         Err(rfid_rs::Error::Timeout) => Ok(None),
         Err(err) => Err(err.into()),
@@ -77,7 +77,7 @@ fn open_tag(mfrc522: &mut RfidController) -> Fallible<Option<Tag>> {
 }
 
 fn open_tag_when_none(mfrc522: &mut RfidController) -> Fallible<Option<Tag>> {
-    match try_open_tag(mfrc522, false) {
+    match try_open_tag(mfrc522, true) {
         Ok(tag) => Ok(Some(tag)),
         Err(rfid_rs::Error::Timeout) => Ok(None),
         Err(err) => Err(err.into()),
