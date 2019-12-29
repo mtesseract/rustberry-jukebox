@@ -53,6 +53,7 @@ fn execute_volume_up(config: &Config) {
         }
         None => {
             Command::new("amixer")
+                .arg("-q")
                 .arg("-M")
                 .arg("set")
                 .arg("PCM")
@@ -72,6 +73,7 @@ fn execute_volume_down(config: &Config) {
         }
         None => {
             Command::new("amixer")
+                .arg("-q")
                 .arg("-M")
                 .arg("set")
                 .arg("PCM")
