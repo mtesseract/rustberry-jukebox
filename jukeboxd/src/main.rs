@@ -22,6 +22,8 @@ struct Config {
     device_name: String,
     post_init_command: Option<String>,
     shutdown_command: Option<String>,
+    volume_up_command: Option<String>,
+    volume_down_command: Option<String>,
 }
 
 fn execute_shutdown(config: &Config) {
@@ -38,6 +40,44 @@ fn execute_shutdown(config: &Config) {
                 .arg("now")
                 .status()
                 .expect("failed to execute default shutdown command");
+        }
+    }
+}
+
+fn execute_volume_up(config: &Config) {
+    match config.volume_up_command {
+        Some(ref cmd) => {
+            Command::new(cmd)
+                .status()
+                .expect(&format!("failed to execute volume up command '{}'", cmd));
+        }
+        None => {
+            Command::new("amixer")
+                .arg("-M")
+                .arg("set")
+                .arg("PCM")
+                .arg("5%+")
+                .status()
+                .expect("failed to execute default volume up command");
+        }
+    }
+}
+
+fn execute_volume_down(config: &Config) {
+    match config.volume_down_command {
+        Some(ref cmd) => {
+            Command::new(cmd)
+                .status()
+                .expect(&format!("failed to execute volume down command '{}'", cmd));
+        }
+        None => {
+            Command::new("amixer")
+                .arg("-M")
+                .arg("set")
+                .arg("PCM")
+                .arg("5%-")
+                .status()
+                .expect("failed to execute default volume down command");
         }
     }
 }
@@ -70,6 +110,14 @@ fn run_application() -> Fallible<()> {
                 button_controller::Command::Shutdown => {
                     info!("Shutting down");
                     execute_shutdown(&config_copy);
+                }
+                button_controller::Command::VolumeUp => {
+                    info!("Volume up");
+                    execute_volume_up(&config_copy);
+                }
+                button_controller::Command::VolumeDown => {
+                    info!("Volume down");
+                    execute_volume_down(&config_copy);
                 }
             }
         }

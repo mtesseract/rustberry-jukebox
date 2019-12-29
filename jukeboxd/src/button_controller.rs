@@ -12,6 +12,8 @@ pub trait ButtonControllerBackend {
 #[derive(Debug, Clone)]
 pub struct Config {
     pub shutdown_pin: Option<u32>,
+    pub volume_up_pin: Option<u32>,
+    pub volume_down_pin: Option<u32>,
     pub start_time: Option<Instant>,
 }
 
@@ -40,6 +42,8 @@ pub mod backends {
         #[derive(Deserialize, Debug, Clone)]
         pub struct EnvConfig {
             shutdown_pin: Option<u32>,
+            volume_up_pin: Option<u32>,
+            volume_down_pin: Option<u32>,
         }
 
         impl From<EnvConfig> for Config {
@@ -47,6 +51,8 @@ pub mod backends {
                 Config {
                     shutdown_pin: env_config.shutdown_pin,
                     start_time: Some(Instant::now()),
+                    volume_up_pin: env_config.volume_up_pin,
+                    volume_down_pin: env_config.volume_down_pin,
                 }
             }
         }
@@ -65,6 +71,12 @@ pub mod backends {
                 let mut map = HashMap::new();
                 if let Some(shutdown_pin) = config.shutdown_pin {
                     map.insert(shutdown_pin, Command::Shutdown);
+                }
+                if let Some(pin) = config.volume_up_pin {
+                    map.insert(pin, Command::VolumeUp);
+                }
+                if let Some(pin) = config.volume_down_pin {
+                    map.insert(pin, Command::VolumeDown);
                 }
                 Ok(Self { map, config })
             }
@@ -174,6 +186,8 @@ pub mod backends {
         #[derive(Deserialize, Debug, Clone)]
         pub struct EnvConfig {
             shutdown_pin: Option<u32>,
+            volume_up_pin: Option<u32>,
+            volume_down_pin: Option<u32>,
         }
 
         impl From<EnvConfig> for Config {
@@ -181,6 +195,8 @@ pub mod backends {
                 let start_time = Some(Instant::now());
                 Config {
                     shutdown_pin: env_config.shutdown_pin,
+                    volume_up_pin: env_config.volume_up_pin,
+                    volume_down_pin: env_config.volume_down_pin,
                     start_time,
                 }
             }
@@ -200,6 +216,12 @@ pub mod backends {
                 let mut map = HashMap::new();
                 if let Some(shutdown_pin) = config.shutdown_pin {
                     map.insert(shutdown_pin, Command::Shutdown);
+                }
+                if let Some(pin) = config.volume_up_pin {
+                    map.insert(pin, Command::VolumeUp);
+                }
+                if let Some(pin) = config.volume_down_pin {
+                    map.insert(pin, Command::VolumeDown);
                 }
                 let chip = Chip::new("/dev/gpiochip0")
                     .map_err(|err| Error::IO(format!("Failed to open Chip: {:?}", err)))?;
@@ -281,7 +303,6 @@ pub mod backends {
                 Ok(())
             }
         }
-
     }
 }
 
@@ -303,6 +324,8 @@ impl std::error::Error for Error {}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
     Shutdown,
+    VolumeUp,
+    VolumeDown,
 }
 
 #[derive(Debug, Clone)]
