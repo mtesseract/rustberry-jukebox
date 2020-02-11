@@ -190,7 +190,7 @@ pub mod rfid {
                         loop {
                             let mut reader = tag.new_reader();
                             if let Err(err) = reader.tag_still_readable() {
-                                std::thread::sleep(std::time::Duration::from_millis(10));
+                                std::thread::sleep(std::time::Duration::from_millis(80));
                                 break;
                             } else {
                                 std::thread::sleep(std::time::Duration::from_millis(80));
