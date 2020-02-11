@@ -24,20 +24,22 @@ fn main() {
         let new_card = mfrc522.new_card_present().is_ok();
 
         if new_card {
-            let uid = match mfrc522.read_card_serial() {
-                Ok(u) => u,
-                Err(e) => {
-                    println!("Could not read card: {:?}", e);
-                    continue;
-                }
-            };
+            loop {
+                let uid = match mfrc522.read_card_serial() {
+                    Ok(u) => u,
+                    Err(e) => {
+                        println!("Could not read card: {:?}", e);
+                        break;
+                    }
+                };
 
-            dbg!(&uid);
+                dbg!(&uid);
 
-            // mfrc522.halt_a().expect("Could not halt");
-            // mfrc522.stop_crypto1().expect("Could not stop crypto1");
+                // mfrc522.halt_a().expect("Could not halt");
+                // mfrc522.stop_crypto1().expect("Could not stop crypto1");
 
-            std::thread::sleep(std::time::Duration::from_millis(100));
+                std::thread::sleep(std::time::Duration::from_millis(500));
+            }
         } else {
             println!("no tag");
         }
