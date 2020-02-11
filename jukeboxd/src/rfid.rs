@@ -16,29 +16,29 @@ pub struct Tag {
     pub mfrc522: Arc<Mutex<MFRC522>>,
 }
 
-impl Drop for TagReader {
-    fn drop(&mut self) {
-        let mut mfrc522 = self.mfrc522.lock().unwrap();
-        if let Err(err) = mfrc522.halt_a() {
-            error!("Could not halt MFRC522: {:?}", err);
-        }
-        if let Err(err) = mfrc522.stop_crypto1() {
-            error!("Could not stop crypto1 for MFRC522: {:?}", err);
-        }
-    }
-}
+// impl Drop for TagReader {
+//     fn drop(&mut self) {
+//         let mut mfrc522 = self.mfrc522.lock().unwrap();
+//         if let Err(err) = mfrc522.halt_a() {
+//             error!("Could not halt MFRC522: {:?}", err);
+//         }
+//         if let Err(err) = mfrc522.stop_crypto1() {
+//             error!("Could not stop crypto1 for MFRC522: {:?}", err);
+//         }
+//     }
+// }
 
-impl Drop for TagWriter {
-    fn drop(&mut self) {
-        let mut mfrc522 = self.mfrc522.lock().unwrap();
-        if let Err(err) = mfrc522.halt_a() {
-            error!("Could not halt MFRC522: {:?}", err);
-        }
-        if let Err(err) = mfrc522.stop_crypto1() {
-            error!("Could not stop crypto1 for MFRC522: {:?}", err);
-        }
-    }
-}
+// impl Drop for TagWriter {
+//     fn drop(&mut self) {
+//         let mut mfrc522 = self.mfrc522.lock().unwrap();
+//         if let Err(err) = mfrc522.halt_a() {
+//             error!("Could not halt MFRC522: {:?}", err);
+//         }
+//         if let Err(err) = mfrc522.stop_crypto1() {
+//             error!("Could not stop crypto1 for MFRC522: {:?}", err);
+//         }
+//     }
+// }
 
 pub struct TagReader {
     pub uid: Arc<Uid>,
@@ -163,14 +163,14 @@ impl Write for TagWriter {
                         &(*self.uid),
                     )
                     .map_err(|err| {
-                        error!("Failed to authenticate RFID tag during writing: {:?}", err);
+                        // error!("Failed to authenticate RFID tag during writing: {:?}", err);
                         std::io::Error::new(std::io::ErrorKind::Other, err)
                     })?;
 
                 mfrc522
                     .mifare_write(DATA_BLOCKS[self.current_block as usize], &block)
                     .map_err(|err| {
-                        error!("Failed to write data block to RFID tag: {:?}", err);
+                        // error!("Failed to write data block to RFID tag: {:?}", err);
                         std::io::Error::new(std::io::ErrorKind::Other, err)
                     })?;
 
@@ -197,7 +197,7 @@ impl Write for TagWriter {
                     &(*self.uid),
                 )
                 .map_err(|err| {
-                    error!("Failed to authenticate RFID tag during flushing");
+                    // error!("Failed to authenticate RFID tag during flushing");
                     std::io::Error::new(std::io::ErrorKind::Other, err)
                 })?;
 
@@ -208,7 +208,7 @@ impl Write for TagWriter {
             mfrc522
                 .mifare_write(DATA_BLOCKS[self.current_block as usize], &buffer)
                 .map_err(|err| {
-                    error!("Failed to write data block to RFID tag during flushing");
+                    // error!("Failed to write data block to RFID tag during flushing");
                     std::io::Error::new(std::io::ErrorKind::Other, err)
                 })?;
             self.current_pos_in_buffered_data = 0;
@@ -226,6 +226,13 @@ impl TagReader {
         let string = rmp::decode::read_str(self, &mut bytes)
             .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err.to_string()))?;
         Ok(string.to_string().clone())
+    }
+    pub fn tag_still_readable(&mut self) -> Result<(), std::io::Error> {
+        let mut bytes: [u8; 1] = [0];
+        let _ = self
+            .read_exact(&mut bytes)
+            .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err.to_string()))?;
+        Ok(())
     }
 }
 
@@ -254,7 +261,7 @@ impl Read for TagReader {
                 &self.uid,
             )
             .map_err(|err| {
-                error!("Failed to authenticate RFID tag during reading");
+                // error!("Failed to authenticate RFID tag during reading");
                 std::io::Error::new(std::io::ErrorKind::Other, err)
             })?;
 
@@ -262,7 +269,7 @@ impl Read for TagReader {
         let response = (*mfrc522)
             .mifare_read(DATA_BLOCKS[self.current_block as usize], N_BLOCK_SIZE + 2)
             .map_err(|err| {
-                error!("Failed to read data block from RFID tag");
+                // error!("Failed to read data block from RFID tag");
                 std::io::Error::new(std::io::ErrorKind::Other, err)
             })?;
 
