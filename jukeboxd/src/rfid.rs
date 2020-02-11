@@ -228,7 +228,11 @@ impl TagReader {
         Ok(string.to_string().clone())
     }
     pub fn test_read_byte(&mut self) -> Result<(), std::io::Error> {
-        let _ = rmp::decode::read_str(self)
+        // let _ = rmp::decode::read_str(self)
+        //     .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err.to_string()))?;
+        // Ok(())
+        let mut bytes: [u8; 1024] = [0; 1024];
+        let string = rmp::decode::read_str(self, &mut bytes)
             .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err.to_string()))?;
         Ok(())
     }
