@@ -21,6 +21,7 @@ fn main() {
                             break;
                         }
                     }
+                    std::mem::forget(reader);
                 }
             }
             Err(err) => {
