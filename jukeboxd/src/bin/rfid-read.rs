@@ -37,7 +37,9 @@ fn main() {
             // mfrc522.halt_a().expect("Could not halt");
             // mfrc522.stop_crypto1().expect("Could not stop crypto1");
 
-            std::thread::sleep(std::time::Duration::from_secs(1));
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        } else {
+            println!("no tag");
         }
     }
 }
