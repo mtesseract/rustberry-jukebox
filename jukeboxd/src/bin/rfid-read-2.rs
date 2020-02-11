@@ -9,23 +9,33 @@ fn main() {
             }
             Ok(Some(tag)) => {
                 println!("tag {:?}", tag.uid);
-                loop {
-                    let mut reader = tag.new_reader();
-                    match reader.read_string() {
-                        Ok(s) => {
-                            println!("{}", s);
-                            std::thread::sleep(std::time::Duration::from_millis(100));
-                        }
-                        Err(err) => {
-                            println!("err: {:?}", err);
-                            break;
+                let mut reader = tag.new_reader();
+                let res = reader.read_string();
+                drop(reader);
+                match res {
+                    Ok(s) => {
+                        println!("{}", s);
+                        loop {
+                            let mut reader = tag.new_reader();
+                            match reader.test_read_byte() {
+                                Ok(s) => {
+                                    std::thread::sleep(std::time::Duration::from_millis(100));
+                                }
+                                Err(err) => {
+                                    println!("err: {}", err);
+                                    break;
+                                }
+                            }
+                            // std::mem::forget(reader);
                         }
                     }
-                    std::mem::forget(reader);
+                    Err(err) => {
+                        println!("err: {}", err);
+                    }
                 }
             }
             Err(err) => {
-                println!("err {:?}", err);
+                println!("err: {}", err);
             }
         }
         std::thread::sleep(std::time::Duration::from_millis(100));

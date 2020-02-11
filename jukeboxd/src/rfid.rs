@@ -16,29 +16,29 @@ pub struct Tag {
     pub mfrc522: Arc<Mutex<MFRC522>>,
 }
 
-impl Drop for TagReader {
-    fn drop(&mut self) {
-        let mut mfrc522 = self.mfrc522.lock().unwrap();
-        if let Err(err) = mfrc522.halt_a() {
-            error!("Could not halt MFRC522: {:?}", err);
-        }
-        if let Err(err) = mfrc522.stop_crypto1() {
-            error!("Could not stop crypto1 for MFRC522: {:?}", err);
-        }
-    }
-}
+// impl Drop for TagReader {
+//     fn drop(&mut self) {
+//         let mut mfrc522 = self.mfrc522.lock().unwrap();
+//         if let Err(err) = mfrc522.halt_a() {
+//             error!("Could not halt MFRC522: {:?}", err);
+//         }
+//         if let Err(err) = mfrc522.stop_crypto1() {
+//             error!("Could not stop crypto1 for MFRC522: {:?}", err);
+//         }
+//     }
+// }
 
-impl Drop for TagWriter {
-    fn drop(&mut self) {
-        let mut mfrc522 = self.mfrc522.lock().unwrap();
-        if let Err(err) = mfrc522.halt_a() {
-            error!("Could not halt MFRC522: {:?}", err);
-        }
-        if let Err(err) = mfrc522.stop_crypto1() {
-            error!("Could not stop crypto1 for MFRC522: {:?}", err);
-        }
-    }
-}
+// impl Drop for TagWriter {
+//     fn drop(&mut self) {
+//         let mut mfrc522 = self.mfrc522.lock().unwrap();
+//         if let Err(err) = mfrc522.halt_a() {
+//             error!("Could not halt MFRC522: {:?}", err);
+//         }
+//         if let Err(err) = mfrc522.stop_crypto1() {
+//             error!("Could not stop crypto1 for MFRC522: {:?}", err);
+//         }
+//     }
+// }
 
 pub struct TagReader {
     pub uid: Arc<Uid>,
@@ -226,6 +226,11 @@ impl TagReader {
         let string = rmp::decode::read_str(self, &mut bytes)
             .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err.to_string()))?;
         Ok(string.to_string().clone())
+    }
+    pub fn test_read_byte(&mut self) -> Result<(), std::io::Error> {
+        let _ = rmp::decode::read_u8(self)
+            .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err.to_string()))?;
+        Ok(())
     }
 }
 
