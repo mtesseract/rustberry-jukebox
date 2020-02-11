@@ -14,7 +14,7 @@ fn main() {
                     match reader.read_string() {
                         Ok(s) => {
                             println!("{}", s);
-                            std::thread::sleep(std::time::Duration::from_millis(1000));
+                            std::thread::sleep(std::time::Duration::from_millis(100));
                         }
                         Err(err) => {
                             println!("err: {:?}", err);
@@ -28,6 +28,6 @@ fn main() {
                 println!("err {:?}", err);
             }
         }
-        std::thread::sleep(std::time::Duration::from_millis(1000));
+        std::thread::sleep(std::time::Duration::from_millis(100));
     }
 }
