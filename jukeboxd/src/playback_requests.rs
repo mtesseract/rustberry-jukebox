@@ -162,7 +162,7 @@ pub mod rfid {
                     Err(err) => {
                         // Do not change playback state in this case.
                         warn!("Failed to open RFID tag: {}", err);
-                        std::thread::sleep(std::time::Duration::from_millis(50));
+                        std::thread::sleep(std::time::Duration::from_millis(80));
                     }
                     Ok(None) => {
                         if last_uid.is_some() {
@@ -171,7 +171,7 @@ pub mod rfid {
                             if let Err(err) = tx.send(None) {
                                 error!("Failed to transmit User Request: {}", err);
                             }
-                            std::thread::sleep(std::time::Duration::from_millis(50));
+                            std::thread::sleep(std::time::Duration::from_millis(80));
                         }
                     }
                     Ok(Some(tag)) => {
@@ -180,7 +180,7 @@ pub mod rfid {
                             // new tag!
                             if let Err(err) = handle_tag(&tag, &tx) {
                                 error!("Failed to handle tag: {}", err);
-                                std::thread::sleep(std::time::Duration::from_millis(50));
+                                std::thread::sleep(std::time::Duration::from_millis(80));
                                 continue;
                             }
                             last_uid = Some(current_uid);
@@ -193,7 +193,7 @@ pub mod rfid {
                                 std::thread::sleep(std::time::Duration::from_millis(10));
                                 break;
                             } else {
-                                std::thread::sleep(std::time::Duration::from_millis(50));
+                                std::thread::sleep(std::time::Duration::from_millis(80));
                             }
                         }
                     }
