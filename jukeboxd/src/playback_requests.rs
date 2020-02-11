@@ -158,7 +158,7 @@ pub mod rfid {
             let mut last_uid: Option<String> = None;
 
             loop {
-                match self.picc.open_tag() {
+                match sxelf.picc.open_tag() {
                     Err(err) => {
                         // Do not change playback state in this case.
                         warn!("Failed to open RFID tag: {}", err);
@@ -191,8 +191,10 @@ pub mod rfid {
                             let mut reader = tag.new_reader();
                             if let Err(err) = reader.tag_still_readable() {
                                 std::thread::sleep(std::time::Duration::from_millis(80));
+                                error!("tag_still_readable() failed: {}", err);
                                 break;
                             } else {
+                                info!("Still there");
                                 std::thread::sleep(std::time::Duration::from_millis(80));
                             }
                         }
