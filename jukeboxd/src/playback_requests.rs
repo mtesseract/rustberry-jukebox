@@ -142,7 +142,7 @@ pub mod rfid {
     }
 
     fn handle_tag<T: DeserializeOwned + 'static + PartialEq + Clone + Send + Sync>(
-        tag: Tag,
+        tag: &Tag,
         tx: &Sender<Option<T>>,
     ) -> Fallible<()> {
         let mut tag_reader = tag.new_reader();
@@ -162,6 +162,7 @@ pub mod rfid {
                     Err(err) => {
                         // Do not change playback state in this case.
                         warn!("Failed to open RFID tag: {}", err);
+                        std::thread::sleep(std::time::Duration::from_millis(50));
                     }
                     Ok(None) => {
                         if last_uid.is_some() {
@@ -170,26 +171,33 @@ pub mod rfid {
                             if let Err(err) = tx.send(None) {
                                 error!("Failed to transmit User Request: {}", err);
                             }
+                            std::thread::sleep(std::time::Duration::from_millis(50));
                         }
                     }
                     Ok(Some(tag)) => {
                         let current_uid = format!("{:?}", tag.uid);
-                        if last_uid == Some(current_uid.clone()) {
-                            std::thread::sleep(std::time::Duration::from_millis(1500));
-                            continue;
-                        }
-                        // new tag!
-                        match handle_tag(tag, &tx) {
-                            Ok(_) => {
-                                last_uid = Some(current_uid);
-                            }
-                            Err(err) => {
+                        if last_uid != Some(current_uid.clone()) {
+                            // new tag!
+                            if let Err(err) = handle_tag(&tag, &tx) {
                                 error!("Failed to handle tag: {}", err);
+                                std::thread::sleep(std::time::Duration::from_millis(50));
+                                continue;
+                            }
+                            last_uid = Some(current_uid);
+                        }
+
+                        // wait for card status change
+                        loop {
+                            let mut reader = tag.new_reader();
+                            if let Err(err) = reader.tag_still_readable() {
+                                std::thread::sleep(std::time::Duration::from_millis(10));
+                                break;
+                            } else {
+                                std::thread::sleep(std::time::Duration::from_millis(50));
                             }
                         }
                     }
                 }
-                std::thread::sleep(std::time::Duration::from_millis(1500));
             }
         }
     }
