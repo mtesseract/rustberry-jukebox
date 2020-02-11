@@ -18,9 +18,9 @@ fn main() {
     let spi = create_spi().unwrap();
     let mut mfrc522 = rfid_rs::MFRC522 { spi };
 
-    loop {
-        mfrc522.init().expect("Init failed!");
+    mfrc522.init().expect("Init failed!");
 
+    loop {
         let new_card = mfrc522.new_card_present().is_ok();
 
         if new_card {
