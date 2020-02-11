@@ -158,7 +158,7 @@ pub mod rfid {
             let mut last_uid: Option<String> = None;
 
             loop {
-                match sxelf.picc.open_tag() {
+                match self.picc.open_tag() {
                     Err(err) => {
                         // Do not change playback state in this case.
                         warn!("Failed to open RFID tag: {}", err);
