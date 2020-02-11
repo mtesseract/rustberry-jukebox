@@ -231,7 +231,7 @@ impl TagReader {
         let mut bytes: [u8; 1] = [0];
         let res = self
             .read_exact(&mut bytes)
-            .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err.to_string()));
+            .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err.to_string()))?;
         Ok(())
     }
 }
