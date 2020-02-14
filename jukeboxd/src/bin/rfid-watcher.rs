@@ -18,7 +18,7 @@ fn main() {
                         loop {
                             let mut reader = tag.new_reader();
                             match reader.tag_still_readable() {
-                                Ok(s) => {
+                                Ok(_s) => {
                                     println!("still there");
                                     std::thread::sleep(std::time::Duration::from_millis(80));
                                 }

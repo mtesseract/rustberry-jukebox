@@ -1229,7 +1229,7 @@ dependencies = [
 
 [[package]]
 name = "rustberry"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "base64 0.10.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "dialoguer 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1239,6 +1239,7 @@ dependencies = [
  "gotham 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "gotham_derive 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "gpio-cdev 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "http 0.1.19 (registry+https://github.com/rust-lang/crates.io-index)",
  "hyper 0.12.35 (registry+https://github.com/rust-lang/crates.io-index)",
  "mime 0.3.14 (registry+https://github.com/rust-lang/crates.io-index)",
  "regex 1.3.1 (registry+https://github.com/rust-lang/crates.io-index)",

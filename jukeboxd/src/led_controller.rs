@@ -70,8 +70,8 @@ pub mod backends {
         }
 
         pub struct GpioCdev {
-            config: Config,
-            chip: Chip,
+            _config: Config,
+            _chip: Chip,
             leds: HashMap<Led, LineHandle>,
             // playback_led: Option<LineHandle>,
         }
@@ -112,7 +112,11 @@ pub mod backends {
                     warn!("No GPIO line configured for LED {:?}. Skipping all future requests for this LED.", Led::Playback);
                 }
 
-                Ok(GpioCdev { chip, config, leds })
+                Ok(GpioCdev {
+                    _chip: chip,
+                    _config: config,
+                    leds,
+                })
             }
         }
 

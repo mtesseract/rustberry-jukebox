@@ -189,7 +189,7 @@ pub mod rfid {
                         // wait for card status change
                         loop {
                             let mut reader = tag.new_reader();
-                            if let Err(err) = reader.tag_still_readable() {
+                            if let Err(_err) = reader.tag_still_readable() {
                                 std::thread::sleep(std::time::Duration::from_millis(80));
                                 break;
                             } else {

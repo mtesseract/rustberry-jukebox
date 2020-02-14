@@ -11,7 +11,7 @@ use rustberry::access_token_provider;
 use rustberry::button_controller::{self, ButtonController};
 use rustberry::led_controller;
 use rustberry::playback_requests::{self, PlaybackRequest};
-use rustberry::spotify_play;
+use rustberry::spotify_play::{self, PlaybackError};
 use rustberry::spotify_util;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -172,37 +172,49 @@ fn run_application() -> Fallible<()> {
         }
     }
     // Enter loop processing user requests (via RFID tag).
-    user_requests_producer.for_each(|req| match req {
-        Some(req) => {
-            info!("Received playback request {:?}", &req);
-            led_controller.switch_on(led_controller::Led::Playback);
-            let res = match req {
-                PlaybackRequest::SpotifyUri(ref uri) => player.start_playback(uri),
-            };
-            match res {
-                Ok(_) => {
-                    info!("Started playback: {:?}", &req);
+    for req in user_requests_producer {
+        match req {
+            Some(req) => {
+                info!("Received playback request {:?}", &req);
+                led_controller.switch_on(led_controller::Led::Playback);
+                let res = match req {
+                    PlaybackRequest::SpotifyUri(ref uri) => player.start_playback(uri),
+                };
+                match res {
+                    Ok(_) => {
+                        info!("Started playback: {:?}", &req);
+                    }
+                    Err(err) => {
+                        led_controller.switch_off(led_controller::Led::Playback);
+                        error!("Failed to start playback: {}", err);
+                        if err.is_client_error() {
+                            warn!("Playback error is regarded as client error, application will terminate");
+                            break;
+                        }
+                    }
                 }
-                Err(err) => {
-                    error!("Failed to start playback: {}", err);
+            }
+            None => {
+                info!("Stopping playback");
+                match player.stop_playback() {
+                    Ok(_) => {
+                        info!("Stopped playback");
+                        led_controller.switch_off(led_controller::Led::Playback);
+                    }
+                    Err(err) => {
+                        error!("Failed to stop playback: {}", err);
+                        if err.is_client_error() {
+                            warn!("Playback error is regarded as client error, application will terminate");
+                            break;
+                        }
+                    }
                 }
             }
         }
-        None => {
-            info!("Stopping playback");
-            led_controller.switch_off(led_controller::Led::Playback);
-            match player.stop_playback() {
-                Ok(_) => {
-                    info!("Stopped playback");
-                }
-                Err(err) => {
-                    error!("Failed to stop playback: {}", err);
-                }
-            }
-        }
-    });
+    }
 
-    unreachable!()
+    warn!("Jukebox loop terminated, terminating application");
+    Ok(())
 }
 
 fn main() -> Fallible<()> {
