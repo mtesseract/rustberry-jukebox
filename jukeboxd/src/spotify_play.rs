@@ -1,6 +1,6 @@
 use std::fmt::{self, Display};
 
-use crate::access_token_provider::AccessTokenProvider;
+use crate::access_token_provider::{self, AccessTokenProvider, AtpError};
 
 use hyper::header::AUTHORIZATION;
 use reqwest::Client;
@@ -11,18 +11,26 @@ use std::convert::From;
 #[derive(Debug)]
 pub enum Error {
     HTTP(reqwest::Error),
+    NoToken,
 }
 
 pub trait PlaybackError {
     fn is_client_error(&self) -> bool;
 }
 
+impl From<access_token_provider::AtpError> for Error {
+    fn from(err: access_token_provider::AtpError) -> Error {
+        match err {
+            AtpError::NoTokenReceivedYet => Error::NoToken,
+        }
+    }
+}
 impl PlaybackError for Error {
     fn is_client_error(&self) -> bool {
-        let status = match self {
-            Error::HTTP(err) => err.status(),
-        };
-        status.map(|s| s.is_client_error()).unwrap_or(false)
+        match self {
+            Error::HTTP(err) => err.status().map(|s| s.is_client_error()).unwrap_or(false),
+            Error::NoToken => true,
+        }
     }
 }
 
@@ -30,6 +38,7 @@ impl Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Error::HTTP(err) => write!(f, "Spotify HTTP Error {}", err),
+            Error::NoToken => write!(f, "Failed to obtain access token"),
         }
     }
 }
@@ -96,7 +105,7 @@ impl Player {
     }
 
     pub fn start_playback(&mut self, spotify_uri: &str) -> Result<(), Error> {
-        let access_token = self.access_token_provider.get_bearer_token().unwrap();
+        let access_token = self.access_token_provider.get_bearer_token()?;
         let msg = "Failed to start Spotify playback";
         let req = Self::derive_start_playback_payload_from_spotify_uri(spotify_uri);
         self.http_client
@@ -121,7 +130,7 @@ impl Player {
     }
 
     pub fn stop_playback(&mut self) -> Result<(), Error> {
-        let access_token = self.access_token_provider.get_bearer_token().unwrap();
+        let access_token = self.access_token_provider.get_bearer_token()?;
         let msg = "Failed to stop Spotify playback";
         self.http_client
             .put("https://api.spotify.com/v1/me/player/pause")

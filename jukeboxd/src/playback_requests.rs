@@ -105,7 +105,13 @@ pub mod stdin {
                     let req = if line == "" {
                         None
                     } else {
-                        Some(serde_json::from_str(line).unwrap())
+                        match serde_json::from_str(line) {
+                            Ok(deserialized) => Some(deserialized),
+                            Err(err) => {
+                                error!("Failed to deserialize line `{}`: {}", line, err);
+                                None
+                            }
+                        }
                     };
                     if last != req {
                         tx.send(req.clone()).unwrap();
@@ -147,8 +153,17 @@ pub mod rfid {
     ) -> Fallible<()> {
         let mut tag_reader = tag.new_reader();
         let request_string = tag_reader.read_string()?;
-        let request_deserialized: T = serde_json::from_str(&request_string)?;
-        Ok(tx.send(Some(request_deserialized.clone()))?)
+        let request_deserialized = match serde_json::from_str(&request_string) {
+            Ok(deserialized) => Some(deserialized),
+            Err(err) => {
+                error!(
+                    "Failed to deserialize RFID tag string `{}`: {}",
+                    request_string, err
+                );
+                None
+            }
+        };
+        Ok(tx.send(request_deserialized.clone())?)
     }
 
     impl<T: DeserializeOwned + Send + Sync + 'static + PartialEq + Clone>
