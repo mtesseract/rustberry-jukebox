@@ -28,7 +28,7 @@ pub fn lookup_device_by_name(
     device_name: &str,
 ) -> Fallible<Device> {
     let http_client = Client::new();
-    let access_token = access_token_provider.get_bearer_token().unwrap();
+    let access_token = access_token_provider.get_bearer_token()?;
     let mut rsp = http_client
         .get("https://api.spotify.com/v1/me/player/devices")
         .header(AUTHORIZATION, &access_token)

@@ -1,7 +1,6 @@
 use std::sync::{Arc, RwLock};
 use std::thread;
 
-use failure::Fallible;
 use gotham_derive::StateData;
 use slog_scope::{info, warn};
 
