@@ -1,12 +1,15 @@
 use std::sync::{Arc, RwLock};
 use std::thread;
 
-use gotham_derive::StateData;
+use failure::Fallible;
+// use gotham_derive::StateData;
 use slog_scope::{info, warn};
 
 use spotify_auth::request_fresh_token;
 
-#[derive(Debug, Clone, StateData)]
+pub use err::*;
+
+#[derive(Debug, Clone)]
 pub struct AccessTokenProvider {
     client_id: String,
     client_secret: String,
@@ -22,17 +25,17 @@ fn token_refresh_thread(
 ) {
     loop {
         {
-            let token = request_fresh_token(&client_id, &client_secret, &refresh_token)
-                .map(|x| x.access_token);
-            if let Ok(ref token) = token {
-                info!("Retrieved fresh access token"; "access_token" => token);
-            } else {
-                warn!("Failed to retrieve access token");
-            }
-            let mut access_token_write = access_token.write().unwrap();
-
-            if let Ok(token) = token {
-                *access_token_write = Some(token);
+            match request_fresh_token(&client_id, &client_secret, &refresh_token)
+                .map(|x| x.access_token)
+            {
+                Ok(token) => {
+                    info!("Retrieved fresh access token"; "access_token" => &token);
+                    let mut access_token_write = access_token.write().unwrap();
+                    *access_token_write = Some(token);
+                }
+                Err(err) => {
+                    warn!("Failed to retrieve access token: {}", err);
+                }
             }
         }
         thread::sleep(std::time::Duration::from_secs(600));
@@ -41,25 +44,19 @@ fn token_refresh_thread(
     // panic!()
 }
 
-#[derive(Clone, Copy, Debug)]
-pub enum AtpError {
-    NoTokenReceivedYet,
-}
-
-impl std::fmt::Display for AtpError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use AtpError::*;
-
-        match self {
-            NoTokenReceivedYet => write!(f, "No initial token received yet"),
-        }
-    }
-}
-
-impl std::error::Error for AtpError {}
-
 impl AccessTokenProvider {
-    pub fn get_token(&mut self) -> Result<String, AtpError> {
+    pub fn wait_for_token(&self) -> Result<(), AtpError> {
+        let n_attempts = 20;
+        for _idx in 0..n_attempts {
+            if self.access_token.read().unwrap().is_some() {
+                return Ok(());
+            }
+            thread::sleep(std::time::Duration::from_millis(500));
+        }
+        Err(AtpError::NoTokenReceivedYet)
+    }
+
+    pub fn get_token(&self) -> Result<String, AtpError> {
         let access_token = self.access_token.read().unwrap();
 
         match &*access_token {
@@ -68,11 +65,15 @@ impl AccessTokenProvider {
         }
     }
 
-    pub fn get_bearer_token(&mut self) -> Result<String, AtpError> {
+    pub fn get_bearer_token(&self) -> Result<String, AtpError> {
         self.get_token().map(|token| format!("Bearer {}", &token))
     }
 
-    pub fn new(client_id: &str, client_secret: &str, refresh_token: &str) -> AccessTokenProvider {
+    pub fn new(
+        client_id: &str,
+        client_secret: &str,
+        refresh_token: &str,
+    ) -> Fallible<AccessTokenProvider> {
         let access_token = Arc::new(RwLock::new(None));
 
         {
@@ -81,17 +82,24 @@ impl AccessTokenProvider {
             let client_secret = client_secret.clone().to_string();
             let refresh_token = refresh_token.clone().to_string();
 
-            thread::spawn(move || {
-                token_refresh_thread(client_id, client_secret, refresh_token, access_token_clone)
-            });
+            thread::Builder::new()
+                .name("access-token-provider".to_string())
+                .spawn(move || {
+                    token_refresh_thread(
+                        client_id,
+                        client_secret,
+                        refresh_token,
+                        access_token_clone,
+                    )
+                })?;
         }
 
-        AccessTokenProvider {
+        Ok(AccessTokenProvider {
             client_id: client_id.clone().to_string(),
             client_secret: client_secret.clone().to_string(),
             refresh_token: refresh_token.clone().to_string(),
             access_token,
-        }
+        })
     }
 }
 
@@ -135,13 +143,35 @@ pub mod spotify_auth {
         let auth_token = format!("Basic {}", client_id_and_secret);
         let params = [("grant_type", grant_type), ("refresh_token", refresh_token)];
 
-        let http_client = reqwest::Client::new();
-        let mut res = http_client
+        let http_client = reqwest::blocking::Client::new();
+        let res = http_client
             .post(TOKEN_REFRESH_URL)
             .header(AUTHORIZATION, auth_token)
             .form(&params)
-            .send()?;
-        let rsp_json: RefreshTokenResponse = res.json()?;
-        Ok(rsp_json)
+            .send()?
+            .error_for_status()?;
+
+        // FIXME: error logging.
+        let rsp_body_json: serde_json::Value = res.json()?;
+        Ok(serde_json::value::from_value(rsp_body_json)?)
     }
+}
+
+pub mod err {
+    #[derive(Clone, Copy, Debug)]
+    pub enum AtpError {
+        NoTokenReceivedYet,
+    }
+
+    impl std::fmt::Display for AtpError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            use AtpError::*;
+
+            match self {
+                NoTokenReceivedYet => write!(f, "No initial token received yet"),
+            }
+        }
+    }
+
+    impl std::error::Error for AtpError {}
 }

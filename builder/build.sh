@@ -1,12 +1,7 @@
 #!/bin/sh
 
-# docker stop rustberry-builder
-# docker rm rustberry-builder
-# docker run --name "rustberry-builder" -d -p 4022:22 --mount source=rustberry-builder,target=/cache rustberry-builder
-
 set -e
 set -x
-
 
 # docker run --restart always --name rustberry-builder -d -p 4022:22
 #   rustberry-builder
@@ -15,8 +10,15 @@ DIR=$(ssh rustberry-builder mktemp -d)
 
 PROGRAM=${1:-jukeboxd}
 BRANCH=${2:-master}
+MODE=${3:-release}
 
-echo "Building $PROGRAM on branch $BRANCH"
+echo "Building $PROGRAM on branch $BRANCH in $MODE mode"
+
+if [ "$MODE" == "debug" ]; then
+    MODE_SWITCH=""
+else
+    MODE_SWITCH="--release"
+fi
 
 ssh rustberry-builder "\
 set -x && \
@@ -30,7 +32,9 @@ export OPENSSL_LIB_DIR=/usr/local/openssl && \
 export OPENSSL_INCLUDE_DIR=/usr/local/openssl/include && \
 export OPENSSL_LIB_DIR=/usr/local/openssl && \
 export OPENSSL_INCLUDE_DIR=/usr/local/openssl/include && \
-cargo build --release --bin $PROGRAM --target=armv7-unknown-linux-gnueabihf
+export PKG_CONFIG_ALLOW_CROSS=1 && \
+cargo build $MODE_SWITCH --bin $PROGRAM --target=armv7-unknown-linux-gnueabihf
 "
 
-scp rustberry-builder:$DIR/rustberry/jukeboxd/target/armv7-unknown-linux-gnueabihf/release/$PROGRAM .
+scp rustberry-builder:$DIR/rustberry/jukeboxd/target/armv7-unknown-linux-gnueabihf/$MODE/$PROGRAM .
+scp $PROGRAM rustberry:~

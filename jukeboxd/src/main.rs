@@ -1,221 +1,16 @@
+use std::sync::Arc;
+
+use crossbeam_channel::{self, Receiver, Select};
 use failure::Fallible;
-use serde::Deserialize;
-use signal_hook::{iterator::Signals, SIGINT, SIGTERM};
 use slog::{self, o, Drain};
 use slog_async;
 use slog_scope::{error, info, warn};
 use slog_term;
-use std::process::Command;
 
-use rustberry::access_token_provider;
-use rustberry::button_controller::{self, ButtonController};
-use rustberry::led_controller;
-use rustberry::playback_requests::{self, PlaybackRequest};
-use rustberry::spotify_play::{self, PlaybackError};
-use rustberry::spotify_util;
-
-#[derive(Deserialize, Debug, Clone)]
-struct Config {
-    refresh_token: String,
-    client_id: String,
-    client_secret: String,
-    device_name: String,
-    post_init_command: Option<String>,
-    shutdown_command: Option<String>,
-    volume_up_command: Option<String>,
-    volume_down_command: Option<String>,
-}
-
-fn execute_shutdown(config: &Config) {
-    match config.shutdown_command {
-        Some(ref cmd) => {
-            Command::new(cmd)
-                .status()
-                .expect(&format!("failed to execute shutdown command '{}'", cmd));
-        }
-        None => {
-            Command::new("sudo")
-                .arg("shutdown")
-                .arg("-h")
-                .arg("now")
-                .status()
-                .expect("failed to execute default shutdown command");
-        }
-    }
-}
-
-fn execute_volume_up(config: &Config) {
-    match config.volume_up_command {
-        Some(ref cmd) => {
-            Command::new(cmd)
-                .status()
-                .expect(&format!("failed to execute volume up command '{}'", cmd));
-        }
-        None => {
-            Command::new("amixer")
-                .arg("-q")
-                .arg("-M")
-                .arg("set")
-                .arg("PCM")
-                .arg("5%+")
-                .status()
-                .expect("failed to execute default volume up command");
-        }
-    }
-}
-
-fn execute_volume_down(config: &Config) {
-    match config.volume_down_command {
-        Some(ref cmd) => {
-            Command::new(cmd)
-                .status()
-                .expect(&format!("failed to execute volume down command '{}'", cmd));
-        }
-        None => {
-            Command::new("amixer")
-                .arg("-q")
-                .arg("-M")
-                .arg("set")
-                .arg("PCM")
-                .arg("5%-")
-                .status()
-                .expect("failed to execute default volume down command");
-        }
-    }
-}
-
-fn run_application() -> Fallible<()> {
-    info!("** Rustberry/Spotify Starting **");
-    let config = envy::from_env::<Config>()?;
-    info!("Configuration"; o!("device_name" => &config.device_name));
-
-    // Create Access Token Provider
-    let mut access_token_provider = access_token_provider::AccessTokenProvider::new(
-        &config.client_id,
-        &config.client_secret,
-        &config.refresh_token,
-    );
-
-    let button_controller_backend =
-        button_controller::backends::cdev_gpio::CdevGpio::new_from_env()?;
-    let button_controller = ButtonController::new(button_controller_backend)?;
-    info!("Created Button Controller");
-
-    let led_controller_backend = led_controller::backends::gpio_cdev::GpioCdev::new()?;
-    let mut led_controller = led_controller::LedController::new(led_controller_backend)?;
-
-    let config_copy = config.clone();
-    std::thread::spawn(move || {
-        for cmd in button_controller {
-            info!("Received {:?} command from Button Controller", cmd);
-            match cmd {
-                button_controller::Command::Shutdown => {
-                    info!("Shutting down");
-                    execute_shutdown(&config_copy);
-                }
-                button_controller::Command::VolumeUp => {
-                    info!("Volume up");
-                    execute_volume_up(&config_copy);
-                }
-                button_controller::Command::VolumeDown => {
-                    info!("Volume down");
-                    execute_volume_down(&config_copy);
-                }
-            }
-        }
-    });
-
-    std::thread::sleep(std::time::Duration::from_secs(2));
-
-    let device = loop {
-        match spotify_util::lookup_device_by_name(&mut access_token_provider, &config.device_name) {
-            Err(err) => {
-                warn!("Failed to lookup device, will retry: {}", err);
-                std::thread::sleep(std::time::Duration::from_secs(5));
-            }
-            Ok(device) => {
-                break device;
-            }
-        }
-    };
-
-    info!("Found device ID for device name"; o!("device_id" => &device.id));
-
-    let mut player = spotify_play::Player::new(access_token_provider, &device.id);
-    info!("Initialized Player");
-
-    {
-        let signals = Signals::new(&[SIGINT, SIGTERM])?;
-        let mut player_clone = player.clone();
-        std::thread::spawn(move || {
-            let sig = signals.into_iter().next();
-            info!("Received signal {:?}, exiting", sig);
-            let _ = player_clone.stop_playback();
-            std::process::exit(0);
-        });
-    }
-
-    let transmitter_backend = playback_requests::rfid::PlaybackRequestTransmitterRfid::new()
-        .expect("Failed to initialize backend");
-    let transmitter = playback_requests::PlaybackRequestsTransmitter::new(transmitter_backend)
-        .expect("Failed to create PlaybackRequestsTransmitter");
-    let user_requests_producer: playback_requests::PlaybackRequests<PlaybackRequest> =
-        playback_requests::PlaybackRequests::new(transmitter);
-
-    // Execute post-init-command, if set in the environment.
-    if let Some(ref post_init_command) = config.post_init_command {
-        if let Err(err) = Command::new(post_init_command).output() {
-            error!(
-                "Failed to execute post init command '{}': {}",
-                post_init_command, err
-            );
-        }
-    }
-    // Enter loop processing user requests (via RFID tag).
-    for req in user_requests_producer {
-        match req {
-            Some(req) => {
-                info!("Received playback request {:?}", &req);
-                led_controller.switch_on(led_controller::Led::Playback);
-                let res = match req {
-                    PlaybackRequest::SpotifyUri(ref uri) => player.start_playback(uri),
-                };
-                match res {
-                    Ok(_) => {
-                        info!("Started playback: {:?}", &req);
-                    }
-                    Err(err) => {
-                        led_controller.switch_off(led_controller::Led::Playback);
-                        error!("Failed to start playback: {}", err);
-                        if err.is_client_error() {
-                            warn!("Playback error is regarded as client error, application will terminate");
-                            break;
-                        }
-                    }
-                }
-            }
-            None => {
-                info!("Stopping playback");
-                match player.stop_playback() {
-                    Ok(_) => {
-                        info!("Stopped playback");
-                        led_controller.switch_off(led_controller::Led::Playback);
-                    }
-                    Err(err) => {
-                        error!("Failed to stop playback: {}", err);
-                        if err.is_client_error() {
-                            warn!("Playback error is regarded as client error, application will terminate");
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    warn!("Jukebox loop terminated, terminating application");
-    Ok(())
-}
+use rustberry::config::Config;
+use rustberry::effects::{Interpreter, ProdInterpreter};
+use rustberry::input_controller::{button, playback, Input};
+use rustberry::player::{self, PlaybackRequest, Player};
 
 fn main() -> Fallible<()> {
     let decorator = slog_term::TermDecorator::new().build();
@@ -224,5 +19,176 @@ fn main() -> Fallible<()> {
     let logger = slog::Logger::root(drain, o!());
     let _guard = slog_scope::set_global_logger(logger);
 
-    slog_scope::scope(&slog_scope::logger().new(o!()), || run_application())
+    slog_scope::scope(&slog_scope::logger().new(o!()), || main_with_log())
+}
+
+fn main_with_log() -> Fallible<()> {
+    let config = envy::from_env::<Config>()?;
+    info!("Configuration"; o!("device_name" => &config.device_name));
+
+    // // Create Effects Channel and Interpreter.
+    let interpreter = ProdInterpreter::new(&config).unwrap();
+
+    interpreter.wait_until_ready().map_err(|err| {
+        error!("Failed to wait for interpreter readiness: {}", err);
+        err
+    })?;
+
+    let interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>> =
+        Arc::new(Box::new(interpreter));
+
+    // Prepare individual input channels.
+    let button_controller_handle =
+        button::cdev_gpio::CdevGpio::new_from_env(|cmd| Some(Input::Button(cmd)))?;
+    let playback_controller_handle =
+        playback::rfid::PlaybackRequestTransmitterRfid::new(|req| Some(Input::Playback(req)))?;
+
+    // Execute Application Logic, producing Effects.
+    let application = App::new(
+        config,
+        interpreter.clone(),
+        &vec![
+            button_controller_handle.channel(),
+            playback_controller_handle.channel(),
+        ],
+    );
+    application.run().map_err(|err| {
+        warn!("Jukebox loop terminated, terminating application: {}", err);
+        err
+    })?;
+    unreachable!();
+}
+
+struct App {
+    config: Config,
+    player: player::Player,
+    interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>>,
+    inputs: Vec<Receiver<Input>>,
+}
+
+impl App {
+    pub fn new(
+        config: Config,
+        interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>>,
+        inputs: &[Receiver<Input>],
+    ) -> Self {
+        let player = Player::new(interpreter.clone());
+        Self {
+            config,
+            inputs: inputs.to_vec(),
+            player,
+            interpreter,
+        }
+    }
+
+    pub fn run(self) -> Fallible<()> {
+        let mut sel = Select::new();
+        for r in &self.inputs {
+            sel.recv(r);
+        }
+
+        loop {
+            // Wait until a receive operation becomes ready and try executing it.
+            let index = sel.ready();
+            let res = self.inputs[index].try_recv();
+
+            match res {
+                Err(err) => {
+                    if err.is_empty() {
+                        // If the operation turns out not to be ready, retry.
+                        continue;
+                    } else {
+                        // FIXME
+                        error!("Failed to receive input event: {}", err);
+                    }
+                }
+                Ok(input) => match input {
+                    Input::Button(cmd) => match cmd {
+                        button::Command::Shutdown => {
+                            if let Err(err) = self.interpreter.generic_command(
+                                self.config
+                                    .shutdown_command
+                                    .clone()
+                                    .unwrap_or("sudo shutdown -h now".to_string()),
+                            ) {
+                                error!("Failed to execute shutdown command: {}", err);
+                            }
+                        }
+                        button::Command::VolumeUp => {
+                            if let Err(err) = self.interpreter.generic_command(
+                                self.config
+                                    .volume_up_command
+                                    .clone()
+                                    .unwrap_or("amixer -q -M set PCM 10%+".to_string()),
+                            ) {
+                                error!("Failed to increase volume: {}", err);
+                            }
+                        }
+                        button::Command::VolumeDown => {
+                            if let Err(err) = self.interpreter.generic_command(
+                                self.config
+                                    .volume_down_command
+                                    .clone()
+                                    .unwrap_or("amixer -q -M set PCM 10%-".to_string()),
+                            ) {
+                                error!("Failed to decrease volume: {}", err);
+                            }
+                        }
+                    },
+                    Input::Playback(request) => {
+                        if let Err(err) = self.player.playback(request.clone()) {
+                            error!("Failed to execute playback request {:?}: {}", request, err);
+                        }
+                        match request {
+                            PlaybackRequest::Start(_) => {
+                                let _ = self.interpreter.led_on();
+                            }
+                            PlaybackRequest::Stop => {
+                                let _ = self.interpreter.led_off();
+                            }
+                        }
+                    }
+                },
+            };
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use rustberry::config::Config;
+    use rustberry::effects::{test::TestInterpreter, Effects};
+    use rustberry::input_controller::{button, Input};
+
+    use super::*;
+
+    #[test]
+    fn jukebox_can_be_shut_down() {
+        let (interpreter, effects_rx) = TestInterpreter::new();
+        let interpreter =
+            Arc::new(Box::new(interpreter) as Box<dyn Interpreter + Send + Sync + 'static>);
+        let (effects_tx, effects_rx) = crossbeam_channel::bounded(10);
+        let config: Config = Config {
+            refresh_token: "token".to_string(),
+            client_id: "client".to_string(),
+            client_secret: "secret".to_string(),
+            device_name: "device".to_string(),
+            post_init_command: None,
+            shutdown_command: None,
+            volume_up_command: None,
+            volume_down_command: None,
+        };
+        let inputs = vec![Input::Button(button::Command::Shutdown)];
+        let effects_expected = vec![Effects::GenericCommand("sudo shutdown -h now".to_string())];
+        let (input_tx, input_rx) = crossbeam_channel::unbounded();
+        let app = App::new(config, interpreter, &vec![input_rx]);
+        for input in inputs {
+            input_tx.send(input).unwrap();
+        }
+        drop(input_tx);
+        app.run();
+        let produced_effects: Vec<Effects> = effects_rx.iter().collect();
+
+        assert_eq!(produced_effects, effects_expected);
+    }
 }
