@@ -59,7 +59,7 @@ impl std::fmt::Display for AtpError {
 impl std::error::Error for AtpError {}
 
 impl AccessTokenProvider {
-    pub fn get_token(&mut self) -> Result<String, AtpError> {
+    pub fn get_token(&self) -> Result<String, AtpError> {
         let access_token = self.access_token.read().unwrap();
 
         match &*access_token {
@@ -68,7 +68,7 @@ impl AccessTokenProvider {
         }
     }
 
-    pub fn get_bearer_token(&mut self) -> Result<String, AtpError> {
+    pub fn get_bearer_token(&self) -> Result<String, AtpError> {
         self.get_token().map(|token| format!("Bearer {}", &token))
     }
 
