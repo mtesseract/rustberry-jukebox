@@ -20,10 +20,9 @@ mod external_command {
     use std::thread::{self, JoinHandle};
     use std::time::Duration;
 
-    // enum SupervisorCommands {
-    //     Restart,
-    //     Terminate,
-    // }
+    enum SupervisorCommands {
+        Terminate,
+    }
 
     enum SupervisorStatus {
         NewDeviceId(String),
@@ -32,42 +31,35 @@ mod external_command {
 
     struct ExternalCommand {
         status: Receiver<SupervisorStatus>,
-        child: Arc<RwLock<Option<Child>>>,
-        // command: Sender<SupervisorCommands>,
+        child: Arc<RwLock<Child>>,
+        command: Sender<SupervisorCommands>,
         supervisor: JoinHandle<()>,
     }
 
     struct SupervisedCommand {
         pub cmd: String,
         pub device_name: String,
-        // pub command_receiver: Receiver<SupervisorCommands>,
+        pub command_receiver: Receiver<SupervisorCommands>,
         pub status_sender: Sender<SupervisorStatus>,
         pub access_token_provider: AccessTokenProvider,
-        child: Arc<RwLock<Option<Child>>>,
+        child: Arc<RwLock<Child>>,
     }
 
     impl Drop for ExternalCommand {
         fn drop(&mut self) {
-            if let Some(ref mut child) = *(self.child.write().unwrap()) {
-                child.kill();
-            }
+            let _ = self.command.send(SupervisorCommands::Terminate);
+            let _ = self.child.write().unwrap().kill();
         }
     }
 
     impl SupervisedCommand {
         fn kill_child(&mut self) -> Result<(), std::io::Error> {
-            let mut opt_child = self.child.write().unwrap();
-            if let Some(ref mut child) = &mut *opt_child {
-                child.kill();
-                *opt_child = None;
-            }
-            Ok(())
+            self.child.write().unwrap().kill()
         }
 
-        fn spawn_cmd(&mut self) -> Result<(), std::io::Error> {
+        fn respawn(&mut self) -> Result<(), std::io::Error> {
             let child = Command::new("sh").arg("-c").arg(&self.cmd).spawn()?;
-            let mut opt_child = self.child.write().unwrap();
-            *opt_child = Some(child);
+            *(self.child.write().unwrap()) = child;
             Ok(())
         }
 
@@ -76,108 +68,101 @@ mod external_command {
             thread::spawn(move || Self::supervisor(self))
         }
 
-        fn try_wait(&mut self) -> Result<Option<ExitStatus>, std::io::Error> {
-            let mut opt_child = self.child.write().unwrap();
-            match *opt_child {
-                Some(ref mut child) => {
-                    let res = child.try_wait();
-                    if let Ok(Some(_)) = res {
-                        *opt_child = None;
-                    }
-                    res
-                }
-                None => Ok(None),
-            }
-        }
-
         fn supervisor(mut self) {
             let mut device_id = None;
 
             loop {
                 info!("supervisor tick");
 
-                let child_running = {
-                    let opt_child = self.child.read().unwrap();
-                    opt_child.is_some()
+                // Child is expected to be running.
+                // Check if it has terminated for some reason:
+                let res = {
+                    let mut writer = self.child.write().unwrap();
+                    writer.try_wait()
                 };
-
-                if child_running {
-                    // Child is expected to be running.
-                    // Check if it has terminated for some reason:
-                    match self.try_wait() {
-                        Ok(Some(status)) => {
-                            // child terminated. needs to be restarted.
-                            error!(
-                                "Spotify Connector terminated unexpectedly with status {}",
-                                status
-                            );
-                            if let Err(err) = self.spawn_cmd() {
-                                error!("Failed to start Spotify Connector: {}", err);
-                            } else {
-                                info!("Spawned new Spotify Connector");
-                            }
-                        }
-                        Ok(None) => {
-                            // seems it is still running.
-                            // check if device id can still be resolved.
-                            let found_device = match spotify_util::lookup_device_by_name(
-                                &self.access_token_provider,
-                                &self.device_name,
-                            ) {
-                                Ok(device) => Some(device),
-                                Err(JukeboxError::DeviceNotFound { .. }) => {
-                                    warn!("No Spotify device ID found for device name ...");
-                                    None
-                                }
-                                Err(err) => {
-                                    error!("Failed to lookup Spotify Device ID: {}", err);
-                                    // fixme, what to do here for resilience?
-                                    None
-                                }
-                            };
-
-                            if let Some(found_device) = found_device {
-                                let opt_found_device_id = Some(found_device.id.clone());
-                                if opt_found_device_id != device_id {
-                                    // Device ID changed, send status update and note new device ID.
-                                    self.status_sender
-                                        .send(SupervisorStatus::NewDeviceId(found_device.id))
-                                        .unwrap();
-                                    device_id = opt_found_device_id;
-                                } else {
-                                    // Device ID unchanged, nothing to do.
-                                }
-                            } else {
-                                // No device found for name. Kill subprocess.
-                                warn!("Failed to lookup device ID");
-                                if let Err(err) = self.kill_child() {
-                                    error!("Failed to terminate Spotify Connector: {}", err);
-                                } else {
-                                    info!("Terminated Spotify Connector");
-                                }
-                                if let Err(err) = self.spawn_cmd() {
-                                    error!("Failed to start new Spotify Connector: {}", err);
-                                } else {
-                                    info!("Started new Spotify Connector");
-                                }
-                            }
-                        }
-                        Err(err) => {
-                            error!(
-                                "Failed to check if Spotify Connector is still running: {}",
-                                err
-                            );
-                            // fixme, what to do for resilience?
+                match res {
+                    Ok(Some(status)) => {
+                        // child terminated. needs to be restarted.
+                        error!(
+                            "Spotify Connector terminated unexpectedly with status {}",
+                            status
+                        );
+                        if let Err(err) = self.respawn() {
+                            error!("Failed to respawn Spotify Connector: {}", err);
+                        } else {
+                            info!("Respawned new Spotify Connector");
                         }
                     }
-                } else {
-                    // No child known to be running.
-                    if let Err(err) = self.spawn_cmd() {
-                        error!("Failed to spawn Spotify Connector: {}", err);
+                    Ok(None) => {
+                        // seems it is still running.
+                        // check if device id can still be resolved.
+                        let found_device = match spotify_util::lookup_device_by_name(
+                            &self.access_token_provider,
+                            &self.device_name,
+                        ) {
+                            Ok(device) => Some(device),
+                            Err(JukeboxError::DeviceNotFound { .. }) => {
+                                warn!("No Spotify device ID found for device name ...");
+                                None
+                            }
+                            Err(err) => {
+                                error!("Failed to lookup Spotify Device ID: {}", err);
+                                // fixme, what to do here for resilience?
+                                None
+                            }
+                        };
+
+                        if let Some(found_device) = found_device {
+                            let opt_found_device_id = Some(found_device.id.clone());
+                            if opt_found_device_id != device_id {
+                                // Device ID changed, send status update and note new device ID.
+                                self.status_sender
+                                    .send(SupervisorStatus::NewDeviceId(found_device.id))
+                                    .unwrap();
+                                device_id = opt_found_device_id;
+                            } else {
+                                // Device ID unchanged, nothing to do.
+                            }
+                        } else {
+                            // No device found for name. Kill subprocess.
+                            warn!("Failed to lookup device ID");
+                            if let Err(err) = self.kill_child() {
+                                error!("Failed to terminate Spotify Connector: {}", err);
+                            } else {
+                                info!("Terminated Spotify Connector");
+                            }
+                            if let Err(err) = self.respawn() {
+                                error!("Failed to start new Spotify Connector: {}", err);
+                            } else {
+                                info!("Started new Spotify Connector");
+                            }
+                        }
+                    }
+                    Err(err) => {
+                        error!(
+                            "Failed to check if Spotify Connector is still running: {}",
+                            err
+                        );
+                        // fixme, what to do for resilience?
                     }
                 }
 
-                thread::sleep(Duration::from_millis(1000));
+                match self
+                    .command_receiver
+                    .recv_timeout(Duration::from_millis(1000))
+                {
+                    Ok(SupervisorCommands::Terminate) => {
+                        info!("Terminating Spotify Connect Supervisor");
+                        break;
+                    }
+                    Err(RecvTimeoutError::Timeout) => {
+                        continue;
+                    }
+                    Err(RecvTimeoutError::Disconnected) => {
+                        error!("Supervisor's command channel disconnected, exiting supervisor");
+                        break;
+                    }
+                }
             }
         }
     }
@@ -189,22 +174,24 @@ mod external_command {
         ) -> Fallible<Self> {
             let cmd = env::var("SPOTIFY_CONNECT_COMMAND").map_err(Context::new)?;
             let (status_sender, status_receiver) = channel();
-            // let (command_sender, command_receiver) = channel();
-            let child = Arc::new(RwLock::new(None));
+            let (command_sender, command_receiver) = channel();
+            let child = Command::new("sh").arg("-c").arg(&cmd).spawn()?;
+            let rw_child = Arc::new(RwLock::new(child));
             let supervised_cmd = SupervisedCommand {
                 cmd: cmd.to_string().clone(),
                 device_name: device_name.to_string().clone(),
-                // command_receiver: command_receiver,
+                command_receiver: command_receiver,
                 status_sender,
                 access_token_provider: access_token_provider.clone(),
-                child: Arc::clone(&child),
+                child: Arc::clone(&rw_child),
             };
             let supervisor = supervised_cmd.spawn_supervisor();
 
             Ok(ExternalCommand {
                 status: status_receiver,
-                child,
+                child: rw_child,
                 supervisor,
+                command: command_sender,
             })
         }
     }
