@@ -11,6 +11,7 @@ use rustberry::access_token_provider;
 use rustberry::button_controller::{self, ButtonController};
 use rustberry::led_controller;
 use rustberry::playback_requests::{self, PlaybackRequest};
+use rustberry::spotify_connect;
 use rustberry::spotify_play::{self, PlaybackError};
 use rustberry::spotify_util;
 
@@ -96,13 +97,12 @@ fn run_application() -> Fallible<()> {
         &config.refresh_token,
     );
 
+    //
+    // Create Button Controller.
     let button_controller_backend =
         button_controller::backends::cdev_gpio::CdevGpio::new_from_env()?;
     let button_controller = ButtonController::new(button_controller_backend)?;
     info!("Created Button Controller");
-
-    let led_controller_backend = led_controller::backends::gpio_cdev::GpioCdev::new()?;
-    let mut led_controller = led_controller::LedController::new(led_controller_backend)?;
 
     let config_copy = config.clone();
     std::thread::spawn(move || {
@@ -125,7 +125,17 @@ fn run_application() -> Fallible<()> {
         }
     });
 
-    std::thread::sleep(std::time::Duration::from_secs(2));
+    //
+    // Create LED Controller.
+    let led_controller_backend = led_controller::backends::gpio_cdev::GpioCdev::new()?;
+    let mut led_controller = led_controller::LedController::new(led_controller_backend)?;
+
+    // std::thread::sleep(std::time::Duration::from_secs(2));
+
+    let spotify_connector = spotify_connect::external_command::ExternalCommand::new_from_env(
+        &access_token_provider,
+        config.device_name.clone(),
+    )?;
 
     let device = loop {
         match spotify_util::lookup_device_by_name(&mut access_token_provider, &config.device_name) {

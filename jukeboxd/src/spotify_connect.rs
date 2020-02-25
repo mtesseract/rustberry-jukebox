@@ -7,7 +7,7 @@ pub trait SpotifyConnector {
     fn request_restart(&mut self);
 }
 
-mod external_command {
+pub mod external_command {
 
     use super::*;
 
@@ -29,7 +29,7 @@ mod external_command {
         Failure(String),
     }
 
-    struct ExternalCommand {
+    pub struct ExternalCommand {
         status: Receiver<SupervisorStatus>,
         child: Arc<RwLock<Child>>,
         command: Sender<SupervisorCommands>,
@@ -165,26 +165,50 @@ mod external_command {
                 }
             }
         }
-    }
-
-    impl ExternalCommand {
         pub fn new(
-            access_token_provider: &AccessTokenProvider,
+            cmd: String,
             device_name: &str,
-        ) -> Fallible<Self> {
-            let cmd = env::var("SPOTIFY_CONNECT_COMMAND").map_err(Context::new)?;
-            let (status_sender, status_receiver) = channel();
-            let (command_sender, command_receiver) = channel();
+            access_token_provider: &AccessTokenProvider,
+            command_receiver: Receiver<SupervisorCommands>,
+            status_sender: Sender<SupervisorStatus>,
+        ) -> Result<(Self, Arc<RwLock<Child>>), std::io::Error> {
             let child = Command::new("sh").arg("-c").arg(&cmd).spawn()?;
             let rw_child = Arc::new(RwLock::new(child));
             let supervised_cmd = SupervisedCommand {
-                cmd: cmd.to_string().clone(),
+                cmd,
                 device_name: device_name.to_string().clone(),
-                command_receiver: command_receiver,
+                command_receiver,
                 status_sender,
                 access_token_provider: access_token_provider.clone(),
                 child: Arc::clone(&rw_child),
             };
+            Ok((supervised_cmd, rw_child))
+        }
+    }
+
+    impl ExternalCommand {
+        pub fn new_from_env(
+            access_token_provider: &AccessTokenProvider,
+            device_name: String,
+        ) -> Fallible<Self> {
+            let cmd = env::var("SPOTIFY_CONNECT_COMMAND").map_err(Context::new)?;
+            Self::new(access_token_provider, cmd, device_name)
+        }
+        pub fn new(
+            access_token_provider: &AccessTokenProvider,
+            cmd: String,
+            device_name: String,
+        ) -> Fallible<Self> {
+            let (status_sender, status_receiver) = channel();
+            let (command_sender, command_receiver) = channel();
+
+            let (supervised_cmd, rw_child) = SupervisedCommand::new(
+                cmd.to_string().clone(),
+                &device_name,
+                access_token_provider,
+                command_receiver,
+                status_sender,
+            )?;
             let supervisor = supervised_cmd.spawn_supervisor();
 
             Ok(ExternalCommand {
