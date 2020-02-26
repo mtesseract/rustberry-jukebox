@@ -2,9 +2,20 @@ use std::sync::{Arc, RwLock};
 
 use crate::access_token_provider::AccessTokenProvider;
 use crate::spotify_util;
+use crossbeam_channel::Receiver;
+
+pub enum SupervisorCommands {
+    Terminate,
+}
+
+pub enum SupervisorStatus {
+    NewDeviceId(String),
+    Failure(String),
+}
 
 pub trait SpotifyConnector {
-    fn request_restart(&mut self);
+    fn request_restart(&self);
+    fn status_channel(&self) -> Receiver<SupervisorStatus>;
 }
 
 pub mod external_command {
@@ -16,18 +27,12 @@ pub mod external_command {
     use slog_scope::{error, info, warn};
     use std::env;
     use std::process::{Child, Command, ExitStatus};
-    use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
+    // use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
+    // use crossbeam_channel::{self, bounded::RecvTimeoutError, Receiver, Sender};
     use std::thread::{self, JoinHandle};
     use std::time::Duration;
 
-    enum SupervisorCommands {
-        Terminate,
-    }
-
-    enum SupervisorStatus {
-        NewDeviceId(String),
-        Failure(String),
-    }
+    use crossbeam_channel::{self, Receiver, RecvTimeoutError, Sender};
 
     pub struct ExternalCommand {
         status: Receiver<SupervisorStatus>,
@@ -187,6 +192,10 @@ pub mod external_command {
     }
 
     impl ExternalCommand {
+        pub fn status(&self) -> Receiver<SupervisorStatus> {
+            self.status.clone()
+        }
+
         pub fn new_from_env(
             access_token_provider: &AccessTokenProvider,
             device_name: String,
@@ -199,8 +208,11 @@ pub mod external_command {
             cmd: String,
             device_name: String,
         ) -> Fallible<Self> {
-            let (status_sender, status_receiver) = channel();
-            let (command_sender, command_receiver) = channel();
+            let (status_sender, status_receiver) = crossbeam_channel::bounded(1);
+            let (command_sender, command_receiver) = crossbeam_channel::bounded(1);
+
+            // let (status_sender, status_receiver) = channel();
+            // let (command_sender, command_receiver) = channel();
 
             let (supervised_cmd, rw_child) = SupervisedCommand::new(
                 cmd.to_string().clone(),
@@ -221,6 +233,15 @@ pub mod external_command {
     }
 
     impl SpotifyConnector for ExternalCommand {
-        fn request_restart(&mut self) {}
+        fn request_restart(&self) {
+            if let Err(err) = self.child.write().unwrap().kill() {
+                error!("While trying to restart Spotify Connector ExternalCommand, terminating the running process failed: {}", err);
+            } else {
+                error!("While trying to restart Spotify Connector ExternalCommand, successfully killed running process");
+            }
+        }
+        fn status_channel(&self) -> Receiver<SupervisorStatus> {
+            self.status.clone()
+        }
     }
 }

@@ -12,7 +12,8 @@ use rustberry::button_controller::{self, ButtonController};
 use rustberry::led_controller;
 use rustberry::playback_requests::{self, PlaybackRequest};
 use rustberry::spotify_connect;
-use rustberry::spotify_play::{self, PlaybackError};
+use rustberry::spotify_connect::SpotifyConnector;
+use rustberry::spotify_play::{self};
 use rustberry::spotify_util;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -151,7 +152,7 @@ fn run_application() -> Fallible<()> {
 
     info!("Found device ID for device name"; o!("device_id" => &device.id));
 
-    let mut player = spotify_play::Player::new(access_token_provider, &device.id);
+    let mut player = spotify_play::Player::new(access_token_provider, spotify_connector.status());
     info!("Initialized Player");
 
     {
@@ -197,9 +198,15 @@ fn run_application() -> Fallible<()> {
                     Err(err) => {
                         led_controller.switch_off(led_controller::Led::Playback);
                         error!("Failed to start playback: {}", err);
-                        if err.is_client_error() {
-                            warn!("Playback error is regarded as client error, application will terminate");
-                            break;
+                        if err.is_device_missing_error() {
+                            warn!("No device ID found, restarting Spotify Connector");
+                            spotify_connector.request_restart();
+                        // FIXME: how to automatically retry the playbacj?
+                        } else {
+                            if err.is_client_error() {
+                                warn!("Playback error is regarded as client error, application will terminate");
+                                break;
+                            }
                         }
                     }
                 }
@@ -213,9 +220,15 @@ fn run_application() -> Fallible<()> {
                     }
                     Err(err) => {
                         error!("Failed to stop playback: {}", err);
-                        if err.is_client_error() {
-                            warn!("Playback error is regarded as client error, application will terminate");
-                            break;
+                        if err.is_device_missing_error() {
+                            warn!("No device ID found, restarting Spotify Connector");
+                            spotify_connector.request_restart();
+                        // FIXME: how to automatically retry the playback?
+                        } else {
+                            if err.is_client_error() {
+                                warn!("Playback error is regarded as client error, application will terminate");
+                                break;
+                            }
                         }
                     }
                 }
