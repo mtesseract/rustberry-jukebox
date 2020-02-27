@@ -18,6 +18,7 @@ pub enum Error {
     HTTP(reqwest::Error),
     NoToken,
     NoDevice,
+    SendError(String),
 }
 
 impl From<access_token_provider::AtpError> for Error {
@@ -33,6 +34,7 @@ impl Error {
             Error::HTTP(err) => err.status().map(|s| s.is_client_error()).unwrap_or(false),
             Error::NoToken => true,
             Error::NoDevice => true,
+            Error::SendError(_) => false,
         }
     }
     pub fn is_device_missing_error(&self) -> bool {
@@ -49,6 +51,7 @@ impl Display for Error {
             Error::HTTP(err) => write!(f, "Spotify HTTP Error {}", err),
             Error::NoToken => write!(f, "Failed to obtain access token"),
             Error::NoDevice => write!(f, "No Spotify Connect Device found"),
+            Error::SendError(err) => write!(f, "Failed to transmit command via channel: {}", err),
         }
     }
 }
@@ -59,10 +62,15 @@ impl From<reqwest::Error> for Error {
     }
 }
 
+impl<T> From<crossbeam_channel::SendError<T>> for Error {
+    fn from(err: crossbeam_channel::SendError<T>) -> Self {
+        Error::SendError(err.to_string())
+    }
+}
 impl std::error::Error for Error {}
 
 enum PlayerCommand {
-    StartPlayback(spotify_uri: &str),
+    StartPlayback { spotify_uri: String },
     StopPlayback,
     Terminate,
 }
@@ -74,15 +82,16 @@ pub struct PlayerHandle {
 }
 
 pub struct Player {
-    device_id: Option<String>,
     access_token_provider: AccessTokenProvider,
     http_client: Client,
+    commands: Receiver<PlayerCommand>,
+    status: Receiver<SupervisorStatus>,
 }
 
 impl Drop for PlayerHandle {
     fn drop(&mut self) {
         println!("Destroying Player, stopping Music");
-        let _ = self.stop_playback();
+        // let _ = self.stop_playback();
     }
 }
 
@@ -95,29 +104,45 @@ struct StartPlayback {
 }
 
 impl PlayerHandle {
-    fn player_thread(devicestatus_receiver: Receiver<SupervisorStatus>) {
-        loop {
+    pub fn stop_playback(&self) -> Result<(), Error> {
+        self.commands.send(PlayerCommand::StopPlayback)?;
+        Ok(())
+    }
 
-            info!("player tick");
-            thread::sleep(std::time::Duration::from_secs(1));
-        }
+    pub fn start_playback(&self, spotify_uri: String) -> Result<(), Error> {
+        self.commands
+            .send(PlayerCommand::StartPlayback { spotify_uri })?;
+        Ok(())
     }
 }
 
 impl Player {
+    fn main(self) {
+        loop {
+            info!("player tick");
+            thread::sleep(std::time::Duration::from_secs(1));
+        }
+    }
 
     pub fn new(
         access_token_provider: AccessTokenProvider,
         spotify_connect_status: Receiver<SupervisorStatus>,
-    ) -> Self {
+    ) -> PlayerHandle {
         let http_client = Client::new();
-        let handle = thread::spawn(|| Self::player_thread(spotify_connect_status));
+        let (commands_tx, commands_rx) = crossbeam_channel::bounded(1);
 
-        Player {
+        let player = Player {
             access_token_provider,
             http_client,
+            commands: commands_rx,
+            status: spotify_connect_status,
+        };
+
+        let handle = thread::spawn(|| player.main());
+
+        PlayerHandle {
             handle: Arc::new(handle),
-            device_id: Arc::new(RwLock::new(None)),
+            commands: commands_tx,
         }
     }
 
@@ -135,13 +160,13 @@ impl Player {
         }
     }
 
-    pub fn start_playback(&mut self, spotify_uri: &str) -> Result<(), Error> {
-        let device_id = {
-            match self.device_id.read().unwrap().clone() {
-                Some(device_id) => device_id,
-                None => return Err(Error::NoDevice),
-            }
-        };
+    pub fn start_playback(&mut self, device_id: &str, spotify_uri: &str) -> Result<(), Error> {
+        // let device_id = {
+        //     match self.device_id {
+        //         Some(ref device_id) => device_id.clone(),
+        //         None => return Err(Error::NoDevice),
+        //     }
+        // };
 
         let access_token = self.access_token_provider.get_bearer_token()?;
         let msg = "Failed to start Spotify playback";
@@ -167,13 +192,13 @@ impl Player {
             .map_err(|err| Error::HTTP(err))
     }
 
-    pub fn stop_playback(&mut self) -> Result<(), Error> {
-        let device_id = {
-            match self.device_id.read().unwrap().clone() {
-                Some(device_id) => device_id,
-                None => return Err(Error::NoDevice),
-            }
-        };
+    pub fn stop_playback(&mut self, device_id: &str) -> Result<(), Error> {
+        // let device_id = {
+        //     match self.device_id {
+        //         Some(ref device_id) => device_id.clone(),
+        //         None => return Err(Error::NoDevice),
+        //     }
+        // };
 
         let access_token = self.access_token_provider.get_bearer_token()?;
         let msg = "Failed to stop Spotify playback";

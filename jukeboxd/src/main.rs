@@ -152,12 +152,12 @@ fn run_application() -> Fallible<()> {
 
     info!("Found device ID for device name"; o!("device_id" => &device.id));
 
-    let mut player = spotify_play::Player::new(access_token_provider, spotify_connector.status());
+    let player = spotify_play::Player::new(access_token_provider, spotify_connector.status());
     info!("Initialized Player");
 
     {
         let signals = Signals::new(&[SIGINT, SIGTERM])?;
-        let mut player_clone = player.clone();
+        let player_clone = player.clone();
         std::thread::spawn(move || {
             let sig = signals.into_iter().next();
             info!("Received signal {:?}, exiting", sig);
@@ -189,7 +189,7 @@ fn run_application() -> Fallible<()> {
                 info!("Received playback request {:?}", &req);
                 led_controller.switch_on(led_controller::Led::Playback);
                 let res = match req {
-                    PlaybackRequest::SpotifyUri(ref uri) => player.start_playback(uri),
+                    PlaybackRequest::SpotifyUri(ref uri) => player.start_playback(uri.to_string()),
                 };
                 match res {
                     Ok(_) => {
