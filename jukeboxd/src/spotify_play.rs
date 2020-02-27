@@ -61,15 +61,25 @@ impl From<reqwest::Error> for Error {
 
 impl std::error::Error for Error {}
 
+enum PlayerCommand {
+    StartPlayback(spotify_uri: &str),
+    StopPlayback,
+    Terminate,
+}
+
 #[derive(Debug, Clone)]
-pub struct Player {
+pub struct PlayerHandle {
     handle: Arc<JoinHandle<()>>,
-    device_id: Arc<RwLock<Option<String>>>,
+    commands: Sender<PlayerCommand>,
+}
+
+pub struct Player {
+    device_id: Option<String>,
     access_token_provider: AccessTokenProvider,
     http_client: Client,
 }
 
-impl Drop for Player {
+impl Drop for PlayerHandle {
     fn drop(&mut self) {
         println!("Destroying Player, stopping Music");
         let _ = self.stop_playback();
@@ -84,13 +94,17 @@ struct StartPlayback {
     uris: Option<Vec<String>>,
 }
 
-impl Player {
-    fn player_thread(status_receiver: Receiver<SupervisorStatus>) {
+impl PlayerHandle {
+    fn player_thread(devicestatus_receiver: Receiver<SupervisorStatus>) {
         loop {
+
             info!("player tick");
             thread::sleep(std::time::Duration::from_secs(1));
         }
     }
+}
+
+impl Player {
 
     pub fn new(
         access_token_provider: AccessTokenProvider,
