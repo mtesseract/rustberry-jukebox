@@ -78,18 +78,6 @@ pub enum PlayerCommand {
     NewDeviceId(String),
 }
 
-// #[derive(Debug)]
-// pub enum PlayerMessage {
-//     Command(PlayerCommand),
-//     Status(SupervisorStatus),
-// }
-
-// impl From<SupervisorStatus> for PlayerCommand {
-//     fn from(status: SupervisorStatus) -> Self {
-//         PlayerCommand::NewDeviceId(status)
-//     }
-// }
-
 #[derive(Debug, Clone)]
 pub struct PlayerHandle {
     handle: Arc<JoinHandle<()>>,
@@ -133,30 +121,59 @@ impl PlayerHandle {
 
 impl Player {
     fn main(self) {
-        //     let rs = vec![self.command.clone(), self.status.clone()];
-        //         // Build a list of operations.
-        // let mut sel = Select::new();
-        // for r in rs {
-        //     sel.recv(r);
-        // }
+        use PlayerCommand::*;
+        let mut device_id: Option<String> = None;
+
+        let rs = vec![self.commands.clone(), self.status.clone()];
+        // Build a list of operations.
+        let mut sel = Select::new();
+        for r in &rs {
+            sel.recv(r);
+        }
 
         loop {
             // Wait until a receive operation becomes ready and try executing it.
-            // // let index = sel.ready();
-            // // let res = rs[index].try_recv();
+            let index = sel.ready();
+            let res = rs[index].try_recv();
 
-            // match res {
-            //     Err(err) => {
-            //         // If the operation turns out not to be ready, retry.
-            //         if err.is_empty() {
-            //             continue;
-            //         }
-            //     }
-            //     Ok(msg) => unimplemented!(),
-            // }
-
-            info!("player tick");
-            thread::sleep(std::time::Duration::from_secs(1));
+            match res {
+                Err(err) => {
+                    if err.is_empty() {
+                        // If the operation turns out not to be ready, retry.
+                        continue;
+                    } else {
+                    }
+                }
+                Ok(msg) => match msg {
+                    StartPlayback { spotify_uri } => {
+                        if let Some(ref device_id) = device_id {
+                            match self.start_playback(device_id, &spotify_uri) {
+                                Err(err) => {}
+                                Ok(()) => {}
+                            }
+                        } else {
+                            // no device id
+                        }
+                    }
+                    StopPlayback => {
+                        if let Some(ref device_id) = device_id {
+                            match self.stop_playback(device_id) {
+                                Err(err) => {}
+                                Ok(()) => {}
+                            }
+                        } else {
+                            // no device id
+                        }
+                    }
+                    Terminate => {
+                        info!("Player received Terminate command, terminating");
+                        break;
+                    }
+                    NewDeviceId(new_device_id) => {
+                        device_id = Some(new_device_id);
+                    }
+                },
+            }
         }
     }
 
@@ -196,7 +213,7 @@ impl Player {
         }
     }
 
-    pub fn start_playback(&mut self, device_id: &str, spotify_uri: &str) -> Result<(), Error> {
+    pub fn start_playback(&self, device_id: &str, spotify_uri: &str) -> Result<(), Error> {
         // let device_id = {
         //     match self.device_id {
         //         Some(ref device_id) => device_id.clone(),
@@ -228,7 +245,7 @@ impl Player {
             .map_err(|err| Error::HTTP(err))
     }
 
-    pub fn stop_playback(&mut self, device_id: &str) -> Result<(), Error> {
+    pub fn stop_playback(&self, device_id: &str) -> Result<(), Error> {
         // let device_id = {
         //     match self.device_id {
         //         Some(ref device_id) => device_id.clone(),
