@@ -213,14 +213,7 @@ impl Player {
         }
     }
 
-    pub fn start_playback(&self, device_id: &str, spotify_uri: &str) -> Result<(), Error> {
-        // let device_id = {
-        //     match self.device_id {
-        //         Some(ref device_id) => device_id.clone(),
-        //         None => return Err(Error::NoDevice),
-        //     }
-        // };
-
+    fn start_playback(&self, device_id: &str, spotify_uri: &str) -> Result<(), Error> {
         let access_token = self.access_token_provider.get_bearer_token()?;
         let msg = "Failed to start Spotify playback";
         let req = Self::derive_start_playback_payload_from_spotify_uri(spotify_uri);
@@ -245,14 +238,7 @@ impl Player {
             .map_err(|err| Error::HTTP(err))
     }
 
-    pub fn stop_playback(&self, device_id: &str) -> Result<(), Error> {
-        // let device_id = {
-        //     match self.device_id {
-        //         Some(ref device_id) => device_id.clone(),
-        //         None => return Err(Error::NoDevice),
-        //     }
-        // };
-
+    fn stop_playback(&self, device_id: &str) -> Result<(), Error> {
         let access_token = self.access_token_provider.get_bearer_token()?;
         let msg = "Failed to stop Spotify playback";
         self.http_client
