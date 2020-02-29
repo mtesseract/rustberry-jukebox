@@ -11,7 +11,8 @@ use slog_scope::{error, info, warn};
 use std::convert::From;
 use std::sync::{Arc, RwLock};
 
-use crossbeam_channel::{Receiver, RecvTimeoutError, Sender};
+use crossbeam_channel::{Receiver, RecvError, RecvTimeoutError, Select, Sender};
+//use crossbeam_channel::{Receiver, RecvError, Select};
 
 #[derive(Debug)]
 pub enum Error {
@@ -69,11 +70,25 @@ impl<T> From<crossbeam_channel::SendError<T>> for Error {
 }
 impl std::error::Error for Error {}
 
-enum PlayerCommand {
+#[derive(Debug, Clone)]
+pub enum PlayerCommand {
     StartPlayback { spotify_uri: String },
     StopPlayback,
     Terminate,
+    NewDeviceId(String),
 }
+
+// #[derive(Debug)]
+// pub enum PlayerMessage {
+//     Command(PlayerCommand),
+//     Status(SupervisorStatus),
+// }
+
+// impl From<SupervisorStatus> for PlayerCommand {
+//     fn from(status: SupervisorStatus) -> Self {
+//         PlayerCommand::NewDeviceId(status)
+//     }
+// }
 
 #[derive(Debug, Clone)]
 pub struct PlayerHandle {
@@ -85,7 +100,7 @@ pub struct Player {
     access_token_provider: AccessTokenProvider,
     http_client: Client,
     commands: Receiver<PlayerCommand>,
-    status: Receiver<SupervisorStatus>,
+    status: Receiver<PlayerCommand>,
 }
 
 impl Drop for PlayerHandle {
@@ -118,7 +133,28 @@ impl PlayerHandle {
 
 impl Player {
     fn main(self) {
+        //     let rs = vec![self.command.clone(), self.status.clone()];
+        //         // Build a list of operations.
+        // let mut sel = Select::new();
+        // for r in rs {
+        //     sel.recv(r);
+        // }
+
         loop {
+            // Wait until a receive operation becomes ready and try executing it.
+            // // let index = sel.ready();
+            // // let res = rs[index].try_recv();
+
+            // match res {
+            //     Err(err) => {
+            //         // If the operation turns out not to be ready, retry.
+            //         if err.is_empty() {
+            //             continue;
+            //         }
+            //     }
+            //     Ok(msg) => unimplemented!(),
+            // }
+
             info!("player tick");
             thread::sleep(std::time::Duration::from_secs(1));
         }
@@ -126,7 +162,7 @@ impl Player {
 
     pub fn new(
         access_token_provider: AccessTokenProvider,
-        spotify_connect_status: Receiver<SupervisorStatus>,
+        spotify_connect_status: Receiver<PlayerCommand>,
     ) -> PlayerHandle {
         let http_client = Client::new();
         let (commands_tx, commands_rx) = crossbeam_channel::bounded(1);

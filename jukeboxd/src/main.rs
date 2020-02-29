@@ -11,9 +11,8 @@ use rustberry::access_token_provider;
 use rustberry::button_controller::{self, ButtonController};
 use rustberry::led_controller;
 use rustberry::playback_requests::{self, PlaybackRequest};
-use rustberry::spotify_connect;
-use rustberry::spotify_connect::SpotifyConnector;
-use rustberry::spotify_play::{self};
+use rustberry::spotify_connect::{self, SpotifyConnector, SupervisorStatus};
+use rustberry::spotify_play::{self, PlayerCommand};
 use rustberry::spotify_util;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -136,6 +135,13 @@ fn run_application() -> Fallible<()> {
     let spotify_connector = spotify_connect::external_command::ExternalCommand::new_from_env(
         &access_token_provider,
         config.device_name.clone(),
+        |status| match status {
+            SupervisorStatus::NewDeviceId(device_id) => Some(PlayerCommand::NewDeviceId(device_id)),
+            other => {
+                warn!("Ignoring SupervisorStatus {:?} in Player", other);
+                None
+            }
+        },
     )?;
 
     let device = loop {

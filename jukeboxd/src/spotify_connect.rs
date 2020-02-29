@@ -8,6 +8,7 @@ pub enum SupervisorCommands {
     Terminate,
 }
 
+#[derive(Debug, Clone)]
 pub enum SupervisorStatus {
     NewDeviceId(String),
     Failure(String),
@@ -15,7 +16,7 @@ pub enum SupervisorStatus {
 
 pub trait SpotifyConnector {
     fn request_restart(&self);
-    fn status_channel(&self) -> Receiver<SupervisorStatus>;
+    // fn status_channel(&self) -> Receiver<T>;
 }
 
 pub mod external_command {
@@ -34,30 +35,31 @@ pub mod external_command {
 
     use crossbeam_channel::{self, Receiver, RecvTimeoutError, Sender};
 
-    pub struct ExternalCommand {
-        status: Receiver<SupervisorStatus>,
+    pub struct ExternalCommand<T> {
+        status: Receiver<T>,
         child: Arc<RwLock<Child>>,
         command: Sender<SupervisorCommands>,
         supervisor: JoinHandle<()>,
     }
 
-    struct SupervisedCommand {
+    struct SupervisedCommand<T: Send> {
         pub cmd: String,
         pub device_name: String,
         pub command_receiver: Receiver<SupervisorCommands>,
-        pub status_sender: Sender<SupervisorStatus>,
+        pub status_sender: Sender<T>,
+        pub status_transformer: Box<Fn(SupervisorStatus) -> Option<T> + 'static + Send>,
         pub access_token_provider: AccessTokenProvider,
         child: Arc<RwLock<Child>>,
     }
 
-    impl Drop for ExternalCommand {
+    impl<T> Drop for ExternalCommand<T> {
         fn drop(&mut self) {
             let _ = self.command.send(SupervisorCommands::Terminate);
             let _ = self.child.write().unwrap().kill();
         }
     }
 
-    impl SupervisedCommand {
+    impl<T: 'static + Send> SupervisedCommand<T> {
         fn kill_child(&mut self) -> Result<(), std::io::Error> {
             self.child.write().unwrap().kill()
         }
@@ -121,9 +123,12 @@ pub mod external_command {
                             let opt_found_device_id = Some(found_device.id.clone());
                             if opt_found_device_id != device_id {
                                 // Device ID changed, send status update and note new device ID.
-                                self.status_sender
-                                    .send(SupervisorStatus::NewDeviceId(found_device.id))
-                                    .unwrap();
+                                let status = (self.status_transformer)(
+                                    SupervisorStatus::NewDeviceId(found_device.id),
+                                );
+                                if let Some(status) = status {
+                                    self.status_sender.send(status).unwrap();
+                                }
                                 device_id = opt_found_device_id;
                             } else {
                                 // Device ID unchanged, nothing to do.
@@ -170,13 +175,17 @@ pub mod external_command {
                 }
             }
         }
-        pub fn new(
+        pub fn new<F>(
             cmd: String,
             device_name: &str,
             access_token_provider: &AccessTokenProvider,
             command_receiver: Receiver<SupervisorCommands>,
-            status_sender: Sender<SupervisorStatus>,
-        ) -> Result<(Self, Arc<RwLock<Child>>), std::io::Error> {
+            status_sender: Sender<T>,
+            status_transformer: F,
+        ) -> Result<(Self, Arc<RwLock<Child>>), std::io::Error>
+        where
+            F: Fn(SupervisorStatus) -> Option<T> + 'static + Send,
+        {
             let child = Command::new("sh").arg("-c").arg(&cmd).spawn()?;
             let rw_child = Arc::new(RwLock::new(child));
             let supervised_cmd = SupervisedCommand {
@@ -184,6 +193,7 @@ pub mod external_command {
                 device_name: device_name.to_string().clone(),
                 command_receiver,
                 status_sender,
+                status_transformer: Box::new(status_transformer),
                 access_token_provider: access_token_provider.clone(),
                 child: Arc::clone(&rw_child),
             };
@@ -191,23 +201,31 @@ pub mod external_command {
         }
     }
 
-    impl ExternalCommand {
-        pub fn status(&self) -> Receiver<SupervisorStatus> {
+    impl<T: Send + 'static> ExternalCommand<T> {
+        pub fn status(&self) -> Receiver<T> {
             self.status.clone()
         }
 
-        pub fn new_from_env(
+        pub fn new_from_env<F>(
             access_token_provider: &AccessTokenProvider,
             device_name: String,
-        ) -> Fallible<Self> {
+            status_transformer: F,
+        ) -> Fallible<Self>
+        where
+            F: Fn(SupervisorStatus) -> Option<T> + 'static + Send,
+        {
             let cmd = env::var("SPOTIFY_CONNECT_COMMAND").map_err(Context::new)?;
-            Self::new(access_token_provider, cmd, device_name)
+            Self::new(access_token_provider, cmd, device_name, status_transformer)
         }
-        pub fn new(
+        pub fn new<F>(
             access_token_provider: &AccessTokenProvider,
             cmd: String,
             device_name: String,
-        ) -> Fallible<Self> {
+            status_transformer: F,
+        ) -> Fallible<Self>
+        where
+            F: Fn(SupervisorStatus) -> Option<T> + 'static + Send,
+        {
             let (status_sender, status_receiver) = crossbeam_channel::bounded(1);
             let (command_sender, command_receiver) = crossbeam_channel::bounded(1);
 
@@ -220,6 +238,7 @@ pub mod external_command {
                 access_token_provider,
                 command_receiver,
                 status_sender,
+                status_transformer,
             )?;
             let supervisor = supervised_cmd.spawn_supervisor();
 
@@ -230,18 +249,19 @@ pub mod external_command {
                 command: command_sender,
             })
         }
+
+        fn status_channel(&self) -> Receiver<T> {
+            self.status.clone()
+        }
     }
 
-    impl SpotifyConnector for ExternalCommand {
+    impl<T> SpotifyConnector for ExternalCommand<T> {
         fn request_restart(&self) {
             if let Err(err) = self.child.write().unwrap().kill() {
                 error!("While trying to restart Spotify Connector ExternalCommand, terminating the running process failed: {}", err);
             } else {
                 error!("While trying to restart Spotify Connector ExternalCommand, successfully killed running process");
             }
-        }
-        fn status_channel(&self) -> Receiver<SupervisorStatus> {
-            self.status.clone()
         }
     }
 }
