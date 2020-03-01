@@ -12,7 +12,6 @@ use std::convert::From;
 use std::sync::{Arc, RwLock};
 
 use crossbeam_channel::{Receiver, RecvError, RecvTimeoutError, Select, Sender};
-//use crossbeam_channel::{Receiver, RecvError, Select};
 
 #[derive(Debug)]
 pub enum Error {
