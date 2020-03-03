@@ -85,7 +85,7 @@ fn execute_volume_down(config: &Config) {
     }
 }
 
-fn run_application() -> Fallible<()> {
+fn main_with_log() -> Fallible<()> {
     info!("** Rustberry/Spotify Starting **");
     let config = envy::from_env::<Config>()?;
     info!("Configuration"; o!("device_name" => &config.device_name));
@@ -97,97 +97,117 @@ fn run_application() -> Fallible<()> {
         &config.refresh_token,
     );
 
-    //
-    // Create Button Controller.
+    /* Create input channels.
+     */
+
+    // 1. Create UserControlTransmitter.
     let button_controller_backend =
         button_controller::backends::cdev_gpio::CdevGpio::new_from_env()?;
-    let button_controller = ButtonController::new(button_controller_backend)?;
-    info!("Created Button Controller");
+    let user_control_transmitter = UserControlTransmitter::new(button_controller_backend);
+    info!("Created UserControlTransmitter");
 
-    let config_copy = config.clone();
-    std::thread::spawn(move || {
-        for cmd in button_controller {
-            info!("Received {:?} command from Button Controller", cmd);
-            match cmd {
-                button_controller::Command::Shutdown => {
-                    info!("Shutting down");
-                    execute_shutdown(&config_copy);
-                }
-                button_controller::Command::VolumeUp => {
-                    info!("Volume up");
-                    execute_volume_up(&config_copy);
-                }
-                button_controller::Command::VolumeDown => {
-                    info!("Volume down");
-                    execute_volume_down(&config_copy);
-                }
-            }
-        }
-    });
-
+    // 2. Create PlayRequests (Transmitter).
     //
-    // Create LED Controller.
-    let led_controller_backend = led_controller::backends::gpio_cdev::GpioCdev::new()?;
-    let mut led_controller = led_controller::LedController::new(led_controller_backend)?;
-
-    // std::thread::sleep(std::time::Duration::from_secs(2));
-
-    let spotify_connector = spotify_connect::external_command::ExternalCommand::new_from_env(
-        &access_token_provider,
-        config.device_name.clone(),
-        |status| match status {
-            SupervisorStatus::NewDeviceId(device_id) => Some(PlayerCommand::NewDeviceId(device_id)),
-            other => {
-                warn!("Ignoring SupervisorStatus {:?} in Player", other);
-                None
-            }
-        },
-    )?;
-
-    let device = loop {
-        match spotify_util::lookup_device_by_name(&mut access_token_provider, &config.device_name) {
-            Err(err) => {
-                warn!("Failed to lookup device, will retry: {}", err);
-                std::thread::sleep(std::time::Duration::from_secs(5));
-            }
-            Ok(device) => {
-                break device;
-            }
-        }
+    let user_requests_transmitter: playback_requests::PlaybackRequests<PlaybackRequest> = {
+        let transmitter_backend = playback_requests::rfid::PlaybackRequestTransmitterRfid::new()
+            .expect("Failed to initialize backend");
+        let transmitter = playback_requests::PlaybackRequestsTransmitter::new(transmitter_backend)
+            .expect("Failed to create PlaybackRequestsTransmitter");
+        playback_requests::PlaybackRequests::new(transmitter)
     };
 
-    info!("Found device ID for device name"; o!("device_id" => &device.id));
+    // let config_copy = config.clone();
+    // std::thread::spawn(move || {
+    //     for cmd in button_controller {
+    //         info!("Received {:?} command from Button Controller", cmd);
+    //         match cmd {
+    //             button_controller::Command::Shutdown => {
+    //                 info!("Shutting down");
+    //                 execute_shutdown(&config_copy);
+    //             }
+    //             button_controller::Command::VolumeUp => {
+    //                 info!("Volume up");
+    //                 execute_volume_up(&config_copy);
+    //             }
+    //             button_controller::Command::VolumeDown => {
+    //                 info!("Volume down");
+    //                 execute_volume_down(&config_copy);
+    //             }
+    //         }
+    //     }
+    // });
 
-    let player = spotify_play::Player::new(access_token_provider, spotify_connector.status());
-    info!("Initialized Player");
+    /*
+     Create effect channel.
+    */
 
-    {
-        let signals = Signals::new(&[SIGINT, SIGTERM])?;
-        let player_clone = player.clone();
-        std::thread::spawn(move || {
-            let sig = signals.into_iter().next();
-            info!("Received signal {:?}, exiting", sig);
-            let _ = player_clone.stop_playback();
-            std::process::exit(0);
-        });
-    }
+    let (effects_tx, effects_rx) = crossbeam_channel::bounded(1);
 
-    let transmitter_backend = playback_requests::rfid::PlaybackRequestTransmitterRfid::new()
-        .expect("Failed to initialize backend");
-    let transmitter = playback_requests::PlaybackRequestsTransmitter::new(transmitter_backend)
-        .expect("Failed to create PlaybackRequestsTransmitter");
-    let user_requests_producer: playback_requests::PlaybackRequests<PlaybackRequest> =
-        playback_requests::PlaybackRequests::new(transmitter);
+    // Move to effects interpreter:
+    //
+    // // 1. Create LED Controller.
+    // let mut led_controller = {
+    //     let led_controller_backend = led_controller::backends::gpio_cdev::GpioCdev::new()?;
+    //     led_controller::LedController::new(led_controller_backend)?
+    // };
 
+    // // std::thread::sleep(std::time::Duration::from_secs(2));
+
+    // let spotify_connector = spotify_connect::external_command::ExternalCommand::new_from_env(
+    //     &access_token_provider,
+    //     config.device_name.clone(),
+    //     |status| match status {
+    //         SupervisorStatus::NewDeviceId(device_id) => Some(PlayerCommand::NewDeviceId(device_id)),
+    //         other => {
+    //             warn!("Ignoring SupervisorStatus {:?} in Player", other);
+    //             None
+    //         }
+    //     },
+    // )?;
+
+    // let device = loop {
+    //     match spotify_util::lookup_device_by_name(&mut access_token_provider, &config.device_name) {
+    //         Err(err) => {
+    //             warn!("Failed to lookup device, will retry: {}", err);
+    //             std::thread::sleep(std::time::Duration::from_secs(5));
+    //         }
+    //         Ok(device) => {
+    //             break device;
+    //         }
+    //     }
+    // };
+
+    // info!("Found device ID for device name"; o!("device_id" => &device.id));
+
+    // let player = spotify_play::Player::new(access_token_provider, spotify_connector.status());
+    // info!("Initialized Player");
+
+    // {
+    //     let signals = Signals::new(&[SIGINT, SIGTERM])?;
+    //     let player_clone = player.clone();
+    //     std::thread::spawn(move || {
+    //         let sig = signals.into_iter().next();
+    //         info!("Received signal {:?}, exiting", sig);
+    //         let _ = player_clone.stop_playback();
+    //         std::process::exit(0);
+    //     });
+    // }
+}
+
+fn run_application() -> Fallible<()> {
     // Execute post-init-command, if set in the environment.
     if let Some(ref post_init_command) = config.post_init_command {
-        if let Err(err) = Command::new(post_init_command).output() {
-            error!(
-                "Failed to execute post init command '{}': {}",
-                post_init_command, err
-            );
-        }
+        effects_tx
+            .send(Effects::GenericCommand(post_init_command.clone()))
+            .unwrap();
+        // if let Err(err) = Command::new(post_init_command).output() {
+        //     error!(
+        //         "Failed to execute post init command '{}': {}",
+        //         post_init_command, err
+        //     );
+        // }
     }
+
     // Enter loop processing user requests (via RFID tag).
     for req in user_requests_producer {
         match req {
@@ -253,5 +273,5 @@ fn main() -> Fallible<()> {
     let logger = slog::Logger::root(drain, o!());
     let _guard = slog_scope::set_global_logger(logger);
 
-    slog_scope::scope(&slog_scope::logger().new(o!()), || run_application())
+    slog_scope::scope(&slog_scope::logger().new(o!()), || main_with_log())
 }

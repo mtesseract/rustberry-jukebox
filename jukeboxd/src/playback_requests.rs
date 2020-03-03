@@ -34,8 +34,10 @@ where
 }
 
 pub struct PlaybackRequestsTransmitter<
-    T: DeserializeOwned + std::fmt::Debug,
-    TB: PlaybackRequestTransmitterBackend<T>,
+    T: DeserializeOwned + std::fmt::Debug = PlaybackRequest,
+    TB: PlaybackRequestTransmitterBackend<T> = rfid::PlaybackRequestTransmitterRfid<
+        PlaybackRequest,
+    >,
 > {
     backend: TB,
     first_req: Option<T>,
