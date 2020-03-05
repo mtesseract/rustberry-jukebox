@@ -16,6 +16,12 @@ pub struct Handle<T> {
     // thread: Arc<JoinHandle<()>>,
 }
 
+impl<T> Handle<T> {
+    pub fn channel(&self) -> Receiver<T> {
+        self.channel.clone()
+    }
+}
+
 pub mod cdev_gpio {
     use super::*;
     use gpio_cdev::{Chip, EventRequestFlags, Line, LineRequestFlags};
@@ -63,7 +69,7 @@ pub mod cdev_gpio {
         where
             F: Fn(TransmitterMessage) -> Option<T> + 'static + Send + Sync,
         {
-            info!("Using CdevGpio backend in Button Controller");
+            info!("Using CdevGpio based in Button Controller");
             let env_config = EnvConfig::new_from_env()?;
             let config: Config = env_config.into();
             let mut map = HashMap::new();
@@ -87,7 +93,6 @@ pub mod cdev_gpio {
             };
 
             gpio_cdev.run(msg_transformer)?;
-
             Ok(Handle { channel: rx })
         }
 
