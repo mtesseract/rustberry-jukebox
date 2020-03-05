@@ -1,7 +1,7 @@
 use std::fmt::{self, Display};
 use std::thread::{self, JoinHandle};
 
-use crate::access_token_provider::{self, AccessTokenProvider, AtpError};
+use crate::components::access_token_provider::{self, AccessTokenProvider, AtpError};
 
 use hyper::header::AUTHORIZATION;
 use reqwest::Client;
@@ -34,7 +34,6 @@ impl From<reqwest::Error> for Error {
 impl std::error::Error for Error {}
 
 pub struct SpotifyPlayer {
-    access_token_provider: AccessTokenProvider,
     http_client: Client,
 }
 
@@ -47,15 +46,9 @@ struct StartPlayback {
 }
 
 impl SpotifyPlayer {
-    pub fn new(access_token_provider: AccessTokenProvider) -> Self {
+    pub fn new() -> Self {
         let http_client = Client::new();
-
-        let player = SpotifyPlayer {
-            access_token_provider,
-            http_client,
-        };
-
-        player
+        SpotifyPlayer { http_client }
     }
 
     fn derive_start_playback_payload_from_spotify_uri(spotify_uri: &str) -> StartPlayback {

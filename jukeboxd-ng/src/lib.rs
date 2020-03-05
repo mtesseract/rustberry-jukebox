@@ -1,6 +1,6 @@
 pub mod components;
+pub mod effects;
 pub mod input_controller;
-// pub mod effects;
 
 // pub mod led_controller;
 // pub mod playback_requests;
