@@ -11,16 +11,16 @@ pub enum PlaybackRequest {
     SpotifyUri(String),
 }
 
-// #[cfg(test)]
-// mod test {
-//     use super::*;
-//     #[test]
-//     fn test_user_request_spotify_uri_serialization() {
-//         let user_req = PlaybackRequest::SpotifyUri("foo".to_string());
-//         let serialized = serde_json::to_string(&user_req).unwrap();
-//         assert_eq!(serialized, "{\"SpotifyUri\":\"foo\"}".to_string());
-//     }
-// }
+#[cfg(test)]
+mod test {
+    use super::*;
+    #[test]
+    fn test_user_request_spotify_uri_serialization() {
+        let user_req = PlaybackRequest::SpotifyUri("foo".to_string());
+        let serialized = serde_json::to_string(&user_req).unwrap();
+        assert_eq!(serialized, "{\"SpotifyUri\":\"foo\"}".to_string());
+    }
+}
 
 pub struct Handle<T> {
     channel: Receiver<Option<T>>,
@@ -87,7 +87,7 @@ pub mod stdin {
 
 pub mod rfid {
     use super::*;
-    use crate::rfid::*;
+    use crate::components::rfid::*;
 
     pub struct PlaybackRequestTransmitterRfid<T> {
         picc: RfidController,
@@ -105,7 +105,6 @@ pub mod rfid {
             let picc = RfidController::new()?;
             let mut transmitter = Self { picc, tx };
             std::thread::spawn(move || transmitter.run(msg_transformer).unwrap());
-            //transmitter.run(msg_transformer)?;
             Ok(Handle { channel: rx })
         }
 

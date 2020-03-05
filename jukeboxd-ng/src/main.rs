@@ -7,7 +7,7 @@ use slog_scope::{error, info, warn};
 use slog_term;
 use std::process::Command;
 
-use rustberry::access_token_provider;
+use rustberry::components::access_token_provider;
 use rustberry::input_controller::{
     button,
     playback::{self, PlaybackRequest},

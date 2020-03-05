@@ -1,7 +1,7 @@
 use std::sync::{Arc, RwLock};
 
-use crate::access_token_provider::AccessTokenProvider;
-use crate::spotify_util;
+use crate::components::access_token_provider::AccessTokenProvider;
+use crate::components::spotify::util;
 use crossbeam_channel::Receiver;
 
 pub enum SupervisorCommands {
@@ -16,20 +16,17 @@ pub enum SupervisorStatus {
 
 pub trait SpotifyConnector {
     fn request_restart(&self);
-    // fn status_channel(&self) -> Receiver<T>;
 }
 
 pub mod external_command {
 
     use super::*;
 
-    use crate::spotify_util::JukeboxError;
+    use crate::components::spotify::{self, util::JukeboxError};
     use failure::{Context, Fallible};
     use slog_scope::{error, info, warn};
     use std::env;
     use std::process::{Child, Command, ExitStatus};
-    // use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
-    // use crossbeam_channel::{self, bounded::RecvTimeoutError, Receiver, Sender};
     use std::thread::{self, JoinHandle};
     use std::time::Duration;
 
@@ -103,7 +100,7 @@ pub mod external_command {
                     Ok(None) => {
                         // seems it is still running.
                         // check if device id can still be resolved.
-                        let found_device = match spotify_util::lookup_device_by_name(
+                        let found_device = match spotify::util::lookup_device_by_name(
                             &self.access_token_provider,
                             &self.device_name,
                         ) {

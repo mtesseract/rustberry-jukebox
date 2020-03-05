@@ -1,7 +1,7 @@
-pub mod access_token_provider;
-pub mod effects;
+pub mod components;
 pub mod input_controller;
-pub mod rfid;
+// pub mod effects;
+
 // pub mod led_controller;
 // pub mod playback_requests;
 // pub mod rfid;
