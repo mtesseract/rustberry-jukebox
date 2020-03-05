@@ -14,8 +14,10 @@ effects:
 pub mod led;
 pub mod spotify_player;
 
+use crate::config::Config;
 use crossbeam_channel::Receiver;
 use failure::Fallible;
+use led::{Led, LedController};
 use slog_scope::{error, info, warn};
 use spotify_player::SpotifyPlayer;
 
@@ -41,12 +43,20 @@ use Effects::*;
 
 struct ProdInterpreter {
     spotify_player: SpotifyPlayer,
+    led_controller: Box<dyn LedController>,
+    config: Config,
 }
 
 impl ProdInterpreter {
-    pub fn new() -> Fallible<Self> {
+    pub fn new(config: &Config) -> Fallible<Self> {
+        let config = config.clone();
         let spotify_player = SpotifyPlayer::new();
-        Ok(ProdInterpreter { spotify_player })
+        let led_controller = Box::new(led::gpio_cdev::GpioCdev::new()?);
+        Ok(ProdInterpreter {
+            spotify_player,
+            led_controller,
+            config,
+        })
     }
 
     fn handle(&self, effect: Effects) -> Fallible<()> {
@@ -68,8 +78,8 @@ impl ProdInterpreter {
                     .stop_playback(&access_token, &device_id)?;
                 Ok(())
             }
-            LedOn => unimplemented!(),
-            LedOff => unimplemented!(),
+            LedOn => self.led_controller.switch_on(Led::Playback),
+            LedOff => self.led_controller.switch_off(Led::Playback),
             VolumeUp => unimplemented!(),
             VolumeDown => unimplemented!(),
             GenericCommand(cmd) => unimplemented!(),

@@ -8,6 +8,12 @@ use std::sync::Arc;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum PlaybackRequest {
+    Start(PlaybackResource),
+    Stop,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum PlaybackResource {
     SpotifyUri(String),
 }
 
@@ -16,7 +22,7 @@ mod test {
     use super::*;
     #[test]
     fn test_user_request_spotify_uri_serialization() {
-        let user_req = PlaybackRequest::SpotifyUri("foo".to_string());
+        let user_req = PlaybackResource::SpotifyUri("foo".to_string());
         let serialized = serde_json::to_string(&user_req).unwrap();
         assert_eq!(serialized, "{\"SpotifyUri\":\"foo\"}".to_string());
     }
@@ -94,9 +100,7 @@ pub mod rfid {
         tx: Sender<Option<T>>,
     }
 
-    impl<T: 'static + Send + Sync + DeserializeOwned + Clone + std::fmt::Debug + PartialEq>
-        PlaybackRequestTransmitterRfid<T>
-    {
+    impl<T: 'static + Send + Sync + Clone + std::fmt::Debug> PlaybackRequestTransmitterRfid<T> {
         pub fn new<F>(msg_transformer: F) -> Fallible<Handle<T>>
         where
             F: Fn(PlaybackRequest) -> Option<T> + 'static + Send + Sync,
@@ -165,7 +169,7 @@ pub mod rfid {
             let mut tag_reader = tag.new_reader();
             let request_string = tag_reader.read_string()?;
             let request_deserialized = match serde_json::from_str(&request_string) {
-                Ok(deserialized) => Some(deserialized),
+                Ok(deserialized) => Some(PlaybackRequest::Start(deserialized)),
                 Err(err) => {
                     error!(
                         "Failed to deserialize RFID tag string `{}`: {}",

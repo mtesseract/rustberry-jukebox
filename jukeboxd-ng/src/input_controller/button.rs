@@ -67,7 +67,7 @@ pub mod cdev_gpio {
     impl<T: Clone + Send + 'static> CdevGpio<T> {
         pub fn new_from_env<F>(msg_transformer: F) -> Fallible<Handle<T>>
         where
-            F: Fn(TransmitterMessage) -> Option<T> + 'static + Send + Sync,
+            F: Fn(Command) -> Option<T> + 'static + Send + Sync,
         {
             info!("Using CdevGpio based in Button Controller");
             let env_config = EnvConfig::new_from_env()?;
@@ -102,7 +102,7 @@ pub mod cdev_gpio {
             msg_transformer: Arc<F>,
         ) -> Fallible<()>
         where
-            F: Fn(TransmitterMessage) -> Option<T> + 'static + Send,
+            F: Fn(Command) -> Option<T> + 'static + Send,
         {
             let mut n_received_during_shutdown_delay = 0;
             info!("Listening for GPIO events on line {}", line_id);
@@ -140,14 +140,12 @@ pub mod cdev_gpio {
                     }
                 }
 
-                if let Some(transmitter_cmd) =
-                    msg_transformer(TransmitterMessage::Command(cmd.clone()))
-                {
-                    if let Err(err) = self.tx.send(transmitter_cmd) {
+                if let Some(cmd) = msg_transformer(cmd.clone()) {
+                    if let Err(err) = self.tx.send(cmd) {
                         error!("Failed to transmit GPIO event: {}", err);
                     }
                 } else {
-                    info!("Dropped transmitter message: {:?}", cmd);
+                    info!("Dropped button command message: {:?}", cmd);
                 }
             }
             Ok(())
@@ -155,7 +153,7 @@ pub mod cdev_gpio {
 
         fn run<F>(&mut self, msg_transformer: F) -> Fallible<()>
         where
-            F: Fn(TransmitterMessage) -> Option<T> + 'static + Send + Sync,
+            F: Fn(Command) -> Option<T> + 'static + Send + Sync,
         {
             let chip = &mut *(self.chip.write().unwrap());
             let msg_transformer = Arc::new(msg_transformer);
@@ -201,11 +199,6 @@ pub enum Command {
     Shutdown,
     VolumeUp,
     VolumeDown,
-}
-
-#[derive(Debug, Clone)]
-pub enum TransmitterMessage {
-    Command(Command),
 }
 
 const DELAY_BEFORE_ACCEPTING_SHUTDOWN_COMMANDS: Duration = Duration::from_secs(10);

@@ -23,8 +23,8 @@ pub enum Led {
 
 pub trait LedController {
     fn description(&self) -> String;
-    fn switch_on(&mut self, line: Led) -> Fallible<()>;
-    fn switch_off(&mut self, line: Led) -> Fallible<()>;
+    fn switch_on(&self, line: Led) -> Fallible<()>;
+    fn switch_off(&self, line: Led) -> Fallible<()>;
 }
 
 pub mod gpio_cdev {
@@ -94,7 +94,7 @@ pub mod gpio_cdev {
         fn description(&self) -> String {
             "gpio-cdev backend".to_string()
         }
-        fn switch_on(&mut self, led: Led) -> Fallible<()> {
+        fn switch_on(&self, led: Led) -> Fallible<()> {
             if let Some(ref led_handle) = self.leds.get(&led) {
                 led_handle.set_value(1).map_err(|err| {
                     Error::IO(format!("Failed to switch on LED {:?}: {:?}", &led, err))
@@ -103,7 +103,7 @@ pub mod gpio_cdev {
             }
             Ok(())
         }
-        fn switch_off(&mut self, led: Led) -> Fallible<()> {
+        fn switch_off(&self, led: Led) -> Fallible<()> {
             if let Some(ref led_handle) = self.leds.get(&led) {
                 led_handle.set_value(0).map_err(|err| {
                     Error::IO(format!("Failed to switch off LED {:?}: {:?}", &led, err))

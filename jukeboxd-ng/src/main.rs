@@ -1,3 +1,4 @@
+use crossbeam_channel::{self, Receiver, RecvError, RecvTimeoutError, Select, Sender};
 use failure::Fallible;
 use serde::Deserialize;
 use signal_hook::{iterator::Signals, SIGINT, SIGTERM};
@@ -8,26 +9,18 @@ use slog_term;
 use std::process::Command;
 
 use rustberry::components::access_token_provider;
+use rustberry::config::Config;
+use rustberry::effects::Effects;
 use rustberry::input_controller::{
     button,
     playback::{self, PlaybackRequest},
+    Input,
 };
+
 // use rustberry::led_controller;
 // use rustberry::spotify_connect::{self, SpotifyConnector, SupervisorStatus};
 // use rustberry::spotify_play::{self, PlayerCommand};
 // use rustberry::spotify_util;
-
-#[derive(Deserialize, Debug, Clone)]
-struct Config {
-    refresh_token: String,
-    client_id: String,
-    client_secret: String,
-    device_name: String,
-    post_init_command: Option<String>,
-    shutdown_command: Option<String>,
-    volume_up_command: Option<String>,
-    volume_down_command: Option<String>,
-}
 
 // fn execute_shutdown(config: &Config) {
 //     match config.shutdown_command {
@@ -88,10 +81,66 @@ struct Config {
 // }
 
 fn main_with_log() -> Fallible<()> {
-    Ok(())
+    let config = envy::from_env::<Config>()?;
+    info!("Configuration"; o!("device_name" => &config.device_name));
+
+    //// Prepare components.
+
+    // Create Access Token Provider
+    let mut access_token_provider = access_token_provider::AccessTokenProvider::new(
+        &config.client_id,
+        &config.client_secret,
+        &config.refresh_token,
+    );
+
+    let player = unimplemented!();
+
+    run_application(&config)
 }
 
-fn run_application() -> Fallible<()> {
+fn handle_inputs(inputs: &[Receiver<Input>]) {
+    let mut sel = Select::new();
+    for r in inputs {
+        sel.recv(r);
+    }
+
+    loop {
+        // Wait until a receive operation becomes ready and try executing it.
+        let index = sel.ready();
+        let res = inputs[index].try_recv();
+
+        match res {
+            Err(err) => {
+                if err.is_empty() {
+                    // If the operation turns out not to be ready, retry.
+                    continue;
+                } else {
+                    error!("Failed to receive input event: {}", err);
+                    continue;
+                }
+            }
+            Ok(input) => match input {
+                Input::Button(cmd) => {}
+                Input::Playback(request) => match request {
+                    Some(request) => {}
+                    None => {}
+                },
+            },
+        }
+    }
+}
+
+fn run_application(config: &Config) -> Fallible<()> {
+    let (tx, rx): (Sender<Effects>, Receiver<Effects>) = crossbeam_channel::bounded(2);
+
+    // Prepare individual input channels.
+    let button_controller_handle =
+        button::cdev_gpio::CdevGpio::new_from_env(|cmd| Some(Input::Button(cmd)))?;
+    let playback_controller_handle =
+        playback::rfid::PlaybackRequestTransmitterRfid::new(|req| Some(req))?;
+
+    loop {}
+
     warn!("Jukebox loop terminated, terminating application");
     Ok(())
 }

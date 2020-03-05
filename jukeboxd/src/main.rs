@@ -90,12 +90,14 @@ fn main_with_log() -> Fallible<()> {
     let config = envy::from_env::<Config>()?;
     info!("Configuration"; o!("device_name" => &config.device_name));
 
-    // Create Access Token Provider
-    let mut access_token_provider = access_token_provider::AccessTokenProvider::new(
-        &config.client_id,
-        &config.client_secret,
-        &config.refresh_token,
-    );
+    // Move to interpreter:
+    //
+    // // Create Access Token Provider
+    // let mut access_token_provider = access_token_provider::AccessTokenProvider::new(
+    //     &config.client_id,
+    //     &config.client_secret,
+    //     &config.refresh_token,
+    // );
 
     /* Create input channels.
      */
@@ -142,6 +144,10 @@ fn main_with_log() -> Fallible<()> {
     */
 
     let (effects_tx, effects_rx) = crossbeam_channel::bounded(1);
+
+    // run main application thread
+    thread::spawn(|| run_application(effects_tx));
+    // run interpreter on effects_rx;
 
     // Move to effects interpreter:
     //
