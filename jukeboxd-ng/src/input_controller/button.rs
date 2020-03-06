@@ -3,6 +3,13 @@ use failure::Fallible;
 use slog_scope::{error, info};
 use std::time::{Duration, Instant};
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Command {
+    Shutdown,
+    VolumeUp,
+    VolumeDown,
+}
+
 #[derive(Debug, Clone)]
 pub struct Config {
     pub shutdown_pin: Option<u32>,
@@ -193,12 +200,5 @@ impl std::fmt::Display for Error {
 }
 
 impl std::error::Error for Error {}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Command {
-    Shutdown,
-    VolumeUp,
-    VolumeDown,
-}
 
 const DELAY_BEFORE_ACCEPTING_SHUTDOWN_COMMANDS: Duration = Duration::from_secs(10);

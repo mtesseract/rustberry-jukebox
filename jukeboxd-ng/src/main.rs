@@ -127,7 +127,11 @@ fn handle_inputs(player_handle: PlayerHandle, inputs: &[Receiver<Input>]) {
                 }
             }
             Ok(input) => match input {
-                Input::Button(cmd) => {}
+                Input::Button(cmd) => match cmd {
+                    button::Command::Shutdown => unimplemented!(),
+                    button::Command::VolumeUp => unimplemented!(),
+                    button::Command::VolumeDown => unimplemented!(),
+                },
                 Input::Playback(request) => match request {
                     Some(request) => {}
                     None => {}
