@@ -9,6 +9,9 @@ use slog_term;
 use std::process::Command;
 
 use rustberry::components::access_token_provider;
+use rustberry::components::spotify::connect::{
+    self, SpotifyConnector, SupervisorCommands, SupervisorStatus,
+};
 use rustberry::config::Config;
 use rustberry::effects::Effects;
 use rustberry::input_controller::{
@@ -16,10 +19,8 @@ use rustberry::input_controller::{
     playback::{self, PlaybackRequest},
     Input,
 };
-
+use rustberry::player::{self, Player, PlayerCommand, PlayerHandle};
 // use rustberry::led_controller;
-// use rustberry::spotify_connect::{self, SpotifyConnector, SupervisorStatus};
-// use rustberry::spotify_play::{self, PlayerCommand};
 // use rustberry::spotify_util;
 
 // fn execute_shutdown(config: &Config) {
@@ -87,18 +88,24 @@ fn main_with_log() -> Fallible<()> {
     //// Prepare components.
 
     // Create Access Token Provider
-    let mut access_token_provider = access_token_provider::AccessTokenProvider::new(
+    let access_token_provider = access_token_provider::AccessTokenProvider::new(
         &config.client_id,
         &config.client_secret,
         &config.refresh_token,
     );
 
-    let player = unimplemented!();
+    let spotify_connector = connect::external_command::ExternalCommand::new_from_env(
+        &access_token_provider,
+        config.device_name.clone(),
+        |SupervisorStatus::NewDeviceId(device_id)| Some(PlayerCommand::NewDeviceId(device_id)),
+    )?;
+    let spotify_connector_channel = spotify_connector.status();
+    let player_handle = Player::new(access_token_provider, spotify_connector_channel);
 
-    run_application(&config)
+    run_application(player_handle, &config)
 }
 
-fn handle_inputs(inputs: &[Receiver<Input>]) {
+fn handle_inputs(player_handle: PlayerHandle, inputs: &[Receiver<Input>]) {
     let mut sel = Select::new();
     for r in inputs {
         sel.recv(r);
@@ -130,7 +137,7 @@ fn handle_inputs(inputs: &[Receiver<Input>]) {
     }
 }
 
-fn run_application(config: &Config) -> Fallible<()> {
+fn run_application(player_handle: PlayerHandle, config: &Config) -> Fallible<()> {
     let (tx, rx): (Sender<Effects>, Receiver<Effects>) = crossbeam_channel::bounded(2);
 
     // Prepare individual input channels.

@@ -11,7 +11,6 @@ pub enum SupervisorCommands {
 #[derive(Debug, Clone)]
 pub enum SupervisorStatus {
     NewDeviceId(String),
-    Failure(String),
 }
 
 pub trait SpotifyConnector {

@@ -1,73 +1,16 @@
-use std::fmt::{self, Display};
+use std::sync::{Arc, RwLock};
 use std::thread::{self, JoinHandle};
 
-use crate::access_token_provider::{self, AccessTokenProvider, AtpError};
-
-use crate::spotify_connect::{SpotifyConnector, SupervisorCommands, SupervisorStatus};
+use crossbeam_channel::{Receiver, RecvError, RecvTimeoutError, Select, Sender};
 use hyper::header::AUTHORIZATION;
 use reqwest::Client;
 use serde::Serialize;
 use slog_scope::{error, info, warn};
-use std::convert::From;
-use std::sync::{Arc, RwLock};
 
-use crossbeam_channel::{Receiver, RecvError, RecvTimeoutError, Select, Sender};
+use crate::components::access_token_provider::{self, AccessTokenProvider, AtpError};
+use crate::components::spotify::connect::{SpotifyConnector, SupervisorCommands, SupervisorStatus};
 
-#[derive(Debug)]
-pub enum Error {
-    HTTP(reqwest::Error),
-    NoToken,
-    NoDevice,
-    SendError(String),
-}
-
-impl From<access_token_provider::AtpError> for Error {
-    fn from(err: access_token_provider::AtpError) -> Error {
-        match err {
-            AtpError::NoTokenReceivedYet => Error::NoToken,
-        }
-    }
-}
-impl Error {
-    pub fn is_client_error(&self) -> bool {
-        match self {
-            Error::HTTP(err) => err.status().map(|s| s.is_client_error()).unwrap_or(false),
-            Error::NoToken => true,
-            Error::NoDevice => true,
-            Error::SendError(_) => false,
-        }
-    }
-    pub fn is_device_missing_error(&self) -> bool {
-        match self {
-            Error::NoDevice => true,
-            _ => false,
-        }
-    }
-}
-
-impl Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Error::HTTP(err) => write!(f, "Spotify HTTP Error {}", err),
-            Error::NoToken => write!(f, "Failed to obtain access token"),
-            Error::NoDevice => write!(f, "No Spotify Connect Device found"),
-            Error::SendError(err) => write!(f, "Failed to transmit command via channel: {}", err),
-        }
-    }
-}
-
-impl From<reqwest::Error> for Error {
-    fn from(err: reqwest::Error) -> Self {
-        Error::HTTP(err)
-    }
-}
-
-impl<T> From<crossbeam_channel::SendError<T>> for Error {
-    fn from(err: crossbeam_channel::SendError<T>) -> Self {
-        Error::SendError(err.to_string())
-    }
-}
-impl std::error::Error for Error {}
+pub use err::*;
 
 #[derive(Debug, Clone)]
 pub enum PlayerCommand {
@@ -260,4 +203,71 @@ impl Player {
             .map(|_| ())
             .map_err(|err| Error::HTTP(err))
     }
+}
+
+pub mod err {
+    use std::convert::From;
+    use std::fmt::{self, Display};
+
+    // use crossbeam_channel::RecvError;
+
+    use crate::components::access_token_provider::{self, AtpError};
+
+    #[derive(Debug)]
+    pub enum Error {
+        HTTP(reqwest::Error),
+        NoToken,
+        NoDevice,
+        SendError(String),
+    }
+
+    impl From<access_token_provider::AtpError> for Error {
+        fn from(err: access_token_provider::AtpError) -> Error {
+            match err {
+                AtpError::NoTokenReceivedYet => Error::NoToken,
+            }
+        }
+    }
+    impl Error {
+        pub fn is_client_error(&self) -> bool {
+            match self {
+                Error::HTTP(err) => err.status().map(|s| s.is_client_error()).unwrap_or(false),
+                Error::NoToken => true,
+                Error::NoDevice => true,
+                Error::SendError(_) => false,
+            }
+        }
+        pub fn is_device_missing_error(&self) -> bool {
+            match self {
+                Error::NoDevice => true,
+                _ => false,
+            }
+        }
+    }
+
+    impl Display for Error {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            match self {
+                Error::HTTP(err) => write!(f, "Spotify HTTP Error {}", err),
+                Error::NoToken => write!(f, "Failed to obtain access token"),
+                Error::NoDevice => write!(f, "No Spotify Connect Device found"),
+                Error::SendError(err) => {
+                    write!(f, "Failed to transmit command via channel: {}", err)
+                }
+            }
+        }
+    }
+
+    impl From<reqwest::Error> for Error {
+        fn from(err: reqwest::Error) -> Self {
+            Error::HTTP(err)
+        }
+    }
+
+    impl<T> From<crossbeam_channel::SendError<T>> for Error {
+        fn from(err: crossbeam_channel::SendError<T>) -> Self {
+            Error::SendError(err.to_string())
+        }
+    }
+    impl std::error::Error for Error {}
 }
