@@ -13,27 +13,28 @@ effects:
 
 pub mod http_player;
 pub mod led;
-pub mod spotify_player;
+pub mod spotify;
 
 use crate::config::Config;
 use crossbeam_channel::Receiver;
 use failure::Fallible;
 use led::{Led, LedController};
 use slog_scope::{error, info, warn};
-use spotify_player::SpotifyPlayer;
+use spotify::player::SpotifyPlayer;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Effects {
     PlayHttp {
         url: String,
-        username: String,
-        password: String,
     },
     StopHttp,
     PlaySpotify {
         spotify_uri: String,
         access_token: String,
         device_id: String,
+    },
+    NewPlaySpotify {
+        spotify_uri: String,
     },
     NewStopSpotify,
     StopSpotify {

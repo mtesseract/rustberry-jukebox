@@ -10,10 +10,10 @@ use std::process::Command;
 use std::thread;
 
 use rustberry::components::access_token_provider;
-use rustberry::components::spotify::connect::{
+use rustberry::config::Config;
+use rustberry::effects::spotify::connect::{
     self, SpotifyConnector, SupervisorCommands, SupervisorStatus,
 };
-use rustberry::config::Config;
 use rustberry::effects::Effects;
 use rustberry::effects::ProdInterpreter;
 use rustberry::input_controller::{

@@ -1,7 +1,7 @@
 use std::sync::{Arc, RwLock};
 
+use super::util;
 use crate::components::access_token_provider::AccessTokenProvider;
-use crate::components::spotify::util;
 use crossbeam_channel::Receiver;
 
 pub enum SupervisorCommands {
@@ -21,7 +21,7 @@ pub mod external_command {
 
     use super::*;
 
-    use crate::components::spotify::{self, util::JukeboxError};
+    use crate::effects::spotify::{self, util::JukeboxError};
     use failure::{Context, Fallible};
     use slog_scope::{error, info, warn};
     use std::env;

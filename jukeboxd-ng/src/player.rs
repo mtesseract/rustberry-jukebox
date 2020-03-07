@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use slog_scope::{error, info, warn};
 
 use crate::components::access_token_provider::{self, AccessTokenProvider, AtpError};
-use crate::components::spotify::connect::{SpotifyConnector, SupervisorCommands, SupervisorStatus};
+// use crate::components::spotify::connect::{SpotifyConnector, SupervisorCommands, SupervisorStatus};
 use crate::effects::Effects;
 
 pub use err::*;
@@ -103,11 +103,13 @@ impl Player {
                         self::PlaybackRequest::Start(resource) => match resource {
                             PlaybackResource::SpotifyUri(spotify_uri) => {
                                 stop_effect = Some(Effects::NewStopSpotify);
-                                unimplemented!()
+                                self.effects
+                                    .send(Effects::NewPlaySpotify { spotify_uri })
+                                    .unwrap();
                             }
                             PlaybackResource::Http(url) => {
                                 stop_effect = Some(Effects::StopHttp);
-                                unimplemented!()
+                                self.effects.send(Effects::PlayHttp { url }).unwrap();
                             }
                         },
                         self::PlaybackRequest::Stop => {
