@@ -15,8 +15,7 @@ pub use err::*;
 
 #[derive(Debug, Clone)]
 pub enum PlayerCommand {
-    StartPlayback { spotify_uri: String },
-    StopPlayback,
+    PlaybackRequest(PlaybackRequest),
     Terminate,
     NewDeviceId(String),
 }
@@ -38,7 +37,7 @@ pub struct Player {
 impl Drop for PlayerHandle {
     fn drop(&mut self) {
         println!("Destroying Player");
-        // let _ = self.stop_playback();
+        // FIXME?
     }
 }
 
@@ -51,6 +50,7 @@ pub enum PlaybackRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum PlaybackResource {
     SpotifyUri(String),
+    Http(String),
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -62,14 +62,9 @@ struct StartPlayback {
 }
 
 impl PlayerHandle {
-    pub fn stop_playback(&self) -> Result<(), Error> {
-        self.commands.send(PlayerCommand::StopPlayback)?;
-        Ok(())
-    }
-
-    pub fn start_playback(&self, spotify_uri: String) -> Result<(), Error> {
+    pub fn playback(&self, request: PlaybackRequest) -> Result<(), Error> {
         self.commands
-            .send(PlayerCommand::StartPlayback { spotify_uri })?;
+            .send(PlayerCommand::PlaybackRequest(request))?;
         Ok(())
     }
 }
@@ -77,6 +72,9 @@ impl PlayerHandle {
 impl Player {
     fn main(self) {
         use PlayerCommand::*;
+
+        let mut stop_effect = None;
+
         let mut device_id: Option<String> = None;
 
         let rs = vec![self.commands.clone(), self.status.clone()];
@@ -100,27 +98,23 @@ impl Player {
                         error!("Player: Failed to receive input command: {:?}", err);
                     }
                 }
-                Ok(msg) => match msg {
-                    StartPlayback { spotify_uri } => {
-                        if let Some(ref device_id) = device_id {
-                            match self.start_playback(device_id, &spotify_uri) {
-                                Err(err) => {}
-                                Ok(()) => {}
+                Ok(cmd) => match cmd {
+                    PlayerCommand::PlaybackRequest(req) => match req {
+                        self::PlaybackRequest::Start(resource) => match resource {
+                            PlaybackResource::SpotifyUri(spotify_uri) => {
+                                stop_effect = Some(Effects::NewStopSpotify);
+                                unimplemented!()
                             }
-                        } else {
-                            // no device id
-                        }
-                    }
-                    StopPlayback => {
-                        if let Some(ref device_id) = device_id {
-                            match self.stop_playback(device_id) {
-                                Err(err) => {}
-                                Ok(()) => {}
+                            PlaybackResource::Http(url) => {
+                                stop_effect = Some(Effects::StopHttp);
+                                unimplemented!()
                             }
-                        } else {
-                            // no device id
+                        },
+                        self::PlaybackRequest::Stop => {
+                            let eff = stop_effect.clone().unwrap();
+                            self.effects.send(eff).unwrap();
                         }
-                    }
+                    },
                     Terminate => {
                         info!("Player received Terminate command, terminating");
                         break;
@@ -155,69 +149,6 @@ impl Player {
             handle: Arc::new(handle),
             commands: commands_tx,
         }
-    }
-
-    fn derive_start_playback_payload_from_spotify_uri(spotify_uri: &str) -> StartPlayback {
-        if &spotify_uri[0..14] == "spotify:album:" {
-            StartPlayback {
-                uris: None,
-                context_uri: Some(spotify_uri.clone().to_string()),
-            }
-        } else {
-            StartPlayback {
-                uris: Some(vec![spotify_uri.clone().to_string()]),
-                context_uri: None,
-            }
-        }
-    }
-
-    fn start_playback(&self, device_id: &str, spotify_uri: &str) -> Result<(), Error> {
-        let access_token = self.access_token_provider.get_bearer_token()?;
-        let msg = "Failed to start Spotify playback";
-        let req = Self::derive_start_playback_payload_from_spotify_uri(spotify_uri);
-        self.http_client
-            .put("https://api.spotify.com/v1/me/player/play")
-            .query(&[("device_id", &device_id)])
-            .header(AUTHORIZATION, &access_token)
-            .json(&req)
-            .send()
-            .map_err(|err| {
-                error!("{}: Executing HTTP request failed: {}", msg, err);
-                err
-            })
-            .map(|mut rsp| {
-                if !rsp.status().is_success() {
-                    error!("{}: HTTP Failure {}: {:?}", msg, rsp.status(), rsp.text());
-                }
-                rsp
-            })?
-            .error_for_status()
-            .map(|_| ())
-            .map_err(|err| Error::HTTP(err))
-    }
-
-    fn stop_playback(&self, device_id: &str) -> Result<(), Error> {
-        let access_token = self.access_token_provider.get_bearer_token()?;
-        let msg = "Failed to stop Spotify playback";
-        self.http_client
-            .put("https://api.spotify.com/v1/me/player/pause")
-            .query(&[("device_id", &device_id)])
-            .body("")
-            .header(AUTHORIZATION, &access_token)
-            .send()
-            .map_err(|err| {
-                error!("{}: Executing HTTP request failed: {}", msg, err);
-                err
-            })
-            .map(|mut rsp| {
-                if !rsp.status().is_success() {
-                    error!("{}: HTTP Failure {}: {:?}", msg, rsp.status(), rsp.text());
-                }
-                rsp
-            })?
-            .error_for_status()
-            .map(|_| ())
-            .map_err(|err| Error::HTTP(err))
     }
 }
 

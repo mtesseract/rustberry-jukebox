@@ -22,8 +22,6 @@ use rustberry::input_controller::{
     Input,
 };
 use rustberry::player::{self, PlaybackRequest, Player, PlayerCommand, PlayerHandle};
-// use rustberry::led_controller;
-// use rustberry::spotify_util;
 
 // fn execute_shutdown(config: &Config) {
 //     match config.shutdown_command {

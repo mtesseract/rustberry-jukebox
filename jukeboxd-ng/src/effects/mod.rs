@@ -11,6 +11,7 @@ effects:
 
 */
 
+pub mod http_player;
 pub mod led;
 pub mod spotify_player;
 
@@ -23,11 +24,18 @@ use spotify_player::SpotifyPlayer;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Effects {
+    PlayHttp {
+        url: String,
+        username: String,
+        password: String,
+    },
+    StopHttp,
     PlaySpotify {
         spotify_uri: String,
         access_token: String,
         device_id: String,
     },
+    NewStopSpotify,
     StopSpotify {
         access_token: String,
         device_id: String,
