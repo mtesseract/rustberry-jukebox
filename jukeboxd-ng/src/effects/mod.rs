@@ -41,9 +41,9 @@ pub enum Effects {
 
 use Effects::*;
 
-struct ProdInterpreter {
+pub struct ProdInterpreter {
     spotify_player: SpotifyPlayer,
-    led_controller: Box<dyn LedController>,
+    led_controller: Box<dyn LedController + 'static + Send>,
     config: Config,
 }
 
@@ -59,7 +59,7 @@ impl ProdInterpreter {
         })
     }
 
-    fn handle(&self, effect: Effects) -> Fallible<()> {
+    fn handle(&self, effect: &Effects) -> Fallible<()> {
         match effect {
             PlaySpotify {
                 spotify_uri,
@@ -90,7 +90,9 @@ impl ProdInterpreter {
     pub fn run(&self, channel: Receiver<Effects>) -> Fallible<()> {
         // FIXME
         for effect in channel.iter() {
-            self.handle(effect)?;
+            if let Err(err) = self.handle(&effect) {
+                error!("Failed to execute effect {:?}: {}", effect, err);
+            }
         }
         Ok(())
     }

@@ -7,6 +7,7 @@ use slog_async;
 use slog_scope::{error, info, warn};
 use slog_term;
 use std::process::Command;
+use std::thread;
 
 use rustberry::components::access_token_provider;
 use rustberry::components::spotify::connect::{
@@ -14,12 +15,13 @@ use rustberry::components::spotify::connect::{
 };
 use rustberry::config::Config;
 use rustberry::effects::Effects;
+use rustberry::effects::ProdInterpreter;
 use rustberry::input_controller::{
     button,
-    playback::{self, PlaybackRequest},
+    playback::{self},
     Input,
 };
-use rustberry::player::{self, Player, PlayerCommand, PlayerHandle};
+use rustberry::player::{self, PlaybackRequest, Player, PlayerCommand, PlayerHandle};
 // use rustberry::led_controller;
 // use rustberry::spotify_util;
 
@@ -100,8 +102,11 @@ fn main_with_log() -> Fallible<()> {
         |SupervisorStatus::NewDeviceId(device_id)| Some(PlayerCommand::NewDeviceId(device_id)),
     )?;
     let spotify_connector_channel = spotify_connector.status();
-    let player_handle = Player::new(access_token_provider, spotify_connector_channel);
+    let (tx, rx): (Sender<Effects>, Receiver<Effects>) = crossbeam_channel::bounded(2);
+    let player_handle = Player::new(tx, access_token_provider, spotify_connector_channel);
 
+    let interpreter = ProdInterpreter::new(&config).unwrap();
+    thread::spawn(move || interpreter.run(rx));
     run_application(player_handle, &config)
 }
 
@@ -133,8 +138,8 @@ fn handle_inputs(player_handle: PlayerHandle, inputs: &[Receiver<Input>]) {
                     button::Command::VolumeDown => unimplemented!(),
                 },
                 Input::Playback(request) => match request {
-                    Some(request) => {}
-                    None => {}
+                    PlaybackRequest::Start(resource) => unimplemented!(),
+                    PlaybackRequest::Stop => unimplemented!(),
                 },
             },
         }
@@ -142,15 +147,19 @@ fn handle_inputs(player_handle: PlayerHandle, inputs: &[Receiver<Input>]) {
 }
 
 fn run_application(player_handle: PlayerHandle, config: &Config) -> Fallible<()> {
-    let (tx, rx): (Sender<Effects>, Receiver<Effects>) = crossbeam_channel::bounded(2);
-
     // Prepare individual input channels.
     let button_controller_handle =
         button::cdev_gpio::CdevGpio::new_from_env(|cmd| Some(Input::Button(cmd)))?;
     let playback_controller_handle =
-        playback::rfid::PlaybackRequestTransmitterRfid::new(|req| Some(req))?;
+        playback::rfid::PlaybackRequestTransmitterRfid::new(|req| Some(Input::Playback(req)))?;
 
-    loop {}
+    handle_inputs(
+        player_handle,
+        &vec![
+            button_controller_handle.channel(),
+            playback_controller_handle.channel(),
+        ],
+    );
 
     warn!("Jukebox loop terminated, terminating application");
     Ok(())

@@ -12,26 +12,7 @@ use std::sync::{Arc, RwLock};
 
 use crossbeam_channel::{Receiver, RecvError, RecvTimeoutError, Select, Sender};
 
-#[derive(Debug)]
-pub enum Error {
-    HTTP(reqwest::Error),
-}
-
-impl Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Error::HTTP(err) => write!(f, "Spotify HTTP Error {}", err),
-        }
-    }
-}
-
-impl From<reqwest::Error> for Error {
-    fn from(err: reqwest::Error) -> Self {
-        Error::HTTP(err)
-    }
-}
-
-impl std::error::Error for Error {}
+pub use err::*;
 
 pub struct SpotifyPlayer {
     http_client: Client,
@@ -116,4 +97,29 @@ impl SpotifyPlayer {
             .map(|_| ())
             .map_err(|err| Error::HTTP(err))
     }
+}
+
+pub mod err {
+    use super::*;
+
+    #[derive(Debug)]
+    pub enum Error {
+        HTTP(reqwest::Error),
+    }
+
+    impl Display for Error {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            match self {
+                Error::HTTP(err) => write!(f, "Spotify HTTP Error {}", err),
+            }
+        }
+    }
+
+    impl From<reqwest::Error> for Error {
+        fn from(err: reqwest::Error) -> Self {
+            Error::HTTP(err)
+        }
+    }
+
+    impl std::error::Error for Error {}
 }

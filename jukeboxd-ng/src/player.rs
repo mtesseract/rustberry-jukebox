@@ -4,11 +4,12 @@ use std::thread::{self, JoinHandle};
 use crossbeam_channel::{Receiver, RecvError, RecvTimeoutError, Select, Sender};
 use hyper::header::AUTHORIZATION;
 use reqwest::Client;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use slog_scope::{error, info, warn};
 
 use crate::components::access_token_provider::{self, AccessTokenProvider, AtpError};
 use crate::components::spotify::connect::{SpotifyConnector, SupervisorCommands, SupervisorStatus};
+use crate::effects::Effects;
 
 pub use err::*;
 
@@ -31,13 +32,25 @@ pub struct Player {
     http_client: Client,
     commands: Receiver<PlayerCommand>,
     status: Receiver<PlayerCommand>,
+    effects: Sender<Effects>,
 }
 
 impl Drop for PlayerHandle {
     fn drop(&mut self) {
-        println!("Destroying Player, stopping Music");
+        println!("Destroying Player");
         // let _ = self.stop_playback();
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum PlaybackRequest {
+    Start(PlaybackResource),
+    Stop,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum PlaybackResource {
+    SpotifyUri(String),
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -84,6 +97,7 @@ impl Player {
                         // If the operation turns out not to be ready, retry.
                         continue;
                     } else {
+                        error!("Player: Failed to receive input command: {:?}", err);
                     }
                 }
                 Ok(msg) => match msg {
@@ -120,6 +134,7 @@ impl Player {
     }
 
     pub fn new(
+        effects: Sender<Effects>,
         access_token_provider: AccessTokenProvider,
         spotify_connect_status: Receiver<PlayerCommand>,
     ) -> PlayerHandle {
@@ -131,6 +146,7 @@ impl Player {
             http_client,
             commands: commands_rx,
             status: spotify_connect_status,
+            effects,
         };
 
         let handle = thread::spawn(|| player.main());
