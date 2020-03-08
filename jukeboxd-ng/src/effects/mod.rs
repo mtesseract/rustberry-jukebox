@@ -18,27 +18,26 @@ pub mod spotify;
 use crate::config::Config;
 use crossbeam_channel::Receiver;
 use failure::Fallible;
+use http_player::HttpPlayer;
 use led::{Led, LedController};
 use slog_scope::{error, info, warn};
 use spotify::player::SpotifyPlayer;
+use std::process::Command;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Effects {
     PlayHttp { url: String },
     StopHttp,
     PlaySpotify { spotify_uri: String },
-    NewPlaySpotify { spotify_uri: String },
-    NewStopSpotify,
     StopSpotify,
     LedOn,
     LedOff,
     GenericCommand(String),
 }
 
-use Effects::*;
-
 pub struct ProdInterpreter {
     spotify_player: SpotifyPlayer,
+    http_player: HttpPlayer,
     led_controller: Box<dyn LedController + 'static + Send>,
     config: Config,
 }
@@ -47,9 +46,11 @@ impl ProdInterpreter {
     pub fn new(config: &Config) -> Fallible<Self> {
         let config = config.clone();
         let spotify_player = SpotifyPlayer::new(&config);
+        let http_player = HttpPlayer::new();
         let led_controller = Box::new(led::gpio_cdev::GpioCdev::new()?);
         Ok(ProdInterpreter {
             spotify_player,
+            http_player,
             led_controller,
             config,
         })
@@ -65,10 +66,42 @@ impl ProdInterpreter {
                 self.spotify_player.stop_playback()?;
                 Ok(())
             }
+            Effects::PlayHttp { url } => {
+                self.http_player
+                    .start_playback(&url, unimplemented!(), unimplemented!())?;
+                Ok(())
+            }
+            Effects::StopHttp => {
+                self.http_player.stop_playback()?;
+                Ok(())
+            }
             Effects::LedOn => self.led_controller.switch_on(Led::Playback),
             Effects::LedOff => self.led_controller.switch_off(Led::Playback),
-            Effects::GenericCommand(cmd) => unimplemented!(),
-            _ => unimplemented!(),
+            Effects::GenericCommand(cmd) => {
+                info!("Executing command '{}'", &cmd);
+                let res = Command::new("/bin/sh").arg("-c").arg(&cmd).status();
+                match res {
+                    Ok(exit_status) => {
+                        if exit_status.success() {
+                            info!("Command succeeded");
+                            Ok(())
+                        } else {
+                            warn!(
+                                "Command terminated with non-zero exit code: {:?}",
+                                exit_status
+                            );
+                            Err(failure::err_msg(format!(
+                                "Command terminated with exit status {}",
+                                exit_status
+                            )))
+                        }
+                    }
+                    Err(err) => {
+                        warn!("Failed to execute command: {}", err);
+                        Err(err.into())
+                    }
+                }
+            }
         }
     }
 
@@ -82,39 +115,3 @@ impl ProdInterpreter {
         Ok(())
     }
 }
-
-// pub mod interpreter {
-//     use super::*;
-//     use crate::access_token_provider::{self, AccessTokenProvider, AtpError};
-//     use crate::effects::spotify_player::SpotifyPlayer;
-//     use crossbeam_channel::Receiver;
-
-//     use failure::Fallible;
-
-//     struct Interpreter {
-//         effects: Receiver<Effects>,
-//         spotify_player: SpotifyPlayer,
-//     }
-
-//     impl Interpreter {
-//         pub fn new(spotify_player: SpotifyPlayer) {}
-
-//         pub fn run(self) -> Fallible<()> {
-//             use Effects::*;
-
-//             for effect in self.effects.iter() {
-//                 info!("Effect: {:?}", effect);
-
-//                 match effect {
-//                     PlaySpotify { .. } => {}
-//                     _ => {
-//                         // unhandled
-//                         unimplemented!()
-//                     }
-//                 }
-//             }
-
-//             Ok(())
-//         }
-//     }
-// }
