@@ -7,8 +7,6 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use slog_scope::{error, info, warn};
 
-use crate::components::access_token_provider::{self, AccessTokenProvider, AtpError};
-// use crate::components::spotify::connect::{SpotifyConnector, SupervisorCommands, SupervisorStatus};
 use crate::effects::Effects;
 
 pub use err::*;
@@ -17,7 +15,6 @@ pub use err::*;
 pub enum PlayerCommand {
     PlaybackRequest(PlaybackRequest),
     Terminate,
-    NewDeviceId(String),
 }
 
 #[derive(Debug, Clone)]
@@ -27,11 +24,9 @@ pub struct PlayerHandle {
 }
 
 pub struct Player {
-    access_token_provider: AccessTokenProvider,
     http_client: Client,
-    commands: Receiver<PlayerCommand>,
-    status: Receiver<PlayerCommand>,
     effects: Sender<Effects>,
+    commands: Receiver<PlayerCommand>,
 }
 
 impl Drop for PlayerHandle {
@@ -75,9 +70,7 @@ impl Player {
 
         let mut stop_effect = None;
 
-        let mut device_id: Option<String> = None;
-
-        let rs = vec![self.commands.clone(), self.status.clone()];
+        let rs = vec![self.commands.clone()];
         // Build a list of operations.
         let mut sel = Select::new();
         for r in &rs {
@@ -102,9 +95,9 @@ impl Player {
                     PlayerCommand::PlaybackRequest(req) => match req {
                         self::PlaybackRequest::Start(resource) => match resource {
                             PlaybackResource::SpotifyUri(spotify_uri) => {
-                                stop_effect = Some(Effects::NewStopSpotify);
+                                stop_effect = Some(Effects::StopSpotify);
                                 self.effects
-                                    .send(Effects::NewPlaySpotify { spotify_uri })
+                                    .send(Effects::PlaySpotify { spotify_uri })
                                     .unwrap();
                             }
                             PlaybackResource::Http(url) => {
@@ -121,27 +114,18 @@ impl Player {
                         info!("Player received Terminate command, terminating");
                         break;
                     }
-                    NewDeviceId(new_device_id) => {
-                        device_id = Some(new_device_id);
-                    }
                 },
             }
         }
     }
 
-    pub fn new(
-        effects: Sender<Effects>,
-        access_token_provider: AccessTokenProvider,
-        spotify_connect_status: Receiver<PlayerCommand>,
-    ) -> PlayerHandle {
+    pub fn new(effects: Sender<Effects>) -> PlayerHandle {
         let http_client = Client::new();
         let (commands_tx, commands_rx) = crossbeam_channel::bounded(1);
 
         let player = Player {
-            access_token_provider,
             http_client,
             commands: commands_rx,
-            status: spotify_connect_status,
             effects,
         };
 
@@ -160,46 +144,25 @@ pub mod err {
 
     // use crossbeam_channel::RecvError;
 
-    use crate::components::access_token_provider::{self, AtpError};
-
     #[derive(Debug)]
     pub enum Error {
         HTTP(reqwest::Error),
-        NoToken,
-        NoDevice,
         SendError(String),
     }
 
-    impl From<access_token_provider::AtpError> for Error {
-        fn from(err: access_token_provider::AtpError) -> Error {
-            match err {
-                AtpError::NoTokenReceivedYet => Error::NoToken,
-            }
-        }
-    }
     impl Error {
-        pub fn is_client_error(&self) -> bool {
-            match self {
-                Error::HTTP(err) => err.status().map(|s| s.is_client_error()).unwrap_or(false),
-                Error::NoToken => true,
-                Error::NoDevice => true,
-                Error::SendError(_) => false,
-            }
-        }
-        pub fn is_device_missing_error(&self) -> bool {
-            match self {
-                Error::NoDevice => true,
-                _ => false,
-            }
-        }
+        // pub fn is_client_error(&self) -> bool {
+        //     match self {
+        //         Error::HTTP(err) => err.status().map(|s| s.is_client_error()).unwrap_or(false),
+        //         Error::SendError(_) => false,
+        //     }
+        // }
     }
 
     impl Display for Error {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             match self {
                 Error::HTTP(err) => write!(f, "Spotify HTTP Error {}", err),
-                Error::NoToken => write!(f, "Failed to obtain access token"),
-                Error::NoDevice => write!(f, "No Spotify Connect Device found"),
                 Error::SendError(err) => {
                     write!(f, "Failed to transmit command via channel: {}", err)
                 }

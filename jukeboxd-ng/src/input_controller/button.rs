@@ -104,7 +104,7 @@ pub mod cdev_gpio {
         }
 
         fn run_single_event_listener<F>(
-            mut self,
+            self,
             (line, line_id, cmd): (Line, u32, Command),
             msg_transformer: Arc<F>,
         ) -> Fallible<()>

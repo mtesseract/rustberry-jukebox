@@ -24,23 +24,12 @@ use spotify::player::SpotifyPlayer;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Effects {
-    PlayHttp {
-        url: String,
-    },
+    PlayHttp { url: String },
     StopHttp,
-    PlaySpotify {
-        spotify_uri: String,
-        access_token: String,
-        device_id: String,
-    },
-    NewPlaySpotify {
-        spotify_uri: String,
-    },
+    PlaySpotify { spotify_uri: String },
+    NewPlaySpotify { spotify_uri: String },
     NewStopSpotify,
-    StopSpotify {
-        access_token: String,
-        device_id: String,
-    },
+    StopSpotify,
     LedOn,
     LedOff,
     VolumeUp,
@@ -59,7 +48,7 @@ pub struct ProdInterpreter {
 impl ProdInterpreter {
     pub fn new(config: &Config) -> Fallible<Self> {
         let config = config.clone();
-        let spotify_player = SpotifyPlayer::new();
+        let spotify_player = SpotifyPlayer::new(&config);
         let led_controller = Box::new(led::gpio_cdev::GpioCdev::new()?);
         Ok(ProdInterpreter {
             spotify_player,
@@ -70,21 +59,12 @@ impl ProdInterpreter {
 
     fn handle(&self, effect: &Effects) -> Fallible<()> {
         match effect {
-            PlaySpotify {
-                spotify_uri,
-                access_token,
-                device_id,
-            } => {
-                self.spotify_player
-                    .start_playback(&access_token, &device_id, &spotify_uri)?;
+            PlaySpotify { spotify_uri } => {
+                self.spotify_player.start_playback(&spotify_uri)?;
                 Ok(())
             }
-            StopSpotify {
-                access_token,
-                device_id,
-            } => {
-                self.spotify_player
-                    .stop_playback(&access_token, &device_id)?;
+            StopSpotify => {
+                self.spotify_player.stop_playback()?;
                 Ok(())
             }
             LedOn => self.led_controller.switch_on(Led::Playback),

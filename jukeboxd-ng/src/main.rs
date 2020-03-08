@@ -11,9 +11,7 @@ use std::thread;
 
 use rustberry::components::access_token_provider;
 use rustberry::config::Config;
-use rustberry::effects::spotify::connect::{
-    self, SpotifyConnector, SupervisorCommands, SupervisorStatus,
-};
+use rustberry::effects::spotify::connect::{self, SpotifyConnector, SupervisorCommands};
 use rustberry::effects::Effects;
 use rustberry::effects::ProdInterpreter;
 use rustberry::input_controller::{
@@ -87,21 +85,8 @@ fn main_with_log() -> Fallible<()> {
 
     //// Prepare components.
 
-    // Create Access Token Provider
-    let access_token_provider = access_token_provider::AccessTokenProvider::new(
-        &config.client_id,
-        &config.client_secret,
-        &config.refresh_token,
-    );
-
-    let spotify_connector = connect::external_command::ExternalCommand::new_from_env(
-        &access_token_provider,
-        config.device_name.clone(),
-        |SupervisorStatus::NewDeviceId(device_id)| Some(PlayerCommand::NewDeviceId(device_id)),
-    )?;
-    let spotify_connector_channel = spotify_connector.status();
     let (tx, rx): (Sender<Effects>, Receiver<Effects>) = crossbeam_channel::bounded(2);
-    let player_handle = Player::new(tx, access_token_provider, spotify_connector_channel);
+    let player_handle = Player::new(tx);
 
     let interpreter = ProdInterpreter::new(&config).unwrap();
     thread::spawn(move || interpreter.run(rx));
