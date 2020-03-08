@@ -21,63 +21,29 @@ use rustberry::input_controller::{
 };
 use rustberry::player::{self, PlaybackRequest, Player, PlayerCommand, PlayerHandle};
 
-// fn execute_shutdown(config: &Config) {
-//     match config.shutdown_command {
-//         Some(ref cmd) => {
-//             Command::new(cmd)
-//                 .status()
-//                 .expect(&format!("failed to execute shutdown command '{}'", cmd));
-//         }
-//         None => {
-//             Command::new("sudo")
-//                 .arg("shutdown")
-//                 .arg("-h")
-//                 .arg("now")
-//                 .status()
-//                 .expect("failed to execute default shutdown command");
-//         }
-//     }
-// }
+fn execute_shutdown(config: &Config, effects: &Sender<Effects>) {
+    let cmd = match config.shutdown_command {
+        Some(ref cmd) => cmd.clone(),
+        None => "sudo shutdown -h now".to_string(),
+    };
+    effects.send(Effects::GenericCommand(cmd)).unwrap();
+}
 
-// fn execute_volume_up(config: &Config) {
-//     match config.volume_up_command {
-//         Some(ref cmd) => {
-//             Command::new(cmd)
-//                 .status()
-//                 .expect(&format!("failed to execute volume up command '{}'", cmd));
-//         }
-//         None => {
-//             Command::new("amixer")
-//                 .arg("-q")
-//                 .arg("-M")
-//                 .arg("set")
-//                 .arg("PCM")
-//                 .arg("5%+")
-//                 .status()
-//                 .expect("failed to execute default volume up command");
-//         }
-//     }
-// }
+fn execute_volume_up(config: &Config, effects: &Sender<Effects>) {
+    let cmd = config
+        .volume_up_command
+        .clone()
+        .unwrap_or("amixer -q -M set PCM 10%+".to_string());
+    effects.send(Effects::GenericCommand(cmd)).unwrap();
+}
 
-// fn execute_volume_down(config: &Config) {
-//     match config.volume_down_command {
-//         Some(ref cmd) => {
-//             Command::new(cmd)
-//                 .status()
-//                 .expect(&format!("failed to execute volume down command '{}'", cmd));
-//         }
-//         None => {
-//             Command::new("amixer")
-//                 .arg("-q")
-//                 .arg("-M")
-//                 .arg("set")
-//                 .arg("PCM")
-//                 .arg("5%-")
-//                 .status()
-//                 .expect("failed to execute default volume down command");
-//         }
-//     }
-// }
+fn execute_volume_down(config: &Config, effects: &Sender<Effects>) {
+    let cmd = config
+        .volume_up_command
+        .clone()
+        .unwrap_or("amixer -q -M set PCM 10%-".to_string());
+    effects.send(Effects::GenericCommand(cmd)).unwrap();
+}
 
 fn main_with_log() -> Fallible<()> {
     let config = envy::from_env::<Config>()?;
@@ -86,14 +52,19 @@ fn main_with_log() -> Fallible<()> {
     //// Prepare components.
 
     let (tx, rx): (Sender<Effects>, Receiver<Effects>) = crossbeam_channel::bounded(2);
-    let player_handle = Player::new(tx);
+    let player_handle = Player::new(tx.clone());
 
     let interpreter = ProdInterpreter::new(&config).unwrap();
     thread::spawn(move || interpreter.run(rx));
-    run_application(player_handle, &config)
+    run_application(player_handle, tx, &config)
 }
 
-fn handle_inputs(player_handle: PlayerHandle, inputs: &[Receiver<Input>]) {
+fn handle_inputs(
+    config: &Config,
+    player_handle: PlayerHandle,
+    effects: &Sender<Effects>,
+    inputs: &[Receiver<Input>],
+) {
     let mut sel = Select::new();
     for r in inputs {
         sel.recv(r);
@@ -116,20 +87,23 @@ fn handle_inputs(player_handle: PlayerHandle, inputs: &[Receiver<Input>]) {
             }
             Ok(input) => match input {
                 Input::Button(cmd) => match cmd {
-                    button::Command::Shutdown => unimplemented!(),
-                    button::Command::VolumeUp => unimplemented!(),
-                    button::Command::VolumeDown => unimplemented!(),
+                    button::Command::Shutdown => execute_shutdown(config, effects),
+                    button::Command::VolumeUp => execute_volume_up(config, effects),
+                    button::Command::VolumeDown => execute_volume_down(config, effects),
                 },
-                Input::Playback(request) => match request {
-                    PlaybackRequest::Start(resource) => unimplemented!(),
-                    PlaybackRequest::Stop => unimplemented!(),
-                },
+                Input::Playback(request) => {
+                    player_handle.playback(request).unwrap();
+                }
             },
         }
     }
 }
 
-fn run_application(player_handle: PlayerHandle, config: &Config) -> Fallible<()> {
+fn run_application(
+    player_handle: PlayerHandle,
+    effects: Sender<Effects>,
+    config: &Config,
+) -> Fallible<()> {
     // Prepare individual input channels.
     let button_controller_handle =
         button::cdev_gpio::CdevGpio::new_from_env(|cmd| Some(Input::Button(cmd)))?;
@@ -137,7 +111,9 @@ fn run_application(player_handle: PlayerHandle, config: &Config) -> Fallible<()>
         playback::rfid::PlaybackRequestTransmitterRfid::new(|req| Some(Input::Playback(req)))?;
 
     handle_inputs(
+        config,
         player_handle,
+        &effects,
         &vec![
             button_controller_handle.channel(),
             playback_controller_handle.channel(),

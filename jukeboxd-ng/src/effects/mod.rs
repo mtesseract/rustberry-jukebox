@@ -32,8 +32,6 @@ pub enum Effects {
     StopSpotify,
     LedOn,
     LedOff,
-    VolumeUp,
-    VolumeDown,
     GenericCommand(String),
 }
 
@@ -59,20 +57,18 @@ impl ProdInterpreter {
 
     fn handle(&self, effect: &Effects) -> Fallible<()> {
         match effect {
-            PlaySpotify { spotify_uri } => {
+            Effects::PlaySpotify { spotify_uri } => {
                 self.spotify_player.start_playback(&spotify_uri)?;
                 Ok(())
             }
-            StopSpotify => {
+            Effects::StopSpotify => {
                 self.spotify_player.stop_playback()?;
                 Ok(())
             }
-            LedOn => self.led_controller.switch_on(Led::Playback),
-            LedOff => self.led_controller.switch_off(Led::Playback),
-            VolumeUp => unimplemented!(),
-            VolumeDown => unimplemented!(),
-            GenericCommand(cmd) => unimplemented!(),
-            Shutdown => unimplemented!(),
+            Effects::LedOn => self.led_controller.switch_on(Led::Playback),
+            Effects::LedOff => self.led_controller.switch_off(Led::Playback),
+            Effects::GenericCommand(cmd) => unimplemented!(),
+            _ => unimplemented!(),
         }
     }
 
