@@ -16,7 +16,7 @@ pub enum PlayerCommand {
 }
 
 #[derive(Debug, Clone)]
-pub struct PlayerHandle {
+pub struct Handle {
     handle: Arc<JoinHandle<()>>,
     commands: Sender<PlayerCommand>,
 }
@@ -26,7 +26,7 @@ pub struct Player {
     commands: Receiver<PlayerCommand>,
 }
 
-impl Drop for PlayerHandle {
+impl Drop for Handle {
     fn drop(&mut self) {
         println!("Destroying Player");
         // FIXME?
@@ -45,15 +45,7 @@ pub enum PlaybackResource {
     Http(String),
 }
 
-#[derive(Debug, Clone, Serialize)]
-struct StartPlayback {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    context_uri: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    uris: Option<Vec<String>>,
-}
-
-impl PlayerHandle {
+impl Handle {
     pub fn playback(&self, request: PlaybackRequest) -> Result<(), Error> {
         self.commands
             .send(PlayerCommand::PlaybackRequest(request))?;
@@ -67,26 +59,12 @@ impl Player {
 
         let mut stop_effect = None;
 
-        let rs = vec![self.commands.clone()];
-        // Build a list of operations.
-        let mut sel = Select::new();
-        for r in &rs {
-            sel.recv(r);
-        }
-
         loop {
-            // Wait until a receive operation becomes ready and try executing it.
-            let index = sel.ready();
-            let res = rs[index].try_recv();
+            let res = self.commands.recv();
 
             match res {
                 Err(err) => {
-                    if err.is_empty() {
-                        // If the operation turns out not to be ready, retry.
-                        continue;
-                    } else {
-                        error!("Player: Failed to receive input command: {:?}", err);
-                    }
+                    error!("Player: Failed to receive input command: {:?}", err);
                 }
                 Ok(cmd) => match cmd {
                     PlayerCommand::PlaybackRequest(req) => match req {
@@ -116,19 +94,19 @@ impl Player {
         }
     }
 
-    pub fn new(effects: Sender<Effects>) -> PlayerHandle {
-        let (commands_tx, commands_rx) = crossbeam_channel::bounded(1);
+    pub fn new(effects: Sender<Effects>) -> Handle {
+        let (tx, rx) = crossbeam_channel::bounded(1);
 
         let player = Player {
-            commands: commands_rx,
+            commands: rx,
             effects,
         };
 
         let handle = thread::spawn(|| player.main());
 
-        PlayerHandle {
+        Handle {
             handle: Arc::new(handle),
-            commands: commands_tx,
+            commands: tx,
         }
     }
 }
@@ -137,21 +115,10 @@ pub mod err {
     use std::convert::From;
     use std::fmt::{self, Display};
 
-    // use crossbeam_channel::RecvError;
-
     #[derive(Debug)]
     pub enum Error {
         HTTP(reqwest::Error),
         SendError(String),
-    }
-
-    impl Error {
-        // pub fn is_client_error(&self) -> bool {
-        //     match self {
-        //         Error::HTTP(err) => err.status().map(|s| s.is_client_error()).unwrap_or(false),
-        //         Error::SendError(_) => false,
-        //     }
-        // }
     }
 
     impl Display for Error {
