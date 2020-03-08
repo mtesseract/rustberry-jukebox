@@ -1,12 +1,8 @@
-use std::env;
-use std::io::BufRead;
-use std::sync::Arc;
-
-use crate::player::{PlaybackRequest, PlaybackResource};
 use crossbeam_channel::{self, Receiver, Sender};
 use failure::Fallible;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use slog_scope::{error, info, warn};
+
+use crate::player::{PlaybackRequest, PlaybackResource};
 
 #[cfg(test)]
 mod test {
@@ -30,61 +26,10 @@ impl<T> Handle<T> {
     }
 }
 
-// pub mod stdin {
-//     use super::*;
-
-//     pub struct PlaybackRequestTransmitterStdin<T> {
-//         tx: Sender<Option<T>>,
-//     }
-
-//     impl<T: DeserializeOwned + Clone + std::fmt::Debug + PartialEq> PlaybackRequestTransmitterStdin<T> {
-//         pub fn new<F>(msg_transformer: F) -> Fallible<Handle<T>>
-//         where
-//             F: Fn(PlaybackRequest) -> Option<T> + 'static + Send + Sync,
-//         {
-//             let (tx, rx) = crossbeam_channel::bounded(1);
-//             let transmitter = Self { tx };
-//             transmitter.run(msg_transformer)?;
-//             Ok(Handle { channel: rx })
-//         }
-
-//         fn run<F>(&self, msg_transformer: F) -> Fallible<()>
-//         where
-//             F: Fn(PlaybackRequest) -> Option<T> + 'static + Send,
-//         {
-//             let mut last: Option<PlaybackRequest> = None;
-
-//             let stdin = std::io::stdin();
-//             for line in stdin.lock().lines() {
-//                 if let Ok(ref line) = line {
-//                     let req: Option<PlaybackRequest> = if line == "" {
-//                         None
-//                     } else {
-//                         match serde_json::from_str(line) {
-//                             Ok(deserialized) => Some(deserialized),
-//                             Err(err) => {
-//                                 error!("Failed to deserialize line `{}`: {}", line, err);
-//                                 None
-//                             }
-//                         }
-//                     };
-//                     if last != req {
-//                         if let Some(transformed_req) = req.clone().and_then(&msg_transformer) {
-//                             self.tx.send(Some(transformed_req)).unwrap();
-//                         }
-//                         last = req;
-//                     }
-//                 }
-//             }
-
-//             panic!();
-//         }
-//     }
-// }
-
 pub mod rfid {
-    use super::*;
     use crate::components::rfid::*;
+
+    use super::*;
 
     pub struct PlaybackRequestTransmitterRfid<T> {
         picc: RfidController,
@@ -161,7 +106,8 @@ pub mod rfid {
         {
             let mut tag_reader = tag.new_reader();
             let request_string = tag_reader.read_string()?;
-            let request_deserialized = match serde_json::from_str(&request_string) {
+            let request_deserialized: PlaybackResource = match serde_json::from_str(&request_string)
+            {
                 Ok(deserialized) => deserialized,
                 Err(err) => {
                     error!(
@@ -172,11 +118,65 @@ pub mod rfid {
                 }
             };
             if let Some(req_transformed) =
-                msg_transformer(PlaybackRequest::Start(request_deserialized))
+                msg_transformer(PlaybackRequest::Start(request_deserialized.clone()))
             {
                 tx.send(req_transformed)?;
+            } else {
+                info!("Dropping playback request '{:?}'", &request_deserialized);
             }
             Ok(())
         }
     }
 }
+
+// pub mod stdin {
+//     use super::*;
+
+//     pub struct PlaybackRequestTransmitterStdin<T> {
+//         tx: Sender<Option<T>>,
+//     }
+
+//     impl<T: DeserializeOwned + Clone + std::fmt::Debug + PartialEq> PlaybackRequestTransmitterStdin<T> {
+//         pub fn new<F>(msg_transformer: F) -> Fallible<Handle<T>>
+//         where
+//             F: Fn(PlaybackRequest) -> Option<T> + 'static + Send + Sync,
+//         {
+//             let (tx, rx) = crossbeam_channel::bounded(1);
+//             let transmitter = Self { tx };
+//             transmitter.run(msg_transformer)?;
+//             Ok(Handle { channel: rx })
+//         }
+
+//         fn run<F>(&self, msg_transformer: F) -> Fallible<()>
+//         where
+//             F: Fn(PlaybackRequest) -> Option<T> + 'static + Send,
+//         {
+//             let mut last: Option<PlaybackRequest> = None;
+
+//             let stdin = std::io::stdin();
+//             for line in stdin.lock().lines() {
+//                 if let Ok(ref line) = line {
+//                     let req: Option<PlaybackRequest> = if line == "" {
+//                         None
+//                     } else {
+//                         match serde_json::from_str(line) {
+//                             Ok(deserialized) => Some(deserialized),
+//                             Err(err) => {
+//                                 error!("Failed to deserialize line `{}`: {}", line, err);
+//                                 None
+//                             }
+//                         }
+//                     };
+//                     if last != req {
+//                         if let Some(transformed_req) = req.clone().and_then(&msg_transformer) {
+//                             self.tx.send(Some(transformed_req)).unwrap();
+//                         }
+//                         last = req;
+//                     }
+//                 }
+//             }
+
+//             panic!();
+//         }
+//     }
+// }

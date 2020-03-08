@@ -6,6 +6,8 @@ use slog_scope::{info, warn};
 
 use spotify_auth::request_fresh_token;
 
+pub use err::*;
+
 #[derive(Debug, Clone, StateData)]
 pub struct AccessTokenProvider {
     client_id: String,
@@ -40,23 +42,6 @@ fn token_refresh_thread(
     // error!("Token refresh thread terminated unexpectedly");
     // panic!()
 }
-
-#[derive(Clone, Copy, Debug)]
-pub enum AtpError {
-    NoTokenReceivedYet,
-}
-
-impl std::fmt::Display for AtpError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use AtpError::*;
-
-        match self {
-            NoTokenReceivedYet => write!(f, "No initial token received yet"),
-        }
-    }
-}
-
-impl std::error::Error for AtpError {}
 
 impl AccessTokenProvider {
     pub fn get_token(&self) -> Result<String, AtpError> {
@@ -144,4 +129,23 @@ pub mod spotify_auth {
         let rsp_json: RefreshTokenResponse = res.json()?;
         Ok(rsp_json)
     }
+}
+
+pub mod err {
+    #[derive(Clone, Copy, Debug)]
+    pub enum AtpError {
+        NoTokenReceivedYet,
+    }
+
+    impl std::fmt::Display for AtpError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            use AtpError::*;
+
+            match self {
+                NoTokenReceivedYet => write!(f, "No initial token received yet"),
+            }
+        }
+    }
+
+    impl std::error::Error for AtpError {}
 }

@@ -1,17 +1,12 @@
-use crossbeam_channel::{self, Receiver, RecvError, RecvTimeoutError, Select, Sender};
+use crossbeam_channel::{self, Receiver, Select, Sender};
 use failure::Fallible;
-use serde::Deserialize;
-use signal_hook::{iterator::Signals, SIGINT, SIGTERM};
 use slog::{self, o, Drain};
 use slog_async;
 use slog_scope::{error, info, warn};
 use slog_term;
-use std::process::Command;
 use std::thread;
 
-use rustberry::components::access_token_provider;
 use rustberry::config::Config;
-use rustberry::effects::spotify::connect::{self, SpotifyConnector, SupervisorCommands};
 use rustberry::effects::Effects;
 use rustberry::effects::ProdInterpreter;
 use rustberry::input_controller::{
@@ -19,7 +14,7 @@ use rustberry::input_controller::{
     playback::{self},
     Input,
 };
-use rustberry::player::{self, PlaybackRequest, Player, PlayerCommand, PlayerHandle};
+use rustberry::player::{Player, PlayerHandle};
 
 fn execute_shutdown(config: &Config, effects: &Sender<Effects>) {
     let cmd = match config.shutdown_command {

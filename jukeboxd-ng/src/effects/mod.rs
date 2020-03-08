@@ -39,7 +39,7 @@ pub struct ProdInterpreter {
     spotify_player: SpotifyPlayer,
     http_player: HttpPlayer,
     led_controller: Box<dyn LedController + 'static + Send>,
-    config: Config,
+    _config: Config,
 }
 
 impl ProdInterpreter {
@@ -52,7 +52,7 @@ impl ProdInterpreter {
             spotify_player,
             http_player,
             led_controller,
-            config,
+            _config: config,
         })
     }
 

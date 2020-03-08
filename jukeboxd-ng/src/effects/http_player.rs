@@ -1,12 +1,10 @@
 use std::fmt::{self, Display};
 use std::thread::{self, JoinHandle};
 
-use hyper::header::AUTHORIZATION;
 use reqwest::Client;
 use serde::Serialize;
 use slog_scope::{error, info, warn};
 use std::convert::From;
-use std::sync::{Arc, RwLock};
 
 use crossbeam_channel::{Receiver, RecvError, RecvTimeoutError, Select, Sender};
 

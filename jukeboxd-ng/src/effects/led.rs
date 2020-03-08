@@ -1,5 +1,4 @@
 use failure::Fallible;
-use slog_scope::{info, warn};
 
 #[derive(Debug)]
 pub enum Error {

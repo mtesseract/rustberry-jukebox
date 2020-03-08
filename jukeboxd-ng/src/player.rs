@@ -1,11 +1,9 @@
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 
-use crossbeam_channel::{Receiver, RecvError, RecvTimeoutError, Select, Sender};
-use hyper::header::AUTHORIZATION;
-use reqwest::Client;
+use crossbeam_channel::{Receiver, Select, Sender};
 use serde::{Deserialize, Serialize};
-use slog_scope::{error, info, warn};
+use slog_scope::{error, info};
 
 use crate::effects::Effects;
 
@@ -24,7 +22,6 @@ pub struct PlayerHandle {
 }
 
 pub struct Player {
-    http_client: Client,
     effects: Sender<Effects>,
     commands: Receiver<PlayerCommand>,
 }
@@ -120,11 +117,9 @@ impl Player {
     }
 
     pub fn new(effects: Sender<Effects>) -> PlayerHandle {
-        let http_client = Client::new();
         let (commands_tx, commands_rx) = crossbeam_channel::bounded(1);
 
         let player = Player {
-            http_client,
             commands: commands_rx,
             effects,
         };

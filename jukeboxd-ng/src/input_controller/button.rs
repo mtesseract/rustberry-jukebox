@@ -1,7 +1,7 @@
+use std::time::{Duration, Instant};
+
 use crossbeam_channel::{self, Receiver, Sender};
 use failure::Fallible;
-use slog_scope::{error, info};
-use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
@@ -20,7 +20,6 @@ pub struct Config {
 
 pub struct Handle<T> {
     channel: Receiver<T>,
-    // thread: Arc<JoinHandle<()>>,
 }
 
 impl<T> Handle<T> {
@@ -30,13 +29,15 @@ impl<T> Handle<T> {
 }
 
 pub mod cdev_gpio {
-    use super::*;
-    use gpio_cdev::{Chip, EventRequestFlags, Line, LineRequestFlags};
-    use serde::Deserialize;
-    use slog_scope::{error, info, warn};
     use std::collections::HashMap;
     use std::convert::From;
     use std::sync::{Arc, RwLock};
+
+    use gpio_cdev::{Chip, EventRequestFlags, Line, LineRequestFlags};
+    use serde::Deserialize;
+    use slog_scope::{error, info, warn};
+
+    use super::*;
 
     #[derive(Debug, Clone)]
     pub struct CdevGpio<T: Clone> {
@@ -164,7 +165,7 @@ pub mod cdev_gpio {
         {
             let chip = &mut *(self.chip.write().unwrap());
             let msg_transformer = Arc::new(msg_transformer);
-            // Spawn thread for requested GPIO lines.
+            // Spawn threads for requested GPIO lines.
             for (line_id, cmd) in self.map.iter() {
                 info!("Listening for {:?} on GPIO line {}", cmd, line_id);
                 let line_id = *line_id as u32;
@@ -172,13 +173,12 @@ pub mod cdev_gpio {
                     .get_line(line_id)
                     .map_err(|err| Error::IO(format!("Failed to get GPIO line: {:?}", err)))?;
                 let cmd = (*cmd).clone();
-                let config = self.config.clone();
                 let clone = self.clone();
                 let msg_transformer = Arc::clone(&msg_transformer);
                 let _handle = std::thread::spawn(move || {
                     let res =
                         clone.run_single_event_listener((line, line_id, cmd), msg_transformer);
-                    error!("GPIO Listener loop terminated: {:?}", res);
+                    error!("GPIO Listener loop terminated unexpectedly: {:?}", res);
                 });
             }
             Ok(())

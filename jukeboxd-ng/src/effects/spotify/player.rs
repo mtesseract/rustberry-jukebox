@@ -1,17 +1,13 @@
+use std::convert::From;
 use std::fmt::{self, Display};
-use std::thread::{self, JoinHandle};
-
-use crate::components::access_token_provider::{self, AccessTokenProvider, AtpError};
-use crate::config::Config;
 
 use hyper::header::AUTHORIZATION;
 use reqwest::Client;
 use serde::Serialize;
-use slog_scope::{error, info, warn};
-use std::convert::From;
-use std::sync::{Arc, RwLock};
+use slog_scope::{error, info};
 
-use crossbeam_channel::{Receiver, RecvError, RecvTimeoutError, Select, Sender};
+use crate::components::access_token_provider::{self, AccessTokenProvider};
+use crate::config::Config;
 
 use super::connect::{self, SpotifyConnector};
 
@@ -47,6 +43,8 @@ impl SpotifyPlayer {
             )
             .unwrap(),
         );
+
+        info!("Creating new SpotifyPlayer...");
 
         SpotifyPlayer {
             http_client,

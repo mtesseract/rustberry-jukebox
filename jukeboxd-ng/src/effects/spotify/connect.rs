@@ -1,16 +1,10 @@
 use std::sync::{Arc, RwLock};
 
 use crate::components::access_token_provider::AccessTokenProvider;
-use crossbeam_channel::Receiver;
 
 pub enum SupervisorCommands {
     Terminate,
 }
-
-// #[derive(Debug, Clone)]
-// pub enum SupervisorStatus {
-//     NewDeviceId(String),
-// }
 
 pub trait SpotifyConnector {
     fn device_id(&self) -> Option<String>;
@@ -25,7 +19,7 @@ pub mod external_command {
     use failure::{Context, Fallible};
     use slog_scope::{error, info, warn};
     use std::env;
-    use std::process::{Child, Command, ExitStatus};
+    use std::process::{Child, Command};
     use std::thread::{self, JoinHandle};
     use std::time::Duration;
 
@@ -36,26 +30,16 @@ pub mod external_command {
         // status: Receiver<T>,
         child: Arc<RwLock<Child>>,
         // command: Sender<SupervisorCommands>,
-        supervisor: JoinHandle<()>,
+        _supervisor: JoinHandle<()>,
     }
 
     struct SupervisedCommand {
         pub cmd: String,
         pub device_name: String,
         pub device_id: Arc<RwLock<Option<String>>>,
-        // pub command_receiver: Receiver<SupervisorCommands>,
-        // pub status_sender: Sender<T>,
-        // pub status_transformer: Box<Fn(SupervisorStatus) -> Option<T> + 'static + Send>,
         pub access_token_provider: AccessTokenProvider,
         child: Arc<RwLock<Child>>,
     }
-
-    // impl Drop for ExternalCommand {
-    //     fn drop(&mut self) {
-    //         let _ = self.command.send(SupervisorCommands::Terminate);
-    //         let _ = self.child.write().unwrap().kill();
-    //     }
-    // }
 
     impl SupervisedCommand {
         fn kill_child(&mut self) -> Result<(), std::io::Error> {
@@ -154,22 +138,6 @@ pub mod external_command {
                     }
                 }
 
-                // match self
-                //     .command_receiver
-                //     .recv_timeout(Duration::from_millis(1000))
-                // {
-                //     Ok(SupervisorCommands::Terminate) => {
-                //         info!("Terminating Spotify Connect Supervisor");
-                //         break;
-                //     }
-                //     Err(RecvTimeoutError::Timeout) => {
-                //         continue;
-                //     }
-                //     Err(RecvTimeoutError::Disconnected) => {
-                //         error!("Supervisor's command channel disconnected, exiting supervisor");
-                //         break;
-                //     }
-                // }
                 thread::sleep(Duration::from_millis(100));
             }
         }
@@ -177,21 +145,12 @@ pub mod external_command {
             cmd: String,
             device_name: &str,
             access_token_provider: &AccessTokenProvider,
-            // command_receiver: Receiver<SupervisorCommands>,
-            // status_sender: Sender<T>,
-            // status_transformer: F,
-        ) -> Result<(Self, Arc<RwLock<Child>>), std::io::Error>
-// where
-        //     F: Fn(SupervisorStatus) -> Option<T> + 'static + Send,
-        {
+        ) -> Result<(Self, Arc<RwLock<Child>>), std::io::Error> {
             let child = Command::new("sh").arg("-c").arg(&cmd).spawn()?;
             let rw_child = Arc::new(RwLock::new(child));
             let supervised_cmd = SupervisedCommand {
                 cmd,
                 device_name: device_name.to_string().clone(),
-                // command_receiver,
-                // status_sender,
-                // status_transformer: Box::new(status_transformer),
                 access_token_provider: access_token_provider.clone(),
                 child: Arc::clone(&rw_child),
                 device_id: Arc::new(RwLock::new(None)),
@@ -201,18 +160,10 @@ pub mod external_command {
     }
 
     impl ExternalCommand {
-        // pub fn status(&self) -> Receiver<T> {
-        //     self.status.clone()
-        // }
-
         pub fn new_from_env(
             access_token_provider: &AccessTokenProvider,
             device_name: String,
-            // status_transformer: F,
-        ) -> Fallible<Self>
-// where
-        //     F: Fn(SupervisorStatus) -> Option<T> + 'static + Send,
-        {
+        ) -> Fallible<Self> {
             let cmd = env::var("SPOTIFY_CONNECT_COMMAND").map_err(Context::new)?;
             Self::new(access_token_provider, cmd, device_name)
         }
@@ -220,40 +171,21 @@ pub mod external_command {
             access_token_provider: &AccessTokenProvider,
             cmd: String,
             device_name: String,
-            // status_transformer: F,
-        ) -> Fallible<Self>
-// where
-        //     F: Fn(SupervisorStatus) -> Option<T> + 'static + Send,
-        {
+        ) -> Fallible<Self> {
             let device_id = Arc::new(RwLock::new(None));
-            // let (status_sender, status_receiver) = crossbeam_channel::bounded(1);
-            // let (command_sender, command_receiver) = crossbeam_channel::bounded(1);
-
-            // let (status_sender, status_receiver) = channel();
-            // let (command_sender, command_receiver) = channel();
-
             let (supervised_cmd, rw_child) = SupervisedCommand::new(
                 cmd.to_string().clone(),
                 &device_name,
                 access_token_provider,
-                // command_receiver,
-                // status_sender,
-                // status_transformer,
             )?;
             let supervisor = supervised_cmd.spawn_supervisor();
 
             Ok(ExternalCommand {
-                // status: status_receiver,
                 device_id,
                 child: rw_child,
-                supervisor,
-                // command: command_sender,
+                _supervisor: supervisor,
             })
         }
-
-        // fn status_channel(&self) -> Receiver<T> {
-        //     self.status.clone()
-        // }
     }
 
     impl SpotifyConnector for ExternalCommand {
