@@ -75,8 +75,14 @@ impl ProdInterpreter {
                 self.http_player.stop_playback()?;
                 Ok(())
             }
-            Effects::LedOn => self.led_controller.switch_on(Led::Playback),
-            Effects::LedOff => self.led_controller.switch_off(Led::Playback),
+            Effects::LedOn => {
+                info!("Switching LED on");
+                self.led_controller.switch_on(Led::Playback)
+            }
+            Effects::LedOff => {
+                info!("Switching LED off");
+                self.led_controller.switch_off(Led::Playback)
+            }
             Effects::GenericCommand(cmd) => {
                 info!("Executing command '{}'", &cmd);
                 let res = Command::new("/bin/sh").arg("-c").arg(&cmd).status();
