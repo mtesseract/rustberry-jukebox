@@ -141,6 +141,7 @@ pub mod external_command {
                 thread::sleep(Duration::from_millis(100));
             }
         }
+
         pub fn new(
             cmd: String,
             device_name: &str,
