@@ -29,6 +29,7 @@ pub struct Player {
 impl Drop for Handle {
     fn drop(&mut self) {
         println!("Destroying Player");
+        let _ = self.commands.send(PlayerCommand::Terminate);
         // FIXME?
     }
 }
@@ -47,8 +48,10 @@ pub enum PlaybackResource {
 
 impl Handle {
     pub fn playback(&self, request: PlaybackRequest) -> Result<(), Error> {
-        self.commands
-            .send(PlayerCommand::PlaybackRequest(request))?;
+        self.send_command(PlayerCommand::PlaybackRequest(request))
+    }
+    pub fn send_command(&self, cmd: PlayerCommand) -> Result<(), Error> {
+        self.commands.send(cmd)?;
         Ok(())
     }
 }
@@ -144,4 +147,39 @@ pub mod err {
         }
     }
     impl std::error::Error for Error {}
+}
+
+#[cfg(test)]
+mod test {
+    use failure::Fallible;
+
+    use crate::effects::Effects;
+
+    use super::*;
+
+    #[test]
+    fn player_plays_resource_on_playback_request() -> Fallible<()> {
+        let (effects_tx, effects_rx) = crossbeam_channel::bounded(10);
+        let player_handle = Player::new(effects_tx);
+        let playback_requests = vec![
+            PlayerCommand::PlaybackRequest(PlaybackRequest::Start(PlaybackResource::SpotifyUri(
+                "spotify:track:5j6ZZwA9BnxZi5Bk0Ng4jB".to_string(),
+            ))),
+            PlayerCommand::PlaybackRequest(PlaybackRequest::Stop),
+            PlayerCommand::Terminate,
+        ];
+        let effects_expected = vec![
+            Effects::PlaySpotify {
+                spotify_uri: "spotify:track:5j6ZZwA9BnxZi5Bk0Ng4jB".to_string(),
+            },
+            Effects::StopSpotify,
+        ];
+        for req in playback_requests.iter() {
+            player_handle.send_command(req.clone()).unwrap();
+        }
+        let produced_effects: Vec<_> = effects_rx.iter().collect();
+
+        assert_eq!(produced_effects, effects_expected);
+        Ok(())
+    }
 }
