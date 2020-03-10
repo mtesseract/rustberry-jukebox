@@ -64,6 +64,7 @@ pub mod external_command {
             let device_id = Arc::clone(&self.device_id);
             let child = Arc::clone(&self.child);
             thread::spawn(move || {
+                thread::sleep(Duration::from_secs(2));
                 Self::device_id_watcher(access_token_provider, device_name, device_id, child)
             })
         }
@@ -76,12 +77,18 @@ pub mod external_command {
         ) {
             loop {
                 info!("device ID watcher tick");
+                info!("Looking for device named '{}'", device_name);
                 match spotify::util::lookup_device_by_name(&access_token_provider, &device_name) {
                     Ok(device) => {
+                        info!("Device ID found: {}", device.id);
                         *(device_id.write().unwrap()) = Some(device.id);
                     }
                     Err(JukeboxError::DeviceNotFound { .. }) => {
-                        warn!("No Spotify device ID found for device name ...");
+                        warn!(
+                            "No Spotify device ID found for device name '{}'",
+                            device_name
+                        );
+                        *(device_id.write().unwrap()) = None;
                         // kill child
                         if let Err(err) = child.write().unwrap().kill() {
                             error!("Failed to terminate Spotify Connector: {}", err);
@@ -108,11 +115,10 @@ pub mod external_command {
                     let mut writer = self.child.write().unwrap();
                     writer.try_wait()
                 };
-                dbg!(&res);
                 match res {
                     Ok(Some(status)) => {
                         // child terminated. needs to be restarted.
-                        error!(
+                        warn!(
                             "Spotify Connector terminated unexpectedly with status {}",
                             status
                         );
@@ -122,7 +128,7 @@ pub mod external_command {
                             info!("Respawned new Spotify Connector");
                         }
                     }
-                    Ok(None) => {}
+                    Ok(None) => info!("Child appears to be still running."),
                     Err(err) => {
                         error!(
                             "Failed to check if Spotify Connector is still running: {}",
@@ -131,7 +137,6 @@ pub mod external_command {
                         // fixme, what to do for resilience?
                     }
                 }
-
                 thread::sleep(Duration::from_millis(1000));
             }
         }
