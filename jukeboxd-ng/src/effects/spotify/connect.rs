@@ -67,6 +67,7 @@ pub mod external_command {
                     let mut writer = self.child.write().unwrap();
                     writer.try_wait()
                 };
+                dbg!(&res);
                 match res {
                     Ok(Some(status)) => {
                         // child terminated. needs to be restarted.
@@ -90,6 +91,7 @@ pub mod external_command {
                             Ok(device) => Some(device),
                             Err(JukeboxError::DeviceNotFound { .. }) => {
                                 warn!("No Spotify device ID found for device name ...");
+                                std::thread::sleep(Duration::from_millis(1000));
                                 None
                             }
                             Err(err) => {
@@ -138,7 +140,7 @@ pub mod external_command {
                     }
                 }
 
-                thread::sleep(Duration::from_millis(100));
+                thread::sleep(Duration::from_millis(1000));
             }
         }
 
