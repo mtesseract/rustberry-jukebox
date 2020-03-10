@@ -1,8 +1,14 @@
-use failure::Fallible;
-use slog_scope::{error, info};
-use std::sync::mpsc;
-use std::sync::mpsc::{Receiver, Sender};
 use std::time::{Duration, Instant};
+
+use crossbeam_channel::{self, Receiver, Sender};
+use failure::Fallible;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Command {
+    Shutdown,
+    VolumeUp,
+    VolumeDown,
+}
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -12,25 +18,33 @@ pub struct Config {
     pub start_time: Option<Instant>,
 }
 
+pub struct Handle<T> {
+    channel: Receiver<T>,
+}
+
+impl<T> Handle<T> {
+    pub fn channel(&self) -> Receiver<T> {
+        self.channel.clone()
+    }
+}
+
 pub mod cdev_gpio {
-    use super::super::*;
-    //     ButtonControllerBackend, Command, Config, Error, TransmitterMessage,
-    //     DELAY_BEFORE_ACCEPTING_SHUTDOWN_COMMANDS,
-    // };
-    use failure::Fallible;
+    use std::collections::HashMap;
+    use std::convert::From;
+    use std::sync::{Arc, RwLock};
+
     use gpio_cdev::{Chip, EventRequestFlags, Line, LineRequestFlags};
     use serde::Deserialize;
     use slog_scope::{error, info, warn};
-    use std::collections::HashMap;
-    use std::convert::From;
-    use std::sync::mpsc::Sender;
-    use std::time::{Duration, Instant};
 
-    #[derive(Debug)]
-    pub struct CdevGpio {
+    use super::*;
+
+    #[derive(Debug, Clone)]
+    pub struct CdevGpio<T: Clone> {
         map: HashMap<u32, Command>,
-        chip: Chip,
+        chip: Arc<RwLock<Chip>>,
         config: Config,
+        tx: Sender<T>,
     }
 
     #[derive(Deserialize, Debug, Clone)]
@@ -58,9 +72,12 @@ pub mod cdev_gpio {
         }
     }
 
-    impl CdevGpio {
-        pub fn new_from_env() -> Fallible<Self> {
-            info!("Using CdevGpio backend in Button Controller");
+    impl<T: Clone + Send + 'static> CdevGpio<T> {
+        pub fn new_from_env<F>(msg_transformer: F) -> Fallible<Handle<T>>
+        where
+            F: Fn(Command) -> Option<T> + 'static + Send + Sync,
+        {
+            info!("Using CdevGpio based in Button Controller");
             let env_config = EnvConfig::new_from_env()?;
             let config: Config = env_config.into();
             let mut map = HashMap::new();
@@ -75,19 +92,25 @@ pub mod cdev_gpio {
             }
             let chip = Chip::new("/dev/gpiochip0")
                 .map_err(|err| Error::IO(format!("Failed to open Chip: {:?}", err)))?;
-            Ok(Self { map, chip, config })
+            let (tx, rx) = crossbeam_channel::bounded(1);
+            let mut gpio_cdev = Self {
+                map,
+                chip: Arc::new(RwLock::new(chip)),
+                config,
+                tx,
+            };
+
+            gpio_cdev.run(msg_transformer)?;
+            Ok(Handle { channel: rx })
         }
 
-        fn run_single_event_listener(
-            config: Config,
-            tx: Sender<T>,
-            line: Line,
-            line_id: u32,
-            cmd: Command,
-            msg_transformer: F,
+        fn run_single_event_listener<F>(
+            self,
+            (line, line_id, cmd): (Line, u32, Command),
+            msg_transformer: Arc<F>,
         ) -> Fallible<()>
         where
-            F: Fn(TransmitterMessage) -> Option<T> + 'static + Send,
+            F: Fn(Command) -> Option<T> + 'static + Send,
         {
             let mut n_received_during_shutdown_delay = 0;
             info!("Listening for GPIO events on line {}", line_id);
@@ -106,7 +129,7 @@ pub mod cdev_gpio {
             {
                 info!("Received GPIO event {:?} on line {}", event, line_id);
                 if cmd == Command::Shutdown {
-                    if let Some(start_time) = config.start_time {
+                    if let Some(start_time) = self.config.start_time {
                         let now = Instant::now();
                         let dt: Duration = now - start_time;
                         if dt < DELAY_BEFORE_ACCEPTING_SHUTDOWN_COMMANDS {
@@ -125,33 +148,37 @@ pub mod cdev_gpio {
                     }
                 }
 
-                if let Some(transmitter_cmd) =
-                    msg_transformer(TransmitterMessage::Command(cmd.clone()))
-                {
-                    if let Err(err) = tx.send(transmitter_cmd) {
+                if let Some(cmd) = msg_transformer(cmd.clone()) {
+                    if let Err(err) = self.tx.send(cmd) {
                         error!("Failed to transmit GPIO event: {}", err);
                     }
                 } else {
-                    info!("Dropped transmitter message: {:?}", cmd);
+                    info!("Dropped button command message: {:?}", cmd);
                 }
             }
             Ok(())
         }
 
-        pub fn run(&mut self, tx: Sender<TransmitterMessage>) -> Fallible {
+        fn run<F>(&mut self, msg_transformer: F) -> Fallible<()>
+        where
+            F: Fn(Command) -> Option<T> + 'static + Send + Sync,
+        {
+            let chip = &mut *(self.chip.write().unwrap());
+            let msg_transformer = Arc::new(msg_transformer);
+            // Spawn threads for requested GPIO lines.
             for (line_id, cmd) in self.map.iter() {
                 info!("Listening for {:?} on GPIO line {}", cmd, line_id);
                 let line_id = *line_id as u32;
-                let line = self
-                    .chip
+                let line = chip
                     .get_line(line_id)
                     .map_err(|err| Error::IO(format!("Failed to get GPIO line: {:?}", err)))?;
-                let tx = tx.clone();
                 let cmd = (*cmd).clone();
-                let config = self.config.clone();
+                let clone = self.clone();
+                let msg_transformer = Arc::clone(&msg_transformer);
                 let _handle = std::thread::spawn(move || {
-                    let res = CdevGpio::run_single_event_listener(config, tx, line, line_id, cmd);
-                    error!("GPIO Listener loop terminated: {:?}", res);
+                    let res =
+                        clone.run_single_event_listener((line, line_id, cmd), msg_transformer);
+                    error!("GPIO Listener loop terminated unexpectedly: {:?}", res);
                 });
             }
             Ok(())
@@ -174,39 +201,4 @@ impl std::fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Command {
-    Shutdown,
-    VolumeUp,
-    VolumeDown,
-}
-
-#[derive(Debug, Clone)]
-pub enum TransmitterMessage {
-    Command(Command),
-}
-
 const DELAY_BEFORE_ACCEPTING_SHUTDOWN_COMMANDS: Duration = Duration::from_secs(10);
-
-pub struct UserControlTransmitter<T> {
-    channel: Receiver<T>,
-}
-
-impl<T> UserControlTransmitter<T> {
-    pub fn new<BCB: ButtonControllerBackend>(mut backend: BCB, msg_transformer: F) -> Fallible<Self>
-    where
-        F: Fn(TransmitterMessage) -> Option<T> + 'static + Send,
-    {
-        info!(
-            "Creating UserControlTransmitter with backend {}",
-            backend.description()
-        );
-        let (tx, rx): (Sender<T>, Receiver<T>) = mpsc::channel();
-        backend.run_event_listener(tx)?;
-        Ok(Self { channel: rx })
-    }
-
-    pub fn channel(&self) -> Receiver<T> {
-        self.channel.clone()
-    }
-}

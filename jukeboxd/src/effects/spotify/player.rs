@@ -1,42 +1,22 @@
+use std::convert::From;
 use std::fmt::{self, Display};
-use std::thread::{self, JoinHandle};
 
-use crate::access_token_provider::{self, AccessTokenProvider, AtpError};
-
-use crate::spotify_connect::{SpotifyConnector, SupervisorCommands, SupervisorStatus};
 use hyper::header::AUTHORIZATION;
 use reqwest::Client;
 use serde::Serialize;
-use slog_scope::{error, info, warn};
-use std::convert::From;
-use std::sync::{Arc, RwLock};
+use slog_scope::{error, info};
 
-use crossbeam_channel::{Receiver, RecvError, RecvTimeoutError, Select, Sender};
+use crate::components::access_token_provider::{self, AccessTokenProvider};
+use crate::config::Config;
 
-#[derive(Debug)]
-pub enum Error {
-    HTTP(reqwest::Error),
-}
+use super::connect::{self, SpotifyConnector};
 
-impl Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Error::HTTP(err) => write!(f, "Spotify HTTP Error {}", err),
-        }
-    }
-}
-
-impl From<reqwest::Error> for Error {
-    fn from(err: reqwest::Error) -> Self {
-        Error::HTTP(err)
-    }
-}
-
-impl std::error::Error for Error {}
+pub use err::*;
 
 pub struct SpotifyPlayer {
-    access_token_provider: AccessTokenProvider,
     http_client: Client,
+    access_token_provider: AccessTokenProvider,
+    spotify_connector: Box<dyn SpotifyConnector + 'static + Send>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -48,15 +28,29 @@ struct StartPlayback {
 }
 
 impl SpotifyPlayer {
-    pub fn new(access_token_provider: AccessTokenProvider) -> Self {
+    pub fn new(config: &Config) -> Self {
         let http_client = Client::new();
+        // Create Access Token Provider
+        let access_token_provider = access_token_provider::AccessTokenProvider::new(
+            &config.client_id,
+            &config.client_secret,
+            &config.refresh_token,
+        );
+        let spotify_connector = Box::new(
+            connect::external_command::ExternalCommand::new_from_env(
+                &access_token_provider.clone(),
+                config.device_name.clone(),
+            )
+            .unwrap(),
+        );
 
-        let player = SpotifyPlayer {
-            access_token_provider,
+        info!("Creating new SpotifyPlayer...");
+
+        SpotifyPlayer {
             http_client,
-        };
-
-        player
+            access_token_provider,
+            spotify_connector,
+        }
     }
 
     fn derive_start_playback_payload_from_spotify_uri(spotify_uri: &str) -> StartPlayback {
@@ -73,13 +67,13 @@ impl SpotifyPlayer {
         }
     }
 
-    pub fn start_playback(
-        &self,
-        access_token: &str,
-        device_id: &str,
-        spotify_uri: &str,
-    ) -> Result<(), Error> {
+    pub fn start_playback(&self, spotify_uri: &str) -> Result<(), Error> {
         let msg = "Failed to start Spotify playback";
+        let access_token = self.access_token_provider.get_token().unwrap(); // fixme
+        let device_id = match self.spotify_connector.device_id() {
+            Some(device_id) => device_id,
+            None => return Err(Error::NoSpotifyDevice),
+        };
         let req = Self::derive_start_playback_payload_from_spotify_uri(spotify_uri);
         self.http_client
             .put("https://api.spotify.com/v1/me/player/play")
@@ -102,8 +96,13 @@ impl SpotifyPlayer {
             .map_err(|err| Error::HTTP(err))
     }
 
-    pub fn stop_playback(&self, access_token: &str, device_id: &str) -> Result<(), Error> {
+    pub fn stop_playback(&self) -> Result<(), Error> {
         let msg = "Failed to stop Spotify playback";
+        let access_token = self.access_token_provider.get_token().unwrap(); // fixme
+        let device_id = match self.spotify_connector.device_id() {
+            Some(device_id) => device_id,
+            None => return Err(Error::NoSpotifyDevice),
+        };
         self.http_client
             .put("https://api.spotify.com/v1/me/player/pause")
             .query(&[("device_id", &device_id)])
@@ -124,4 +123,31 @@ impl SpotifyPlayer {
             .map(|_| ())
             .map_err(|err| Error::HTTP(err))
     }
+}
+
+pub mod err {
+    use super::*;
+
+    #[derive(Debug)]
+    pub enum Error {
+        HTTP(reqwest::Error),
+        NoSpotifyDevice,
+    }
+
+    impl Display for Error {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            match self {
+                Error::HTTP(err) => write!(f, "Spotify HTTP Error {}", err),
+                Error::NoSpotifyDevice => write!(f, "No Spotify Connect Device found"),
+            }
+        }
+    }
+
+    impl From<reqwest::Error> for Error {
+        fn from(err: reqwest::Error) -> Self {
+            Error::HTTP(err)
+        }
+    }
+
+    impl std::error::Error for Error {}
 }

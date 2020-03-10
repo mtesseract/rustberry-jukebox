@@ -1,9 +1,9 @@
-use failure::{Fail, Fallible};
+use failure::Fail;
 use hyper::header::AUTHORIZATION;
 use reqwest::Client;
 use serde::Deserialize;
 
-use crate::access_token_provider::{AccessTokenProvider, AtpError};
+use crate::components::access_token_provider::{AccessTokenProvider, AtpError};
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct Device {
