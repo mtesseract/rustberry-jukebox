@@ -69,7 +69,7 @@ impl SpotifyPlayer {
 
     pub fn start_playback(&self, spotify_uri: &str) -> Result<(), Error> {
         let msg = "Failed to start Spotify playback";
-        let access_token = self.access_token_provider.get_token().unwrap(); // fixme
+        let access_token = self.access_token_provider.get_token()?;
         let device_id = match self.spotify_connector.device_id() {
             Some(device_id) => device_id,
             None => return Err(Error::NoSpotifyDevice),
@@ -100,7 +100,7 @@ impl SpotifyPlayer {
 
     pub fn stop_playback(&self) -> Result<(), Error> {
         let msg = "Failed to stop Spotify playback";
-        let access_token = self.access_token_provider.get_token().unwrap(); // fixme
+        let access_token = self.access_token_provider.get_token()?;
         let device_id = match self.spotify_connector.device_id() {
             Some(device_id) => device_id,
             None => return Err(Error::NoSpotifyDevice),
@@ -134,6 +134,7 @@ pub mod err {
     pub enum Error {
         HTTP(reqwest::Error),
         NoSpotifyDevice,
+        NoToken,
     }
 
     impl Display for Error {
@@ -141,6 +142,10 @@ pub mod err {
             match self {
                 Error::HTTP(err) => write!(f, "Spotify HTTP Error {}", err),
                 Error::NoSpotifyDevice => write!(f, "No Spotify Connect Device found"),
+                Error::NoToken => write!(
+                    f,
+                    "Failed to obtain access token from Access Token Provider"
+                ),
             }
         }
     }
@@ -148,6 +153,14 @@ pub mod err {
     impl From<reqwest::Error> for Error {
         fn from(err: reqwest::Error) -> Self {
             Error::HTTP(err)
+        }
+    }
+
+    impl From<access_token_provider::AtpError> for Error {
+        fn from(err: access_token_provider::err::AtpError) -> Self {
+            match err {
+                access_token_provider::AtpError::NoTokenReceivedYet => Error::NoToken,
+            }
         }
     }
 
