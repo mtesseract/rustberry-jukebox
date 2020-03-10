@@ -80,7 +80,7 @@ impl SpotifyPlayer {
         self.http_client
             .put("https://api.spotify.com/v1/me/player/play")
             .query(&[("device_id", &device_id)])
-            .header(AUTHORIZATION, access_token)
+            .header(AUTHORIZATION, format!("Bearer {}", access_token))
             .json(&req)
             .send()
             .map_err(|err| {
@@ -109,7 +109,7 @@ impl SpotifyPlayer {
             .put("https://api.spotify.com/v1/me/player/pause")
             .query(&[("device_id", &device_id)])
             .body("")
-            .header(AUTHORIZATION, access_token)
+            .header(AUTHORIZATION, format!("Bearer {}", access_token))
             .send()
             .map_err(|err| {
                 error!("{}: Executing HTTP request failed: {}", msg, err);
