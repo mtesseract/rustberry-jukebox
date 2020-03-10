@@ -57,6 +57,47 @@ pub mod external_command {
             thread::spawn(move || Self::supervisor(self))
         }
 
+        fn spawn_device_id_watcher(&self) -> JoinHandle<()> {
+            info!("Spawning device ID watcher for Spotify Connect command");
+            let access_token_provider = Arc::new(self.access_token_provider.clone());
+            let device_name = self.device_name.clone();
+            let device_id = Arc::clone(&self.device_id);
+            let child = Arc::clone(&self.child);
+            thread::spawn(move || {
+                Self::device_id_watcher(access_token_provider, device_name, device_id, child)
+            })
+        }
+
+        fn device_id_watcher(
+            access_token_provider: Arc<AccessTokenProvider>,
+            device_name: String,
+            device_id: Arc<RwLock<Option<String>>>,
+            child: Arc<RwLock<Child>>,
+        ) {
+            loop {
+                info!("device ID watcher tick");
+                match spotify::util::lookup_device_by_name(&access_token_provider, &device_name) {
+                    Ok(device) => {
+                        *(device_id.write().unwrap()) = Some(device.id);
+                    }
+                    Err(JukeboxError::DeviceNotFound { .. }) => {
+                        warn!("No Spotify device ID found for device name ...");
+                        // kill child
+                        if let Err(err) = child.write().unwrap().kill() {
+                            error!("Failed to terminate Spotify Connector: {}", err);
+                        } else {
+                            info!("Terminated Spotify Connector");
+                        }
+                    }
+                    Err(err) => {
+                        error!("Failed to lookup Spotify Device ID: {}", err);
+                        // fixme, what to do here for resilience?
+                    }
+                }
+                thread::sleep(Duration::from_millis(2000));
+            }
+        }
+
         fn supervisor(mut self) {
             loop {
                 info!("supervisor tick");
@@ -81,56 +122,7 @@ pub mod external_command {
                             info!("Respawned new Spotify Connector");
                         }
                     }
-                    Ok(None) => {
-                        // seems it is still running.
-                        // check if device id can still be resolved.
-                        let found_device = match spotify::util::lookup_device_by_name(
-                            &self.access_token_provider,
-                            &self.device_name,
-                        ) {
-                            Ok(device) => Some(device),
-                            Err(JukeboxError::DeviceNotFound { .. }) => {
-                                warn!("No Spotify device ID found for device name ...");
-                                std::thread::sleep(Duration::from_millis(1000));
-                                None
-                            }
-                            Err(err) => {
-                                error!("Failed to lookup Spotify Device ID: {}", err);
-                                // fixme, what to do here for resilience?
-                                None
-                            }
-                        };
-
-                        if let Some(found_device) = found_device {
-                            let mut writer = self.device_id.write().unwrap();
-                            let opt_found_device_id = Some(found_device.id.clone());
-                            if opt_found_device_id != *writer {
-                                // // Device ID changed, send status update and note new device ID.
-                                // let status = (self.status_transformer)(
-                                //     SupervisorStatus::NewDeviceId(found_device.id),
-                                // );
-                                // if let Some(status) = status {
-                                //     self.status_sender.send(status).unwrap();
-                                // }
-                                *writer = opt_found_device_id;
-                            } else {
-                                // Device ID unchanged, nothing to do.
-                            }
-                        } else {
-                            // No device found for name. Kill subprocess.
-                            warn!("Failed to lookup device ID");
-                            if let Err(err) = self.kill_child() {
-                                error!("Failed to terminate Spotify Connector: {}", err);
-                            } else {
-                                info!("Terminated Spotify Connector");
-                            }
-                            if let Err(err) = self.respawn() {
-                                error!("Failed to start new Spotify Connector: {}", err);
-                            } else {
-                                info!("Started new Spotify Connector");
-                            }
-                        }
-                    }
+                    Ok(None) => {}
                     Err(err) => {
                         error!(
                             "Failed to check if Spotify Connector is still running: {}",
@@ -181,6 +173,7 @@ pub mod external_command {
                 &device_name,
                 access_token_provider,
             )?;
+            let _ = supervised_cmd.spawn_device_id_watcher();
             let supervisor = supervised_cmd.spawn_supervisor();
 
             Ok(ExternalCommand {
