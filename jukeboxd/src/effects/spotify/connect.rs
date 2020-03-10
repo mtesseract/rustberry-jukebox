@@ -144,6 +144,7 @@ pub mod external_command {
         pub fn new(
             cmd: String,
             device_name: &str,
+            device_id: Arc<RwLock<Option<String>>>,
             access_token_provider: &AccessTokenProvider,
         ) -> Result<(Self, Arc<RwLock<Child>>), std::io::Error> {
             let child = Command::new("sh").arg("-c").arg(&cmd).spawn()?;
@@ -153,7 +154,7 @@ pub mod external_command {
                 device_name: device_name.to_string().clone(),
                 access_token_provider: access_token_provider.clone(),
                 child: Arc::clone(&rw_child),
-                device_id: Arc::new(RwLock::new(None)),
+                device_id,
             };
             Ok((supervised_cmd, rw_child))
         }
@@ -176,6 +177,7 @@ pub mod external_command {
             let (supervised_cmd, rw_child) = SupervisedCommand::new(
                 cmd.to_string().clone(),
                 &device_name,
+                Arc::clone(&device_id),
                 access_token_provider,
             )?;
             let _ = supervised_cmd.spawn_device_id_watcher();
