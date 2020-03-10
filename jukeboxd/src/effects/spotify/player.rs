@@ -74,6 +74,7 @@ impl SpotifyPlayer {
             Some(device_id) => device_id,
             None => return Err(Error::NoSpotifyDevice),
         };
+        dbg!(&device_id);
         let req = Self::derive_start_playback_payload_from_spotify_uri(spotify_uri);
         self.http_client
             .put("https://api.spotify.com/v1/me/player/play")
