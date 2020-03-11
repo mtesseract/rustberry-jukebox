@@ -127,7 +127,7 @@ pub mod external_command {
                         // fixme, what to do here for resilience?
                     }
                 }
-                thread::sleep(Duration::from_millis(2000));
+                thread::sleep(Duration::from_millis(10000));
             }
         }
 
@@ -163,7 +163,7 @@ pub mod external_command {
                         // fixme, what to do for resilience?
                     }
                 }
-                thread::sleep(Duration::from_millis(10000));
+                thread::sleep(Duration::from_millis(2000));
             }
         }
 
