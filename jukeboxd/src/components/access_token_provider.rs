@@ -66,9 +66,16 @@ impl AccessTokenProvider {
             let client_secret = client_secret.clone().to_string();
             let refresh_token = refresh_token.clone().to_string();
 
-            thread::spawn(move || {
-                token_refresh_thread(client_id, client_secret, refresh_token, access_token_clone)
-            });
+            thread::Builder::new()
+                .name("access-token-provider".to_string())
+                .spawn(move || {
+                    token_refresh_thread(
+                        client_id,
+                        client_secret,
+                        refresh_token,
+                        access_token_clone,
+                    )
+                });
         }
 
         AccessTokenProvider {

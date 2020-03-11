@@ -105,7 +105,10 @@ impl Player {
             effects,
         };
 
-        let handle = thread::spawn(|| player.main());
+        let handle = thread::Builder::new()
+            .name("player".to_string())
+            .spawn(|| player.main())
+            .unwrap();
 
         Handle {
             handle: Arc::new(handle),

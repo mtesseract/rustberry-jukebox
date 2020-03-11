@@ -36,7 +36,10 @@ fn main_with_log() -> Fallible<()> {
     let interpreter = ProdInterpreter::new(&config).unwrap();
 
     // Run Interpreter.
-    thread::spawn(move || interpreter.run(rx));
+    thread::Builder::new()
+        .name("interpreter".to_string())
+        .spawn(move || interpreter.run(rx))
+        .unwrap();
 
     // Create Player component.
     let player_handle = Player::new(tx.clone());

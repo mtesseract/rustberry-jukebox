@@ -44,7 +44,9 @@ pub mod rfid {
             let (tx, rx) = crossbeam_channel::bounded(1);
             let picc = RfidController::new()?;
             let transmitter = Self { picc, tx };
-            std::thread::spawn(move || transmitter.run(msg_transformer).unwrap());
+            std::thread::Builder::new()
+                .name("playback-transmitter".to_string())
+                .spawn(move || transmitter.run(msg_transformer).unwrap());
             Ok(Handle { channel: rx })
         }
 

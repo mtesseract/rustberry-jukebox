@@ -54,7 +54,10 @@ pub mod external_command {
 
         fn spawn_supervisor(self) -> JoinHandle<()> {
             info!("Spawning supervisor for Spotify Connect command");
-            thread::spawn(move || Self::supervisor(self))
+            thread::Builder::new()
+                .name("spotify-supervisor".to_string())
+                .spawn(move || Self::supervisor(self))
+                .unwrap()
         }
 
         fn spawn_device_id_watcher(&self) -> JoinHandle<()> {
@@ -63,10 +66,13 @@ pub mod external_command {
             let device_name = self.device_name.clone();
             let device_id = Arc::clone(&self.device_id);
             let child = Arc::clone(&self.child);
-            thread::spawn(move || {
-                thread::sleep(Duration::from_secs(2));
-                Self::device_id_watcher(access_token_provider, device_name, device_id, child)
-            })
+            thread::Builder::new()
+                .name("spotify-device-watcher".to_string())
+                .spawn(move || {
+                    thread::sleep(Duration::from_secs(2));
+                    Self::device_id_watcher(access_token_provider, device_name, device_id, child)
+                })
+                .unwrap()
         }
 
         fn device_id_watcher(

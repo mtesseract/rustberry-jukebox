@@ -175,11 +175,14 @@ pub mod cdev_gpio {
                 let cmd = (*cmd).clone();
                 let clone = self.clone();
                 let msg_transformer = Arc::clone(&msg_transformer);
-                let _handle = std::thread::spawn(move || {
-                    let res =
-                        clone.run_single_event_listener((line, line_id, cmd), msg_transformer);
-                    error!("GPIO Listener loop terminated unexpectedly: {:?}", res);
-                });
+                let _handle = std::thread::Builder::new()
+                    .name(format!("button-controller-{}", line_id))
+                    .spawn(move || {
+                        let res =
+                            clone.run_single_event_listener((line, line_id, cmd), msg_transformer);
+                        error!("GPIO Listener loop terminated unexpectedly: {:?}", res);
+                    })
+                    .unwrap();
             }
             Ok(())
         }
