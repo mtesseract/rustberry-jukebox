@@ -35,6 +35,11 @@ fn main_with_log() -> Fallible<()> {
     let (tx, rx): (Sender<Effects>, Receiver<Effects>) = crossbeam_channel::bounded(2);
     let interpreter = ProdInterpreter::new(&config).unwrap();
 
+    interpreter.wait_until_ready().map_err(|err| {
+        error!("Failed to wait for interpreter readiness: {}", err);
+        err
+    })?;
+
     // Run Interpreter.
     thread::Builder::new()
         .name("interpreter".to_string())

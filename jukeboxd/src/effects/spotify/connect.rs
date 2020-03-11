@@ -1,12 +1,32 @@
 use std::sync::{Arc, RwLock};
+use std::thread;
+use std::time::Duration;
+
+use slog_scope::{error, info};
 
 use crate::components::access_token_provider::AccessTokenProvider;
+
+use super::util;
 
 pub enum SupervisorCommands {
     Terminate,
 }
 
 pub trait SpotifyConnector {
+    fn wait_until_ready(&self) -> Result<(), util::JukeboxError> {
+        let n_attempts = 10;
+        for _idx in 0..n_attempts {
+            if self.device_id().is_some() {
+                info!("Initial Device ID retrieved");
+                return Ok(());
+            }
+            thread::sleep(Duration::from_millis(500));
+        }
+        error!("Failed to wait for initial Device ID");
+        Err(util::JukeboxError::DeviceNotFound {
+            device_name: "FIXME".to_string(),
+        })
+    }
     fn device_id(&self) -> Option<String>;
     fn request_restart(&self);
 }

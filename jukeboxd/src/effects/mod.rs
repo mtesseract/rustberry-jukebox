@@ -56,6 +56,11 @@ impl ProdInterpreter {
         })
     }
 
+    pub fn wait_until_ready(&self) -> Fallible<()> {
+        self.spotify_player.wait_until_ready()?;
+        Ok(())
+    }
+
     fn handle(&self, effect: &Effects) -> Fallible<()> {
         match effect {
             Effects::PlaySpotify { spotify_uri } => {

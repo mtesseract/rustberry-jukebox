@@ -44,6 +44,17 @@ fn token_refresh_thread(
 }
 
 impl AccessTokenProvider {
+    pub fn wait_for_token(&self) -> Result<(), AtpError> {
+        let n_attempts = 10;
+        for _idx in 0..n_attempts {
+            if self.access_token.read().unwrap().is_some() {
+                return Ok(());
+            }
+            thread::sleep(std::time::Duration::from_millis(500));
+        }
+        Err(AtpError::NoTokenReceivedYet)
+    }
+
     pub fn get_token(&self) -> Result<String, AtpError> {
         let access_token = self.access_token.read().unwrap();
 

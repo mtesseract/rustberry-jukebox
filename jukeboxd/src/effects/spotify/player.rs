@@ -53,6 +53,16 @@ impl SpotifyPlayer {
         }
     }
 
+    pub fn wait_until_ready(&self) -> Result<(), Error> {
+        self.spotify_connector
+            .wait_until_ready()
+            .map_err(|_err| Error::NoSpotifyDevice)?;
+        self.access_token_provider
+            .wait_for_token()
+            .map_err(|_err| Error::NoToken)?;
+        Ok(())
+    }
+
     fn derive_start_playback_payload_from_spotify_uri(spotify_uri: &str) -> StartPlayback {
         if &spotify_uri[0..14] == "spotify:album:" {
             StartPlayback {
@@ -129,6 +139,8 @@ impl SpotifyPlayer {
 
 pub mod err {
     use super::*;
+
+    use super::super::util;
 
     #[derive(Debug)]
     pub enum Error {

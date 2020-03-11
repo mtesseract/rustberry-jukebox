@@ -3,7 +3,6 @@ use rustberry::config::Config;
 use rustberry::effects::spotify::connect::external_command::ExternalCommand;
 use slog::{self, o, Drain};
 use slog_async;
-use slog_scope::{error, info, warn};
 use slog_term;
 
 fn main() {
