@@ -62,8 +62,8 @@ pub mod external_command {
     }
 
     impl Drop for SupervisedCommand {
-        fn drop(self) {
-            self.child.write().kill();
+        fn drop(&mut self) {
+            self.child.write().unwrap().kill();
         }
     }
 
