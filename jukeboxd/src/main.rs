@@ -59,9 +59,11 @@ fn main_with_log() -> Fallible<()> {
         ],
         tx,
     );
-    application.run();
-    warn!("Jukebox loop terminated, terminating application");
-    unreachable!()
+    application.run().map_err(|err| {
+        warn!("Jukebox loop terminated, terminating application: {}", err);
+        err
+    })?;
+    unreachable!();
 }
 
 struct App {
@@ -82,7 +84,7 @@ impl App {
         }
     }
 
-    pub fn run(self) {
+    pub fn run(self) -> Fallible<()> {
         let mut sel = Select::new();
         for r in &self.inputs {
             sel.recv(r);
@@ -93,55 +95,47 @@ impl App {
             let index = sel.ready();
             let res = self.inputs[index].try_recv();
 
-            match res {
+            let effects: Vec<Effects> = match res {
                 Err(err) => {
                     if err.is_empty() {
                         // If the operation turns out not to be ready, retry.
-                        continue;
+                        vec![]
                     } else {
                         // FIXME
                         error!("Failed to receive input event: {}", err);
-                        continue;
+                        vec![]
                     }
                 }
                 Ok(input) => match input {
                     Input::Button(cmd) => match cmd {
-                        button::Command::Shutdown => {
-                            self.effects_tx
-                                .send(Effects::GenericCommand(
-                                    self.config
-                                        .shutdown_command
-                                        .clone()
-                                        .unwrap_or("sudo shutdown -h now".to_string()),
-                                ))
-                                .unwrap();
-                            break;
-                        }
-                        button::Command::VolumeUp => {
-                            self.effects_tx
-                                .send(Effects::GenericCommand(
-                                    self.config
-                                        .volume_up_command
-                                        .clone()
-                                        .unwrap_or("amixer -q -M set PCM 10%+".to_string()),
-                                ))
-                                .unwrap();
-                        }
-                        button::Command::VolumeDown => {
-                            self.effects_tx
-                                .send(Effects::GenericCommand(
-                                    self.config
-                                        .volume_up_command
-                                        .clone()
-                                        .unwrap_or("amixer -q -M set PCM 10%-".to_string()),
-                                ))
-                                .unwrap();
-                        }
+                        button::Command::Shutdown => vec![Effects::GenericCommand(
+                            self.config
+                                .shutdown_command
+                                .clone()
+                                .unwrap_or("sudo shutdown -h now".to_string()),
+                        )],
+                        button::Command::VolumeUp => vec![Effects::GenericCommand(
+                            self.config
+                                .volume_up_command
+                                .clone()
+                                .unwrap_or("amixer -q -M set PCM 10%+".to_string()),
+                        )],
+                        button::Command::VolumeDown => vec![Effects::GenericCommand(
+                            self.config
+                                .volume_up_command
+                                .clone()
+                                .unwrap_or("amixer -q -M set PCM 10%-".to_string()),
+                        )],
                     },
                     Input::Playback(request) => {
+                        // fixme
                         self.player_handle.playback(request).unwrap();
+                        vec![]
                     }
                 },
+            };
+            for effect in effects {
+                self.effects_tx.send(effect)?;
             }
         }
     }
