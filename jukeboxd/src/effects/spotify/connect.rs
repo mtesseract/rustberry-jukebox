@@ -14,7 +14,7 @@ pub enum SupervisorCommands {
 
 pub trait SpotifyConnector {
     fn wait_until_ready(&self) -> Result<(), util::JukeboxError> {
-        let n_attempts = 20;
+        let n_attempts = 30;
         for _idx in 0..n_attempts {
             if self.device_id().is_some() {
                 info!("Initial Device ID retrieved");
@@ -59,6 +59,12 @@ pub mod external_command {
         pub device_id: Arc<RwLock<Option<String>>>,
         pub access_token_provider: AccessTokenProvider,
         child: Arc<RwLock<Child>>,
+    }
+
+    impl Drop for SupervisedCommand {
+        fn drop(self) {
+            self.child.write().kill();
+        }
     }
 
     impl SupervisedCommand {
