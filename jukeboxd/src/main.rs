@@ -128,8 +128,12 @@ impl App {
                         )],
                     },
                     Input::Playback(request) => {
-                        // fixme
-                        self.player_handle.playback(request).unwrap();
+                        if let Err(err) = self.player_handle.playback(request.clone()) {
+                            error!(
+                                "Failed to send playback request {:?} to Player: {}",
+                                request, err
+                            );
+                        }
                         vec![]
                     }
                 },

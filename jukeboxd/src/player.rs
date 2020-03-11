@@ -69,30 +69,44 @@ impl Player {
                 Err(err) => {
                     error!("Player: Failed to receive input command: {:?}", err);
                 }
-                Ok(cmd) => match cmd {
-                    PlayerCommand::PlaybackRequest(req) => match req {
-                        self::PlaybackRequest::Start(resource) => match resource {
-                            PlaybackResource::SpotifyUri(spotify_uri) => {
-                                stop_effect = Some(Effects::StopSpotify);
-                                self.effects
-                                    .send(Effects::PlaySpotify { spotify_uri })
-                                    .unwrap();
-                            }
-                            PlaybackResource::Http(url) => {
-                                stop_effect = Some(Effects::StopHttp);
-                                self.effects.send(Effects::PlayHttp { url }).unwrap();
+                Ok(cmd) => {
+                    let effects = match cmd {
+                        PlayerCommand::PlaybackRequest(req) => match req {
+                            self::PlaybackRequest::Start(resource) => match resource {
+                                PlaybackResource::SpotifyUri(spotify_uri) => {
+                                    stop_effect = Some(Effects::StopSpotify);
+                                    vec![Effects::PlaySpotify { spotify_uri }]
+                                }
+                                PlaybackResource::Http(url) => {
+                                    stop_effect = Some(Effects::StopHttp);
+                                    vec![Effects::PlayHttp { url }]
+                                }
+                            },
+                            self::PlaybackRequest::Stop => {
+                                if let Some(stop_eff) = stop_effect {
+                                    let effs = vec![stop_eff.clone()];
+                                    stop_effect = None;
+                                    effs
+                                } else {
+                                    vec![]
+                                }
                             }
                         },
-                        self::PlaybackRequest::Stop => {
-                            let eff = stop_effect.clone().unwrap();
-                            self.effects.send(eff).unwrap();
+                        Terminate => {
+                            info!("Player received Terminate command, terminating");
+                            break;
                         }
-                    },
-                    Terminate => {
-                        info!("Player received Terminate command, terminating");
-                        break;
+                    };
+                    for effect in effects {
+                        if let Err(err) = self.effects.send(effect.clone()) {
+                            error!(
+                                "Failed to send player effect {:?} to effect channel: {}",
+                                effect, err
+                            );
+                            error!("Terminating Player");
+                        }
                     }
-                },
+                }
             }
         }
     }
