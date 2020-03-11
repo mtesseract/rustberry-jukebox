@@ -45,7 +45,7 @@ fn token_refresh_thread(
 
 impl AccessTokenProvider {
     pub fn wait_for_token(&self) -> Result<(), AtpError> {
-        let n_attempts = 10;
+        let n_attempts = 20;
         for _idx in 0..n_attempts {
             if self.access_token.read().unwrap().is_some() {
                 return Ok(());

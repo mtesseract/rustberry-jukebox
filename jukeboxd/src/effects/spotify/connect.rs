@@ -14,7 +14,7 @@ pub enum SupervisorCommands {
 
 pub trait SpotifyConnector {
     fn wait_until_ready(&self) -> Result<(), util::JukeboxError> {
-        let n_attempts = 10;
+        let n_attempts = 20;
         for _idx in 0..n_attempts {
             if self.device_id().is_some() {
                 info!("Initial Device ID retrieved");
