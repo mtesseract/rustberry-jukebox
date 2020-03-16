@@ -143,8 +143,10 @@ pub mod spotify_auth {
             .post(TOKEN_REFRESH_URL)
             .header(AUTHORIZATION, auth_token)
             .form(&params)
-            .send()?;
-        dbg!(&res);
+            .send()?
+            .error_for_status()?;
+
+        // FIXME: error logging.
         let rsp_body_json: serde_json::Value = res.json()?;
         dbg!(&rsp_body_json);
         Ok(serde_json::value::from_value(rsp_body_json)?)
