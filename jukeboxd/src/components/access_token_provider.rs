@@ -144,6 +144,7 @@ pub mod spotify_auth {
             .header(AUTHORIZATION, auth_token)
             .form(&params)
             .send()?;
+        dbg!(&res);
         let rsp_json: RefreshTokenResponse = res.json()?;
         Ok(rsp_json)
     }
