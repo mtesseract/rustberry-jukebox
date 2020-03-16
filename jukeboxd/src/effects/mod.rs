@@ -45,7 +45,7 @@ pub struct ProdInterpreter {
 impl ProdInterpreter {
     pub fn new(config: &Config) -> Fallible<Self> {
         let config = config.clone();
-        let spotify_player = SpotifyPlayer::new(&config);
+        let spotify_player = SpotifyPlayer::new(&config)?;
         let http_player = HttpPlayer::new();
         let led_controller = Box::new(led::gpio_cdev::GpioCdev::new()?);
         Ok(ProdInterpreter {

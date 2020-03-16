@@ -1,6 +1,7 @@
 use std::sync::{Arc, RwLock};
 use std::thread;
 
+use failure::Fallible;
 use gotham_derive::StateData;
 use slog_scope::{info, warn};
 
@@ -68,7 +69,11 @@ impl AccessTokenProvider {
         self.get_token().map(|token| format!("Bearer {}", &token))
     }
 
-    pub fn new(client_id: &str, client_secret: &str, refresh_token: &str) -> AccessTokenProvider {
+    pub fn new(
+        client_id: &str,
+        client_secret: &str,
+        refresh_token: &str,
+    ) -> Fallible<AccessTokenProvider> {
         let access_token = Arc::new(RwLock::new(None));
 
         {
@@ -86,15 +91,15 @@ impl AccessTokenProvider {
                         refresh_token,
                         access_token_clone,
                     )
-                });
+                })?;
         }
 
-        AccessTokenProvider {
+        Ok(AccessTokenProvider {
             client_id: client_id.clone().to_string(),
             client_secret: client_secret.clone().to_string(),
             refresh_token: refresh_token.clone().to_string(),
             access_token,
-        }
+        })
     }
 }
 

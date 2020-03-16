@@ -1,6 +1,7 @@
 use std::convert::From;
 use std::fmt::{self, Display};
 
+use failure::Fallible;
 use hyper::header::AUTHORIZATION;
 use reqwest::Client;
 use serde::Serialize;
@@ -28,14 +29,14 @@ struct StartPlayback {
 }
 
 impl SpotifyPlayer {
-    pub fn new(config: &Config) -> Self {
+    pub fn new(config: &Config) -> Fallible<Self> {
         let http_client = Client::new();
         // Create Access Token Provider
         let access_token_provider = access_token_provider::AccessTokenProvider::new(
             &config.client_id,
             &config.client_secret,
             &config.refresh_token,
-        );
+        )?;
         let spotify_connector = Box::new(
             connect::external_command::ExternalCommand::new_from_env(
                 &access_token_provider.clone(),
@@ -46,11 +47,11 @@ impl SpotifyPlayer {
 
         info!("Creating new SpotifyPlayer...");
 
-        SpotifyPlayer {
+        Ok(SpotifyPlayer {
             http_client,
             access_token_provider,
             spotify_connector,
-        }
+        })
     }
 
     pub fn wait_until_ready(&self) -> Result<(), Error> {
