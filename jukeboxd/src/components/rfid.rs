@@ -265,13 +265,25 @@ impl Read for TagReader {
                 std::io::Error::new(std::io::ErrorKind::Other, err)
             })?;
 
+        let bytes_to_read = N_BLOCK_SIZE + 2;
+
         // Read current block.
         let response = (*mfrc522)
-            .mifare_read(DATA_BLOCKS[self.current_block as usize], N_BLOCK_SIZE + 2)
+            .mifare_read(DATA_BLOCKS[self.current_block as usize], bytes_to_read)
             .map_err(|err| {
                 // error!("Failed to read data block from RFID tag");
                 std::io::Error::new(std::io::ErrorKind::Other, err)
             })?;
+
+        if response.data.len() != bytes_to_read as usize {
+            // Invalid / incomplete read.
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Incomplete read from RFID Tag",
+            ));
+        }
+
+        // Received complete block from RFID tag.
 
         let bytes_to_copy = std::cmp::min(
             buf.len(),
