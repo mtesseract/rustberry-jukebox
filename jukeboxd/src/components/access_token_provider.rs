@@ -24,17 +24,17 @@ fn token_refresh_thread(
 ) {
     loop {
         {
-            let token = request_fresh_token(&client_id, &client_secret, &refresh_token)
-                .map(|x| x.access_token);
-            if let Ok(ref token) = token {
-                info!("Retrieved fresh access token"; "access_token" => token);
-            } else {
-                warn!("Failed to retrieve access token");
-            }
-            let mut access_token_write = access_token.write().unwrap();
-
-            if let Ok(token) = token {
-                *access_token_write = Some(token);
+            match request_fresh_token(&client_id, &client_secret, &refresh_token)
+                .map(|x| x.access_token)
+            {
+                Ok(token) => {
+                    info!("Retrieved fresh access token"; "access_token" => &token);
+                    let mut access_token_write = access_token.write().unwrap();
+                    *access_token_write = Some(token);
+                }
+                Err(err) => {
+                    warn!("Failed to retrieve access token: {}", err);
+                }
             }
         }
         thread::sleep(std::time::Duration::from_secs(600));
