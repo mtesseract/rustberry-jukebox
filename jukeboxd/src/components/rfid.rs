@@ -290,8 +290,8 @@ impl Read for TagReader {
             (N_BLOCK_SIZE - self.current_pos_in_block) as usize,
         ) as u8;
 
-        info!("current_pos_in_block = {}, bytes_to_copy = {}, buf.len() = {}, response.data.len() = {}",
-            self.current_pos_in_block, bytes_to_copy, buf.len(), response.data.len());
+        // info!("current_pos_in_block = {}, bytes_to_copy = {}, buf.len() = {}, response.data.len() = {}",
+        //     self.current_pos_in_block, bytes_to_copy, buf.len(), response.data.len());
 
         let src: &[u8] = &response.data[self.current_pos_in_block as usize
             ..(self.current_pos_in_block + bytes_to_copy) as usize];

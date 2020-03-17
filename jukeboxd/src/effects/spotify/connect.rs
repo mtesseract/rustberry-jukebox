@@ -108,8 +108,8 @@ pub mod external_command {
             child: Arc<RwLock<Child>>,
         ) {
             loop {
-                info!("device ID watcher tick");
-                info!("Looking for device named '{}'", device_name);
+                // info!("device ID watcher tick");
+                // info!("Looking for device named '{}'", device_name);
                 match spotify::util::lookup_device_by_name(&access_token_provider, &device_name) {
                     Ok(device) => {
                         info!("Device ID found: {}", device.id);
@@ -139,7 +139,7 @@ pub mod external_command {
 
         fn supervisor(mut self) {
             loop {
-                info!("supervisor tick");
+                // info!("supervisor tick");
 
                 // Child is expected to be running.
                 // Check if it has terminated for some reason:
@@ -160,7 +160,7 @@ pub mod external_command {
                             info!("Respawned new Spotify Connector");
                         }
                     }
-                    Ok(None) => info!("Child appears to be still running."),
+                    Ok(None) => {}
                     Err(err) => {
                         error!(
                             "Failed to check if Spotify Connector is still running: {}",
