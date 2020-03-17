@@ -15,6 +15,8 @@ pub mod http_player;
 pub mod led;
 pub mod spotify;
 
+use std::sync::Arc;
+
 use crate::config::Config;
 use crossbeam_channel::Receiver;
 use failure::Fallible;
@@ -38,16 +40,17 @@ pub enum Effects {
 pub struct ProdInterpreter {
     spotify_player: SpotifyPlayer,
     http_player: HttpPlayer,
-    led_controller: Box<dyn LedController + 'static + Send>,
+    led_controller: Arc<Box<dyn LedController + 'static + Send + Sync>>,
     _config: Config,
 }
 
 impl ProdInterpreter {
     pub fn new(config: &Config) -> Fallible<Self> {
         let config = config.clone();
-        let spotify_player = SpotifyPlayer::new(&config)?;
+        let led_controller = Arc::new(Box::new(led::gpio_cdev::GpioCdev::new()?)
+            as Box<dyn LedController + 'static + Send + Sync>);
+        let spotify_player = SpotifyPlayer::new(&config, Arc::clone(&led_controller))?;
         let http_player = HttpPlayer::new();
-        let led_controller = Box::new(led::gpio_cdev::GpioCdev::new()?);
         Ok(ProdInterpreter {
             spotify_player,
             http_player,

@@ -1,5 +1,6 @@
 use std::convert::From;
 use std::fmt::{self, Display};
+use std::sync::Arc;
 
 use failure::Fallible;
 use hyper::header::AUTHORIZATION;
@@ -11,6 +12,7 @@ use crate::components::access_token_provider::{self, AccessTokenProvider};
 use crate::config::Config;
 
 use super::connect::{self, SpotifyConnector};
+use crate::effects::led::{Led, LedController};
 
 pub use err::*;
 
@@ -18,6 +20,7 @@ pub struct SpotifyPlayer {
     http_client: Client,
     access_token_provider: AccessTokenProvider,
     spotify_connector: Box<dyn SpotifyConnector + 'static + Send>,
+    led_controller: Arc<Box<dyn LedController + 'static + Send + Sync>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -29,7 +32,10 @@ struct StartPlayback {
 }
 
 impl SpotifyPlayer {
-    pub fn new(config: &Config) -> Fallible<Self> {
+    pub fn new(
+        config: &Config,
+        led_controller: Arc<Box<dyn LedController + 'static + Send + Sync>>,
+    ) -> Fallible<Self> {
         let http_client = Client::new();
         // Create Access Token Provider
         let access_token_provider = access_token_provider::AccessTokenProvider::new(
@@ -51,6 +57,7 @@ impl SpotifyPlayer {
             http_client,
             access_token_provider,
             spotify_connector,
+            led_controller,
         })
     }
 
@@ -85,8 +92,6 @@ impl SpotifyPlayer {
             Some(device_id) => device_id,
             None => return Err(Error::NoSpotifyDevice),
         };
-        dbg!(&device_id);
-        dbg!(&access_token);
         let req = Self::derive_start_playback_payload_from_spotify_uri(spotify_uri);
         self.http_client
             .put("https://api.spotify.com/v1/me/player/play")
@@ -105,7 +110,9 @@ impl SpotifyPlayer {
                 rsp
             })?
             .error_for_status()
-            .map(|_| ())
+            .map(|_| {
+                self.led_controller.switch_on(Led::Playback);
+            })
             .map_err(|err| Error::HTTP(err))
     }
 
@@ -133,7 +140,9 @@ impl SpotifyPlayer {
                 rsp
             })?
             .error_for_status()
-            .map(|_| ())
+            .map(|_| {
+                self.led_controller.switch_off(Led::Playback);
+            })
             .map_err(|err| Error::HTTP(err))
     }
 }
