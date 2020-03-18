@@ -42,9 +42,9 @@ impl HttpPlayer {
     }
 
     pub fn start_playback(&mut self, url: &str) -> Result<(), Error> {
-        let child = Command::new("sh")
-            .arg("-c")
-            .arg(&self.command)
+        let child = Command::new("omxplayer")
+            .arg("-o")
+            .arg("hdmi")
             .arg(url)
             .stdin(Stdio::null())
             .spawn()?;

@@ -41,3 +41,4 @@ cargo build $MODE_SWITCH --bin $PROGRAM --target=armv7-unknown-linux-gnueabihf
 "
 
 scp rustberry-builder:$DIR/rustberry/jukeboxd/target/armv7-unknown-linux-gnueabihf/$MODE/$PROGRAM .
+scp $PROGRAM rustberry:~
