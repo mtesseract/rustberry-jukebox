@@ -18,7 +18,7 @@ pub use err::*;
 
 pub struct HttpPlayer {
     command: String,
-    led_controller: Arc<Box<dyn LedController + 'static + Send + Sync>>,
+    led_controller: Option<Arc<Box<dyn LedController + 'static + Send + Sync>>>,
     child: Option<Child>,
 }
 
@@ -27,7 +27,7 @@ pub struct HttpPlayerHandle {}
 impl HttpPlayer {
     pub fn new(
         config: &Config,
-        led_controller: Arc<Box<dyn LedController + 'static + Send + Sync>>,
+        led_controller: Option<Arc<Box<dyn LedController + 'static + Send + Sync>>>,
     ) -> Fallible<Self> {
         info!("Creating new HttpPlayer...");
         let command = env::var("HTTP_PLAYER_COMMAND").map_err(Context::new)?;
@@ -50,7 +50,9 @@ impl HttpPlayer {
             .stdin(Stdio::null())
             .spawn()?;
         self.child = Some(child);
-        self.led_controller.switch_on(Led::Playback);
+        if let Some(ref led_controller) = self.led_controller {
+            led_controller.switch_on(Led::Playback);
+        }
         Ok(())
     }
 
@@ -62,8 +64,9 @@ impl HttpPlayer {
             info!("Killed HTTP player child");
             self.child = None;
         }
-        self.led_controller.switch_off(Led::Playback);
-
+        if let Some(ref led_controller) = self.led_controller {
+            led_controller.switch_off(Led::Playback);
+        }
         Ok(())
     }
 }

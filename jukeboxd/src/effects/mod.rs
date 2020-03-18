@@ -50,7 +50,7 @@ impl ProdInterpreter {
         let led_controller = Arc::new(Box::new(led::gpio_cdev::GpioCdev::new()?)
             as Box<dyn LedController + 'static + Send + Sync>);
         let spotify_player = SpotifyPlayer::new(&config, Arc::clone(&led_controller))?;
-        let http_player = HttpPlayer::new(&config, Arc::clone(&led_controller))?;
+        let http_player = HttpPlayer::new(&config, Some(Arc::clone(&led_controller)))?;
         Ok(ProdInterpreter {
             spotify_player,
             http_player,
