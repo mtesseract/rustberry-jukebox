@@ -45,6 +45,7 @@ impl HttpPlayer {
         let child = Command::new("omxplayer")
             .arg("-o")
             .arg("hdmi")
+            .arg("--no-keys")
             .arg(url)
             .stdin(Stdio::null())
             .spawn()?;
