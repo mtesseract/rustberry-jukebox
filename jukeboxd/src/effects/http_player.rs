@@ -1,33 +1,69 @@
+use std::env;
 use std::fmt::{self, Display};
+use std::process::{Child, Command, Stdio};
+use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 
-use reqwest::Client;
-use serde::Serialize;
+use failure::{Context, Fallible};
+
 use slog_scope::{error, info, warn};
 use std::convert::From;
 
-use crossbeam_channel::{Receiver, RecvError, RecvTimeoutError, Select, Sender};
+// use crossbeam_channel::{Receiver, RecvError, RecvTimeoutError, Select, Sender};
+
+use crate::config::Config;
+use crate::effects::led::{Led, LedController};
 
 pub use err::*;
 
 pub struct HttpPlayer {
-    http_client: Client,
+    command: String,
+    led_controller: Arc<Box<dyn LedController + 'static + Send + Sync>>,
+    child: Option<Child>,
 }
 
 pub struct HttpPlayerHandle {}
 
 impl HttpPlayer {
-    pub fn new() -> Self {
-        let http_client = Client::new();
-        HttpPlayer { http_client }
+    pub fn new(
+        config: &Config,
+        led_controller: Arc<Box<dyn LedController + 'static + Send + Sync>>,
+    ) -> Fallible<Self> {
+        info!("Creating new HttpPlayer...");
+        let command = env::var("HTTP_PLAYER_COMMAND").map_err(Context::new)?;
+
+        let player = HttpPlayer {
+            command,
+            led_controller,
+            child: None,
+        };
+
+        Ok(player)
     }
 
-    pub fn start_playback(&self, url: &str, username: &str, password: &str) -> Result<(), Error> {
-        unimplemented!()
+    pub fn start_playback(&mut self, url: &str) -> Result<(), Error> {
+        let child = Command::new("sh")
+            .arg("-c")
+            .arg(&self.command)
+            .arg(url)
+            .stdin(Stdio::null())
+            .spawn()?;
+        self.child = Some(child);
+        self.led_controller.switch_on(Led::Playback);
+        Ok(())
     }
 
-    pub fn stop_playback(&self) -> Result<(), Error> {
-        unimplemented!()
+    pub fn stop_playback(&mut self) -> Result<(), Error> {
+        if let Some(ref mut child) = self.child {
+            if let Err(err) = child.kill() {
+                warn!("HTTP Player failed to kill child: {}", err);
+            }
+            info!("Killed HTTP player child");
+            self.child = None;
+        }
+        self.led_controller.switch_off(Led::Playback);
+
+        Ok(())
     }
 }
 
@@ -36,20 +72,20 @@ pub mod err {
 
     #[derive(Debug)]
     pub enum Error {
-        HTTP(reqwest::Error),
+        IO(std::io::Error),
     }
 
     impl Display for Error {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             match self {
-                Error::HTTP(err) => write!(f, "HTTP Player Error {}", err),
+                Error::IO(err) => write!(f, "HTTP Player IO Error {}", err),
             }
         }
     }
 
-    impl From<reqwest::Error> for Error {
-        fn from(err: reqwest::Error) -> Self {
-            Error::HTTP(err)
+    impl From<std::io::Error> for Error {
+        fn from(err: std::io::Error) -> Self {
+            Error::IO(err)
         }
     }
 

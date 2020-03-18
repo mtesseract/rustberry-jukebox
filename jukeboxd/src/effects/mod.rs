@@ -50,7 +50,7 @@ impl ProdInterpreter {
         let led_controller = Arc::new(Box::new(led::gpio_cdev::GpioCdev::new()?)
             as Box<dyn LedController + 'static + Send + Sync>);
         let spotify_player = SpotifyPlayer::new(&config, Arc::clone(&led_controller))?;
-        let http_player = HttpPlayer::new();
+        let http_player = HttpPlayer::new(&config, Arc::clone(&led_controller))?;
         Ok(ProdInterpreter {
             spotify_player,
             http_player,
@@ -64,7 +64,7 @@ impl ProdInterpreter {
         Ok(())
     }
 
-    fn handle(&self, effect: &Effects) -> Fallible<()> {
+    fn handle(&mut self, effect: &Effects) -> Fallible<()> {
         match effect {
             Effects::PlaySpotify { spotify_uri } => {
                 self.spotify_player.start_playback(&spotify_uri)?;
@@ -75,8 +75,7 @@ impl ProdInterpreter {
                 Ok(())
             }
             Effects::PlayHttp { url } => {
-                self.http_player
-                    .start_playback(&url, unimplemented!(), unimplemented!())?;
+                self.http_player.start_playback(&url)?;
                 Ok(())
             }
             Effects::StopHttp => {
@@ -119,7 +118,7 @@ impl ProdInterpreter {
         }
     }
 
-    pub fn run(&self, channel: Receiver<Effects>) -> Fallible<()> {
+    pub fn run(&mut self, channel: Receiver<Effects>) -> Fallible<()> {
         // FIXME
         for effect in channel.iter() {
             if let Err(err) = self.handle(&effect) {
