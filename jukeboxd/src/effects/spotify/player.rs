@@ -3,8 +3,8 @@ use std::fmt::{self, Display};
 use std::sync::Arc;
 
 use failure::Fallible;
-use hyper::header::AUTHORIZATION;
-use reqwest::Client;
+use http::header::AUTHORIZATION;
+use reqwest::blocking::Client;
 use serde::Serialize;
 use slog_scope::{error, info};
 
@@ -103,9 +103,9 @@ impl SpotifyPlayer {
                 error!("{}: Executing HTTP request failed: {}", msg, err);
                 err
             })
-            .map(|mut rsp| {
+            .map(|rsp| {
                 if !rsp.status().is_success() {
-                    error!("{}: HTTP Failure {}: {:?}", msg, rsp.status(), rsp.text());
+                    error!("{}: HTTP Failure {}", msg, rsp.status());
                 }
                 rsp
             })?
@@ -133,9 +133,9 @@ impl SpotifyPlayer {
                 error!("{}: Executing HTTP request failed: {}", msg, err);
                 err
             })
-            .map(|mut rsp| {
+            .map(|rsp| {
                 if !rsp.status().is_success() {
-                    error!("{}: HTTP Failure {}: {:?}", msg, rsp.status(), rsp.text());
+                    error!("{}: HTTP Failure {}", msg, rsp.status());
                 }
                 rsp
             })?

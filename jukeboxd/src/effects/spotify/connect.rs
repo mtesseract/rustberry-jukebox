@@ -112,7 +112,6 @@ pub mod external_command {
                 // info!("Looking for device named '{}'", device_name);
                 match spotify::util::lookup_device_by_name(&access_token_provider, &device_name) {
                     Ok(device) => {
-                        info!("Device ID found: {}", device.id);
                         *(device_id.write().unwrap()) = Some(device.id);
                     }
                     Err(JukeboxError::DeviceNotFound { .. }) => {

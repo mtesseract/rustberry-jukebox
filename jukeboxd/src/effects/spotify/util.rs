@@ -1,6 +1,6 @@
 use failure::Fail;
-use hyper::header::AUTHORIZATION;
-use reqwest::Client;
+use http::header::AUTHORIZATION;
+use reqwest::blocking::Client;
 use serde::Deserialize;
 
 use crate::components::access_token_provider::{AccessTokenProvider, AtpError};
@@ -53,7 +53,7 @@ pub fn lookup_device_by_name(
 ) -> Result<Device, JukeboxError> {
     let http_client = Client::new();
     let access_token = access_token_provider.get_bearer_token()?;
-    let mut rsp = http_client
+    let rsp = http_client
         .get("https://api.spotify.com/v1/me/player/devices")
         .header(AUTHORIZATION, &access_token)
         .send()?;

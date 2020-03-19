@@ -2,14 +2,14 @@ use std::sync::{Arc, RwLock};
 use std::thread;
 
 use failure::Fallible;
-use gotham_derive::StateData;
+// use gotham_derive::StateData;
 use slog_scope::{info, warn};
 
 use spotify_auth::request_fresh_token;
 
 pub use err::*;
 
-#[derive(Debug, Clone, StateData)]
+#[derive(Debug, Clone)]
 pub struct AccessTokenProvider {
     client_id: String,
     client_secret: String,
@@ -143,8 +143,8 @@ pub mod spotify_auth {
         let auth_token = format!("Basic {}", client_id_and_secret);
         let params = [("grant_type", grant_type), ("refresh_token", refresh_token)];
 
-        let http_client = reqwest::Client::new();
-        let mut res = http_client
+        let http_client = reqwest::blocking::Client::new();
+        let res = http_client
             .post(TOKEN_REFRESH_URL)
             .header(AUTHORIZATION, auth_token)
             .form(&params)
