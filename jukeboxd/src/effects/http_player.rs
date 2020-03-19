@@ -5,6 +5,7 @@ use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 
 use failure::{Context, Fallible};
+use reqwest;
 
 use slog_scope::{error, info, warn};
 use std::convert::From;
@@ -15,22 +16,26 @@ use crate::effects::led::{Led, LedController};
 pub use err::*;
 
 pub struct HttpPlayer {
-    led_controller: Option<Arc<Box<dyn LedController + 'static + Send + Sync>>>,
+    _led_controller: Option<Arc<Box<dyn LedController + 'static + Send + Sync>>>,
 }
 
 impl HttpPlayer {
     pub fn new(
-        config: &Config,
+        _config: &Config,
         led_controller: Option<Arc<Box<dyn LedController + 'static + Send + Sync>>>,
     ) -> Fallible<Self> {
         info!("Creating new HttpPlayer...");
 
-        let player = HttpPlayer { led_controller };
+        let player = HttpPlayer {
+            _led_controller: led_controller,
+        };
 
         Ok(player)
     }
 
     pub fn start_playback(&mut self, url: &str) -> Result<(), Error> {
+        let rsp = reqwest::blocking::get(url)?;
+
         unimplemented!()
     }
 
@@ -45,12 +50,14 @@ pub mod err {
     #[derive(Debug)]
     pub enum Error {
         IO(std::io::Error),
+        Http(reqwest::Error),
     }
 
     impl Display for Error {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             match self {
                 Error::IO(err) => write!(f, "HTTP Player IO Error {}", err),
+                Error::Http(err) => write!(f, "HTTP Player HTTP Error {}", err),
             }
         }
     }
@@ -58,6 +65,12 @@ pub mod err {
     impl From<std::io::Error> for Error {
         fn from(err: std::io::Error) -> Self {
             Error::IO(err)
+        }
+    }
+
+    impl From<reqwest::Error> for Error {
+        fn from(err: reqwest::Error) -> Self {
+            Error::Http(err)
         }
     }
 
@@ -144,12 +157,14 @@ pub mod external_command {
         #[derive(Debug)]
         pub enum Error {
             IO(std::io::Error),
+            Http(reqwest::Error),
         }
 
         impl Display for Error {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                 match self {
                     Error::IO(err) => write!(f, "HTTP Player IO Error {}", err),
+                    Error::Http(err) => write!(f, "HTTP Player HTTP Error {}", err),
                 }
             }
         }
@@ -157,6 +172,12 @@ pub mod external_command {
         impl From<std::io::Error> for Error {
             fn from(err: std::io::Error) -> Self {
                 Error::IO(err)
+            }
+        }
+
+        impl From<reqwest::Error> for Error {
+            fn from(err: reqwest::Error) -> Self {
+                Error::Http(err)
             }
         }
 
