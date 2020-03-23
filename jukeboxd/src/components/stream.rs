@@ -11,7 +11,6 @@ pub struct FiniteStream {
     bytes: Vec<u8>,
     pos: usize,
     stream: Pin<Box<dyn Send + 'static + Stream<Item = Result<Bytes, reqwest::Error>>>>,
-    finished: bool,
 }
 
 impl FiniteStream {
@@ -28,13 +27,11 @@ impl FiniteStream {
         let bytes = Vec::with_capacity(length);
         let pos = 0;
         let stream = Box::pin(response.bytes_stream());
-        let finished = false;
         Ok(FiniteStream {
             length,
             bytes,
             pos,
             stream,
-            finished,
         })
     }
 
@@ -47,7 +44,6 @@ impl FiniteStream {
             bytes: Vec::new(),
             pos: 0,
             stream,
-            finished: false,
             length,
         }
     }
@@ -102,31 +98,32 @@ impl std::io::Seek for FiniteStream {
 
 impl std::io::Read for FiniteStream {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, std::io::Error> {
-        if self.finished {
-            Ok(0)
-        } else {
-            let n_buf = buf.len();
-            // fill buffer more if required.
-            if self.pos == self.bytes.len() {
-                if let Some(res) = futures::executor::block_on(self.stream.next()) {
-                    match res {
-                        Ok(bytes) => {
-                            self.bytes.extend_from_slice(bytes.as_ref());
-                        }
-                        Err(err) => {
-                            return Err(std::io::Error::new(std::io::ErrorKind::Other, err));
-                        }
+        let n_buf = buf.len();
+        // fill buffer more if required.
+        if self.pos == self.bytes.len() && self.bytes.len() < self.length {
+            if let Some(res) = futures::executor::block_on(self.stream.next()) {
+                match res {
+                    Ok(bytes) => {
+                        self.bytes.extend_from_slice(bytes.as_ref());
+                    }
+                    Err(err) => {
+                        return Err(std::io::Error::new(std::io::ErrorKind::Other, err));
                     }
                 }
             }
-
-            let n_remaining_available = self.bytes.len() - self.pos;
-            let n_to_read = std::cmp::min(n_buf, n_remaining_available);
-
-            let slice: &[u8] = self.bytes.as_ref();
-            buf[0..n_to_read].copy_from_slice(&slice[self.pos..self.pos + n_to_read]);
-            self.pos += n_to_read;
-            Ok(n_to_read)
         }
+
+        let n_remaining_available = self.bytes.len() - self.pos;
+        let n_to_read = std::cmp::min(n_buf, n_remaining_available);
+
+        let slice: &[u8] = self.bytes.as_ref();
+        buf[0..n_to_read].copy_from_slice(&slice[self.pos..self.pos + n_to_read]);
+        self.pos += n_to_read;
+
+        dbg!(&self.pos);
+        dbg!(&self.length);
+        dbg!(&self.bytes.len());
+
+        Ok(n_to_read)
     }
 }
