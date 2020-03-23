@@ -120,10 +120,6 @@ impl std::io::Read for FiniteStream {
         buf[0..n_to_read].copy_from_slice(&slice[self.pos..self.pos + n_to_read]);
         self.pos += n_to_read;
 
-        dbg!(&self.pos);
-        dbg!(&self.length);
-        dbg!(&self.bytes.len());
-
         Ok(n_to_read)
     }
 }

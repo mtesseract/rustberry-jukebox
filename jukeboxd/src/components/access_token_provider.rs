@@ -153,7 +153,6 @@ pub mod spotify_auth {
 
         // FIXME: error logging.
         let rsp_body_json: serde_json::Value = res.json()?;
-        dbg!(&rsp_body_json);
         Ok(serde_json::value::from_value(rsp_body_json)?)
     }
 }

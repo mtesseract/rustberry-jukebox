@@ -1,7 +1,7 @@
 FROM ubuntu:latest
 
 RUN apt-get update && apt-get dist-upgrade --yes \
-    && apt-get install --yes curl git gcc gcc-multilib-arm-linux-gnueabihf pkg-config libssl-dev \
+    && apt-get install --yes curl git gcc gcc-multilib-arm-linux-gnueabihf pkg-config libssl-dev openssh-server \
     && useradd -ms /bin/bash builder
 
 RUN cd /usr/local && \
@@ -14,12 +14,15 @@ RUN cd /usr/local && \
     export CC=arm-linux-gnueabihf-gcc && \
     cd openssl && \
     ./config shared && \
-    make
-
-RUN apt-get clean
-RUN apt-get update && apt-get install openssh-server --yes
-
-RUN echo trigger
+    make && \
+    cd /usr/local && \
+    curl -O https://www.alsa-project.org/files/pub/lib/alsa-lib-1.2.2.tar.bz2 && \
+    tar xjf alsa-lib-1.2.2.tar.bz2 && \
+    cd alsa-lib-1.2.2 && \
+    export CC=arm-linux-gnueabihf-gcc && \
+    ./configure --host=arm-linux-gnueabihf && \
+    make && \
+    make install
 
 RUN su builder bash -c '\
     curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
