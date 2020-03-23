@@ -21,7 +21,7 @@ pub use err::*;
 use crate::components::stream::FiniteStream;
 
 pub struct HttpPlayer {
-    _led_controller: Option<Arc<Box<dyn LedController + 'static + Send + Sync>>>,
+    led_controller: Option<Arc<Box<dyn LedController + 'static + Send + Sync>>>,
     handle: Option<JoinHandle<()>>,
     tx: Option<Sender<()>>,
 }
@@ -32,7 +32,7 @@ impl HttpPlayer {
     ) -> Fallible<Self> {
         info!("Creating new HttpPlayer...");
         let player = HttpPlayer {
-            _led_controller: led_controller,
+            led_controller,
             handle: None,
             tx: None,
         };
@@ -43,6 +43,7 @@ impl HttpPlayer {
     pub fn start_playback(&mut self, url: &str) -> Result<(), Error> {
         let url = url.clone().to_string();
         let (tx, rx) = crossbeam_channel::bounded(1);
+        let led_controller = self.led_controller.as_ref().map(|x| Arc::clone(&x));
 
         let handle = Builder::new()
             .name("http-player".to_string())
@@ -56,7 +57,13 @@ impl HttpPlayer {
                     let source = rodio::Decoder::new(BufReader::new(stream)).unwrap();
                     sink.append(source);
                     sink.play();
+                    if let Some(ref led_controller) = led_controller {
+                        let _ = led_controller.switch_on(Led::Playback);
+                    }
                     let _msg = rx.recv();
+                    if let Some(ref led_controller) = led_controller {
+                        let _ = led_controller.switch_off(Led::Playback);
+                    }
                 };
                 rt.block_on(f);
             })

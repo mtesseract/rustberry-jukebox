@@ -19,6 +19,8 @@ RUN cd /usr/local && \
 RUN apt-get clean
 RUN apt-get update && apt-get install openssh-server --yes
 
+RUN echo trigger
+
 RUN su builder bash -c '\
     curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
     && . ~/.cargo/env \
@@ -29,8 +31,6 @@ RUN su builder bash -c '\
 RUN su builder bash -c '\
     echo -e "[target.armv7-unknown-linux-gnueabihf]\nlinker = \"arm-linux-gnueabihf-gcc-7\"\n" > ~/.cargo/config \
     '
-
-RUN apt-get update && apt-get install --yes maven
 
 ADD rustberry-builder.pub /home/builder/.ssh/authorized_keys
 
