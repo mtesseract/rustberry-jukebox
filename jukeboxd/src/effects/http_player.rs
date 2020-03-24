@@ -24,6 +24,8 @@ pub struct HttpPlayer {
     led_controller: Option<Arc<Box<dyn LedController + 'static + Send + Sync>>>,
     handle: Option<JoinHandle<()>>,
     tx: Option<Sender<()>>,
+    basic_auth: Option<(String, String)>,
+    http_client: Arc<reqwest::Client>,
 }
 
 impl HttpPlayer {
@@ -31,10 +33,22 @@ impl HttpPlayer {
         led_controller: Option<Arc<Box<dyn LedController + 'static + Send + Sync>>>,
     ) -> Fallible<Self> {
         info!("Creating new HttpPlayer...");
+        let http_client = Arc::new(reqwest::Client::new());
+        let basic_auth = {
+            let username: Option<String> = env::var("HTTP_PLAYER_USERNAME").map(|x| Some(x)).unwrap_or(None);
+            let password: Option<String> = env::var("HTTP_PLAYER_PASSWORD").map(|x| Some(x)).unwrap_or(None);
+            if let (Some(username), Some(password)) = (username, password) {
+                Some((username, password))
+            } else {
+                None
+            }
+        };
         let player = HttpPlayer {
             led_controller,
             handle: None,
             tx: None,
+            basic_auth,
+            http_client,
         };
 
         Ok(player)
@@ -44,6 +58,8 @@ impl HttpPlayer {
         let url = url.clone().to_string();
         let (tx, rx) = crossbeam_channel::bounded(1);
         let led_controller = self.led_controller.as_ref().map(|x| Arc::clone(&x));
+        let http_client = self.http_client.clone();
+        let basic_auth = self.basic_auth.clone();
 
         let handle = Builder::new()
             .name("http-player".to_string())
@@ -52,7 +68,11 @@ impl HttpPlayer {
                 let device = rodio::default_output_device().unwrap();
                 let sink = Sink::new(&device);
                 let f = async {
-                    let response = reqwest::get(&url).await.unwrap();
+                    let mut builder = http_client.get(&url);
+                    if let Some((username, password)) = basic_auth {
+                        builder = builder.basic_auth(username, Some(password));
+                    }
+                    let response = builder.send().await.unwrap();
                     let stream = FiniteStream::from_response(response).unwrap();
                     let source = rodio::Decoder::new(BufReader::new(stream)).unwrap();
                     sink.append(source);
