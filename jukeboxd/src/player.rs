@@ -1,11 +1,13 @@
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 
+use failure::Fallible;
+
 use crossbeam_channel::{Receiver, Select, Sender};
 use serde::{Deserialize, Serialize};
 use slog_scope::{error, info};
 
-use crate::effects::Effects;
+use crate::effects::Interpreter;
 
 pub use err::*;
 
@@ -22,7 +24,7 @@ pub struct Handle {
 }
 
 pub struct Player {
-    effects: Sender<Effects>,
+    interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
     commands: Receiver<PlayerCommand>,
 }
 
@@ -69,54 +71,42 @@ impl Player {
                 Err(err) => {
                     error!("Player: Failed to receive input command: {:?}", err);
                 }
-                Ok(cmd) => {
-                    let effects = match cmd {
-                        PlayerCommand::PlaybackRequest(req) => match req {
-                            self::PlaybackRequest::Start(resource) => match resource {
-                                PlaybackResource::SpotifyUri(spotify_uri) => {
-                                    stop_effect = Some(Effects::StopSpotify);
-                                    vec![Effects::PlaySpotify { spotify_uri }]
-                                }
-                                PlaybackResource::Http(url) => {
-                                    stop_effect = Some(Effects::StopHttp);
-                                    vec![Effects::PlayHttp { url }]
-                                }
-                            },
-                            self::PlaybackRequest::Stop => {
-                                if let Some(stop_eff) = stop_effect {
-                                    let effs = vec![stop_eff.clone()];
-                                    stop_effect = None;
-                                    effs
-                                } else {
-                                    vec![]
-                                }
+                Ok(cmd) => match cmd {
+                    PlayerCommand::PlaybackRequest(req) => match req {
+                        self::PlaybackRequest::Start(resource) => match resource {
+                            PlaybackResource::SpotifyUri(spotify_uri) => {
+                                stop_effect = Some(Box::new(|| self.interpreter.stop_spotify())
+                                    as Box<dyn Fn() -> Fallible<()>>);
+                                self.interpreter.play_spotify(spotify_uri);
+                            }
+                            PlaybackResource::Http(url) => {
+                                stop_effect = Some(Box::new(|| self.interpreter.stop_http())
+                                    as Box<dyn Fn() -> Fallible<()>>);
+                                self.interpreter.play_http(url);
                             }
                         },
-                        Terminate => {
-                            info!("Player received Terminate command, terminating");
-                            break;
+                        self::PlaybackRequest::Stop => {
+                            if let Some(stop_eff) = stop_effect {
+                                stop_eff();
+                                stop_effect = None;
+                            }
                         }
-                    };
-                    for effect in effects {
-                        if let Err(err) = self.effects.send(effect.clone()) {
-                            error!(
-                                "Failed to send player effect {:?} to effect channel: {}",
-                                effect, err
-                            );
-                            error!("Terminating Player");
-                        }
+                    },
+                    Terminate => {
+                        info!("Player received Terminate command, terminating");
+                        break;
                     }
-                }
+                },
             }
         }
     }
 
-    pub fn new(effects: Sender<Effects>) -> Handle {
+    pub fn new(interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>) -> Handle {
         let (tx, rx) = crossbeam_channel::bounded(1);
 
         let player = Player {
             commands: rx,
-            effects,
+            interpreter,
         };
 
         let handle = thread::Builder::new()

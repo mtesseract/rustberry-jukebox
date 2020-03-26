@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::thread;
 
 use crossbeam_channel::{self, Receiver, Select, Sender};
@@ -9,7 +10,7 @@ use slog_term;
 
 use rustberry::config::Config;
 use rustberry::effects::Effects;
-use rustberry::effects::ProdInterpreter;
+use rustberry::effects::{Interpreter, ProdInterpreter};
 use rustberry::input_controller::{
     button,
     playback::{self},
@@ -31,8 +32,8 @@ fn main_with_log() -> Fallible<()> {
     let config = envy::from_env::<Config>()?;
     info!("Configuration"; o!("device_name" => &config.device_name));
 
-    // Create Effects Channel and Interpreter.
-    let (tx, rx): (Sender<Effects>, Receiver<Effects>) = crossbeam_channel::bounded(2);
+    // // Create Effects Channel and Interpreter.
+    // let (tx, rx): (Sender<Effects>, Receiver<Effects>) = crossbeam_channel::bounded(2);
     let mut interpreter = ProdInterpreter::new(&config).unwrap();
 
     interpreter.wait_until_ready().map_err(|err| {
@@ -40,14 +41,11 @@ fn main_with_log() -> Fallible<()> {
         err
     })?;
 
-    // Run Interpreter.
-    thread::Builder::new()
-        .name("interpreter".to_string())
-        .spawn(move || interpreter.run(rx))
-        .unwrap();
+    let interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>> =
+        Arc::new(Box::new(interpreter));
 
     // Create Player component.
-    let player_handle = Player::new(tx.clone());
+    // let player_handle = Player::new(interpreter.clone());
 
     // Prepare individual input channels.
     let button_controller_handle =
@@ -58,11 +56,11 @@ fn main_with_log() -> Fallible<()> {
     // Execute Application Logic, producing Effects.
     let application = App::new(
         config,
+        interpreter.clone(),
         &vec![
             button_controller_handle.channel(),
             playback_controller_handle.channel(),
         ],
-        tx,
     );
     application.run().map_err(|err| {
         warn!("Jukebox loop terminated, terminating application: {}", err);
@@ -74,18 +72,22 @@ fn main_with_log() -> Fallible<()> {
 struct App {
     config: Config,
     player_handle: player::Handle,
+    interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>>,
     inputs: Vec<Receiver<Input>>,
-    effects_tx: Sender<Effects>,
 }
 
 impl App {
-    pub fn new(config: Config, inputs: &[Receiver<Input>], effects_tx: Sender<Effects>) -> Self {
-        let player_handle = Player::new(effects_tx.clone());
+    pub fn new(
+        config: Config,
+        interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>>,
+        inputs: &[Receiver<Input>],
+    ) -> Self {
+        let player_handle = Player::new(interpreter.clone());
         Self {
             config,
             inputs: inputs.to_vec(),
-            effects_tx,
             player_handle,
+            interpreter,
         }
     }
 
@@ -100,37 +102,37 @@ impl App {
             let index = sel.ready();
             let res = self.inputs[index].try_recv();
 
-            let effects: Vec<Effects> = match res {
+            match res {
                 Err(err) => {
                     if err.is_empty() {
                         // If the operation turns out not to be ready, retry.
-                        vec![]
                     } else {
                         // FIXME
                         error!("Failed to receive input event: {}", err);
-                        vec![]
                     }
                 }
                 Ok(input) => match input {
                     Input::Button(cmd) => match cmd {
-                        button::Command::Shutdown => vec![Effects::GenericCommand(
-                            self.config
-                                .shutdown_command
-                                .clone()
-                                .unwrap_or("sudo shutdown -h now".to_string()),
-                        )],
-                        button::Command::VolumeUp => vec![Effects::GenericCommand(
-                            self.config
-                                .volume_up_command
-                                .clone()
-                                .unwrap_or("amixer -q -M set PCM 10%+".to_string()),
-                        )],
-                        button::Command::VolumeDown => vec![Effects::GenericCommand(
-                            self.config
-                                .volume_up_command
-                                .clone()
-                                .unwrap_or("amixer -q -M set PCM 10%-".to_string()),
-                        )],
+                        button::Command::Shutdown => {
+                            self.interpreter
+                                .generic_command(self.config.shutdown_command.clone().unwrap())
+                                .map_err(|err| error!("{}", err));
+                        }
+                        _ => {
+                            unimplemented!()
+                        }
+                        // button::Command::VolumeUp => vec![Effects::GenericCommand(
+                        //     self.config
+                        //         .volume_up_command
+                        //         .clone()
+                        //         .unwrap_or("amixer -q -M set PCM 10%+".to_string()),
+                        // )],
+                        // button::Command::VolumeDown => vec![Effects::GenericCommand(
+                        //     self.config
+                        //         .volume_up_command
+                        //         .clone()
+                        //         .unwrap_or("amixer -q -M set PCM 10%-".to_string()),
+                        // )],
                     },
                     Input::Playback(request) => {
                         if let Err(err) = self.player_handle.playback(request.clone()) {
@@ -139,13 +141,12 @@ impl App {
                                 request, err
                             );
                         }
-                        vec![]
                     }
                 },
             };
-            for effect in effects {
-                self.effects_tx.send(effect)?;
-            }
+            // for effect in effects {
+            //     self.effects_tx.send(effect)?;
+            // }
         }
     }
 }

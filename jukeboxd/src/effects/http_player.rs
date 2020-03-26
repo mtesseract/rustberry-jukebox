@@ -23,7 +23,8 @@ use crate::components::stream::FiniteStream;
 pub struct HttpPlayer {
     led_controller: Option<Arc<Box<dyn LedController + 'static + Send + Sync>>>,
     handle: Option<JoinHandle<()>>,
-    tx: Option<Sender<()>>,
+    rx: Receiver<()>,
+    tx: Sender<()>,
     basic_auth: Option<(String, String)>,
     http_client: Arc<reqwest::Client>,
 }
@@ -33,10 +34,15 @@ impl HttpPlayer {
         led_controller: Option<Arc<Box<dyn LedController + 'static + Send + Sync>>>,
     ) -> Fallible<Self> {
         info!("Creating new HttpPlayer...");
+        let (tx, rx) = crossbeam_channel::bounded(1);
         let http_client = Arc::new(reqwest::Client::new());
         let basic_auth = {
-            let username: Option<String> = env::var("HTTP_PLAYER_USERNAME").map(|x| Some(x)).unwrap_or(None);
-            let password: Option<String> = env::var("HTTP_PLAYER_PASSWORD").map(|x| Some(x)).unwrap_or(None);
+            let username: Option<String> = env::var("HTTP_PLAYER_USERNAME")
+                .map(|x| Some(x))
+                .unwrap_or(None);
+            let password: Option<String> = env::var("HTTP_PLAYER_PASSWORD")
+                .map(|x| Some(x))
+                .unwrap_or(None);
             if let (Some(username), Some(password)) = (username, password) {
                 Some((username, password))
             } else {
@@ -46,20 +52,21 @@ impl HttpPlayer {
         let player = HttpPlayer {
             led_controller,
             handle: None,
-            tx: None,
             basic_auth,
             http_client,
+            tx,
+            rx,
         };
 
         Ok(player)
     }
 
-    pub fn start_playback(&mut self, url: &str) -> Result<(), Error> {
+    pub fn start_playback(&self, url: &str) -> Result<(), Error> {
         let url = url.clone().to_string();
-        let (tx, rx) = crossbeam_channel::bounded(1);
         let led_controller = self.led_controller.as_ref().map(|x| Arc::clone(&x));
         let http_client = self.http_client.clone();
         let basic_auth = self.basic_auth.clone();
+        let rx = self.rx.clone();
 
         let handle = Builder::new()
             .name("http-player".to_string())
@@ -89,23 +96,12 @@ impl HttpPlayer {
             })
             .unwrap();
 
-        self.handle = Some(handle);
-        self.tx = Some(tx);
         Ok(())
     }
 
-    pub fn stop_playback(&mut self) -> Result<(), Error> {
-        match self.tx {
-            Some(ref tx) => {
-                info!("Cancelling HTTP Player");
-                let tx = tx.clone();
-                self.tx = None;
-                tx.send(()).unwrap();
-            }
-            None => {
-                warn!("HTTP Player: Nothing to stop");
-            }
-        }
+    pub fn stop_playback(&self) -> Result<(), Error> {
+        info!("Cancelling HTTP Player");
+        self.tx.send(()).unwrap();
         Ok(())
     }
 }

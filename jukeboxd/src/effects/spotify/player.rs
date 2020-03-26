@@ -19,7 +19,7 @@ pub use err::*;
 pub struct SpotifyPlayer {
     http_client: Client,
     access_token_provider: AccessTokenProvider,
-    spotify_connector: Box<dyn SpotifyConnector + 'static + Send>,
+    spotify_connector: Box<dyn SpotifyConnector + 'static + Sync + Send>,
     led_controller: Arc<Box<dyn LedController + 'static + Send + Sync>>,
 }
 
