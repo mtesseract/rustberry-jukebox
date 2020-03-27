@@ -23,6 +23,6 @@ fn main_with_log() {
         &config.refresh_token,
     )
     .unwrap();
-    let cmd = ExternalCommand::new_from_env(&access_token_provider, "rustberry-test".to_string());
+    let _cmd = ExternalCommand::new_from_env(&access_token_provider, "rustberry-test".to_string());
     std::thread::sleep(std::time::Duration::from_secs(60));
 }

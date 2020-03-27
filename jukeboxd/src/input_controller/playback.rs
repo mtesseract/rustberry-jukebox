@@ -46,7 +46,7 @@ pub mod rfid {
             let transmitter = Self { picc, tx };
             std::thread::Builder::new()
                 .name("playback-transmitter".to_string())
-                .spawn(move || transmitter.run(msg_transformer).unwrap());
+                .spawn(move || transmitter.run(msg_transformer).unwrap())?;
             Ok(Handle { channel: rx })
         }
 

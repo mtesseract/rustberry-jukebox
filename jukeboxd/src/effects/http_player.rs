@@ -1,28 +1,23 @@
-use failure::{Context, Fallible};
+use failure::{Fallible};
 use reqwest;
 use rodio::Sink;
-use slog_scope::{error, info, warn};
+use slog_scope::{info};
 use std::convert::From;
 use std::env;
 use std::fmt::{self, Display};
 use std::io::BufReader;
-use std::process::{Child, Command, Stdio};
 use std::sync::Arc;
-use std::thread::{self, Builder, JoinHandle};
+use std::thread::{Builder, JoinHandle};
 
 use crossbeam_channel::{self, Receiver, Sender};
 use tokio::runtime::Runtime;
-
-use crate::config::Config;
-use crate::effects::led::{Led, LedController};
 
 pub use err::*;
 
 use crate::components::stream::FiniteStream;
 
 pub struct HttpPlayer {
-    led_controller: Option<Arc<Box<dyn LedController + 'static + Send + Sync>>>,
-    handle: Option<JoinHandle<()>>,
+    _handle: Option<JoinHandle<()>>,
     rx: Receiver<()>,
     tx: Sender<()>,
     basic_auth: Option<(String, String)>,
@@ -31,7 +26,6 @@ pub struct HttpPlayer {
 
 impl HttpPlayer {
     pub fn new(
-        led_controller: Option<Arc<Box<dyn LedController + 'static + Send + Sync>>>,
     ) -> Fallible<Self> {
         info!("Creating new HttpPlayer...");
         let (tx, rx) = crossbeam_channel::bounded(1);
@@ -50,8 +44,7 @@ impl HttpPlayer {
             }
         };
         let player = HttpPlayer {
-            led_controller,
-            handle: None,
+            _handle: None,
             basic_auth,
             http_client,
             tx,
@@ -63,12 +56,11 @@ impl HttpPlayer {
 
     pub fn start_playback(&self, url: &str) -> Result<(), Error> {
         let url = url.clone().to_string();
-        let led_controller = self.led_controller.as_ref().map(|x| Arc::clone(&x));
         let http_client = self.http_client.clone();
         let basic_auth = self.basic_auth.clone();
         let rx = self.rx.clone();
 
-        let handle = Builder::new()
+        let _handle = Builder::new()
             .name("http-player".to_string())
             .spawn(move || {
                 let mut rt = Runtime::new().unwrap();
@@ -84,13 +76,7 @@ impl HttpPlayer {
                     let source = rodio::Decoder::new(BufReader::new(stream)).unwrap();
                     sink.append(source);
                     sink.play();
-                    if let Some(ref led_controller) = led_controller {
-                        let _ = led_controller.switch_on(Led::Playback);
-                    }
                     let _msg = rx.recv();
-                    if let Some(ref led_controller) = led_controller {
-                        let _ = led_controller.switch_off(Led::Playback);
-                    }
                 };
                 rt.block_on(f);
             })

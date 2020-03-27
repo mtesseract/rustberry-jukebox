@@ -18,11 +18,10 @@ pub mod spotify;
 use std::sync::Arc;
 
 use crate::config::Config;
-use crossbeam_channel::Receiver;
 use failure::Fallible;
 use http_player::HttpPlayer;
 use led::{Led, LedController};
-use slog_scope::{error, info, warn};
+use slog_scope::{info, warn};
 use spotify::player::SpotifyPlayer;
 use std::process::Command;
 
@@ -45,9 +44,9 @@ pub struct ProdInterpreter {
 }
 
 pub trait Interpreter {
-    fn play_http(&self, url: String) -> Fallible<()>;
+    fn play_http(&self, url: &str) -> Fallible<()>;
     fn stop_http(&self) -> Fallible<()>;
-    fn play_spotify(&self, spotify_uri: String) -> Fallible<()>;
+    fn play_spotify(&self, spotify_uri: &str) -> Fallible<()>;
     fn stop_spotify(&self) -> Fallible<()>;
     fn led_on(&self) -> Fallible<()>;
     fn led_off(&self) -> Fallible<()>;
@@ -55,33 +54,31 @@ pub trait Interpreter {
 }
 
 impl Interpreter for ProdInterpreter {
-    fn play_http(&self, url: String) -> Fallible<()> {
-        self.http_player.start_playback(&url)?;
+    fn play_http(&self, url: &str) -> Fallible<()> {
+        self.http_player.start_playback(url)?;
         Ok(())
     }
 
     fn stop_http(&self) -> Fallible<()> {
-        self.http_player.stop_playback()?;
-        Ok(())
+        self.http_player.stop_playback().map_err(|err| err.into())
     }
-    fn play_spotify(&self, spotify_uri: String) -> Fallible<()> {
-        self.spotify_player.start_playback(&spotify_uri)?;
-
-        Ok(())
+    fn play_spotify(&self, spotify_uri: &str) -> Fallible<()> {
+        self.spotify_player
+            .start_playback(&spotify_uri)
+            .map_err(|err| err.into())
     }
     fn stop_spotify(&self) -> Fallible<()> {
-        self.spotify_player.stop_playback()?;
-        Ok(())
+        self.spotify_player
+            .stop_playback()
+            .map_err(|err| err.into())
     }
     fn led_on(&self) -> Fallible<()> {
         info!("Switching LED on");
-        self.led_controller.switch_on(Led::Playback);
-        Ok(())
+        self.led_controller.switch_on(Led::Playback)
     }
     fn led_off(&self) -> Fallible<()> {
         info!("Switching LED off");
-        self.led_controller.switch_off(Led::Playback);
-        Ok(())
+        self.led_controller.switch_off(Led::Playback)
     }
     fn generic_command(&self, cmd: String) -> Fallible<()> {
         info!("Executing command '{}'", &cmd);
@@ -115,8 +112,8 @@ impl ProdInterpreter {
         let config = config.clone();
         let led_controller = Arc::new(Box::new(led::gpio_cdev::GpioCdev::new()?)
             as Box<dyn LedController + 'static + Send + Sync>);
-        let spotify_player = SpotifyPlayer::new(&config, Arc::clone(&led_controller))?;
-        let http_player = HttpPlayer::new(Some(Arc::clone(&led_controller)))?;
+        let spotify_player = SpotifyPlayer::new(&config)?;
+        let http_player = HttpPlayer::new()?;
         Ok(ProdInterpreter {
             spotify_player,
             http_player,
@@ -193,4 +190,71 @@ impl ProdInterpreter {
     //     }
     //     Ok(())
     // }
+}
+
+pub mod test {
+    use super::*;
+    use crossbeam_channel::{self, Receiver, Sender};
+    use Effects::*;
+
+    pub struct TestInterpreter {
+        tx: Sender<Effects>,
+    }
+
+    impl TestInterpreter {
+        pub fn new() -> (TestInterpreter, Receiver<Effects>) {
+            let (tx, rx) = crossbeam_channel::unbounded();
+            let interpreter = TestInterpreter { tx };
+            (interpreter, rx)
+        }
+    }
+
+    // PlayHttp { url: String },
+    // StopHttp,
+    // PlaySpotify { spotify_uri: String },
+    // StopSpotify,
+    // LedOn,
+    // LedOff,
+    // GenericCommand(String),
+
+    impl Interpreter for TestInterpreter {
+        fn play_http(&self, url: &str) -> Fallible<()> {
+            self.tx
+                .send(PlayHttp {
+                    url: url.to_string().clone(),
+                })
+                .unwrap();
+            Ok(())
+        }
+        fn stop_http(&self) -> Fallible<()> {
+            self.tx.send(StopHttp).unwrap();
+            Ok(())
+        }
+        fn play_spotify(&self, spotify_uri: &str) -> Fallible<()> {
+            self.tx
+                .send(PlaySpotify {
+                    spotify_uri: spotify_uri.to_string().clone(),
+                })
+                .unwrap();
+            Ok(())
+        }
+        fn stop_spotify(&self) -> Fallible<()> {
+            self.tx.send(StopSpotify).unwrap();
+            Ok(())
+        }
+        fn led_on(&self) -> Fallible<()> {
+            self.tx.send(LedOn).unwrap();
+            Ok(())
+        }
+        fn led_off(&self) -> Fallible<()> {
+            self.tx.send(LedOff).unwrap();
+            Ok(())
+        }
+        fn generic_command(&self, cmd: String) -> Fallible<()> {
+            self.tx
+                .send(GenericCommand(cmd.to_string().clone()))
+                .unwrap();
+            Ok(())
+        }
+    }
 }

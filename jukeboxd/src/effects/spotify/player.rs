@@ -1,6 +1,5 @@
 use std::convert::From;
 use std::fmt::{self, Display};
-use std::sync::Arc;
 
 use failure::Fallible;
 use http::header::AUTHORIZATION;
@@ -12,7 +11,6 @@ use crate::components::access_token_provider::{self, AccessTokenProvider};
 use crate::config::Config;
 
 use super::connect::{self, SpotifyConnector};
-use crate::effects::led::{Led, LedController};
 
 pub use err::*;
 
@@ -20,7 +18,6 @@ pub struct SpotifyPlayer {
     http_client: Client,
     access_token_provider: AccessTokenProvider,
     spotify_connector: Box<dyn SpotifyConnector + 'static + Sync + Send>,
-    led_controller: Arc<Box<dyn LedController + 'static + Send + Sync>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -32,10 +29,7 @@ struct StartPlayback {
 }
 
 impl SpotifyPlayer {
-    pub fn new(
-        config: &Config,
-        led_controller: Arc<Box<dyn LedController + 'static + Send + Sync>>,
-    ) -> Fallible<Self> {
+    pub fn new(config: &Config) -> Fallible<Self> {
         let http_client = Client::new();
         // Create Access Token Provider
         let access_token_provider = access_token_provider::AccessTokenProvider::new(
@@ -57,7 +51,6 @@ impl SpotifyPlayer {
             http_client,
             access_token_provider,
             spotify_connector,
-            led_controller,
         })
     }
 
@@ -110,9 +103,7 @@ impl SpotifyPlayer {
                 rsp
             })?
             .error_for_status()
-            .map(|_| {
-                self.led_controller.switch_on(Led::Playback);
-            })
+            .map(|_| ())
             .map_err(|err| Error::HTTP(err))
     }
 
@@ -140,17 +131,13 @@ impl SpotifyPlayer {
                 rsp
             })?
             .error_for_status()
-            .map(|_| {
-                self.led_controller.switch_off(Led::Playback);
-            })
+            .map(|_| ())
             .map_err(|err| Error::HTTP(err))
     }
 }
 
 pub mod err {
     use super::*;
-
-    use super::super::util;
 
     #[derive(Debug)]
     pub enum Error {

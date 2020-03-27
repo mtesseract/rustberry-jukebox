@@ -43,8 +43,6 @@ pub mod external_command {
     use std::thread::{self, JoinHandle};
     use std::time::Duration;
 
-    use crossbeam_channel::{self, Receiver, RecvTimeoutError, Sender};
-
     pub struct ExternalCommand {
         device_id: Arc<RwLock<Option<String>>>,
         // status: Receiver<T>,
@@ -63,14 +61,19 @@ pub mod external_command {
 
     impl Drop for SupervisedCommand {
         fn drop(&mut self) {
-            self.child.write().unwrap().kill();
+            if let Err(err) = self.child.write().unwrap().kill() {
+                error!(
+                    "Failed to terminate supervised librespot while dropiing SupervisedCommand: {}",
+                    err
+                );
+            }
         }
     }
 
     impl SupervisedCommand {
-        fn kill_child(&mut self) -> Result<(), std::io::Error> {
-            self.child.write().unwrap().kill()
-        }
+        // fn kill_child(&mut self) -> Result<(), std::io::Error> {
+        //     self.child.write().unwrap().kill()
+        // }
 
         fn respawn(&mut self) -> Result<(), std::io::Error> {
             let child = Command::new("sh").arg("-c").arg(&self.cmd).spawn()?;

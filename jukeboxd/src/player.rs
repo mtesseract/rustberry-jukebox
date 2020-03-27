@@ -3,7 +3,7 @@ use std::thread::{self, JoinHandle};
 
 use failure::Fallible;
 
-use crossbeam_channel::{Receiver, Select, Sender};
+use crossbeam_channel::{Receiver, Sender};
 use serde::{Deserialize, Serialize};
 use slog_scope::{error, info};
 
@@ -77,17 +77,23 @@ impl Player {
                             PlaybackResource::SpotifyUri(spotify_uri) => {
                                 stop_effect = Some(Box::new(|| self.interpreter.stop_spotify())
                                     as Box<dyn Fn() -> Fallible<()>>);
-                                self.interpreter.play_spotify(spotify_uri);
+                                if let Err(err) = self.interpreter.play_spotify(&spotify_uri) {
+                                    error!("Failed to play Spotify URI '{}': {}", spotify_uri, err);
+                                }
                             }
                             PlaybackResource::Http(url) => {
                                 stop_effect = Some(Box::new(|| self.interpreter.stop_http())
                                     as Box<dyn Fn() -> Fallible<()>>);
-                                self.interpreter.play_http(url);
+                                if let Err(err) = self.interpreter.play_http(&url) {
+                                    error!("Failed to play HTTP URI '{}': {}", url, err);
+                                }
                             }
                         },
                         self::PlaybackRequest::Stop => {
                             if let Some(stop_eff) = stop_effect {
-                                stop_eff();
+                                if let Err(err) = stop_eff() {
+                                    error!("Failed to stop playback: {}", err);
+                                }
                                 stop_effect = None;
                             }
                         }
@@ -160,14 +166,16 @@ pub mod err {
 mod test {
     use failure::Fallible;
 
-    use crate::effects::Effects;
+    use crate::effects::{test::TestInterpreter, Effects};
 
     use super::*;
 
     #[test]
     fn player_plays_resource_on_playback_request() -> Fallible<()> {
-        let (effects_tx, effects_rx) = crossbeam_channel::bounded(10);
-        let player_handle = Player::new(effects_tx);
+        let (interpreter, effects_rx) = TestInterpreter::new();
+        let interpreter =
+            Arc::new(Box::new(interpreter) as Box<dyn Interpreter + Send + Sync + 'static>);
+        let player_handle = Player::new(interpreter);
         let playback_requests = vec![
             PlayerCommand::PlaybackRequest(PlaybackRequest::Start(PlaybackResource::SpotifyUri(
                 "spotify:track:5j6ZZwA9BnxZi5Bk0Ng4jB".to_string(),
