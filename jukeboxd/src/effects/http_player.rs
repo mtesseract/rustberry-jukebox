@@ -1,7 +1,7 @@
-use failure::{Fallible};
+use failure::Fallible;
 use reqwest;
 use rodio::Sink;
-use slog_scope::{info};
+use slog_scope::info;
 use std::convert::From;
 use std::env;
 use std::fmt::{self, Display};
@@ -25,8 +25,7 @@ pub struct HttpPlayer {
 }
 
 impl HttpPlayer {
-    pub fn new(
-    ) -> Fallible<Self> {
+    pub fn new() -> Fallible<Self> {
         info!("Creating new HttpPlayer...");
         let (tx, rx) = crossbeam_channel::bounded(1);
         let http_client = Arc::new(reqwest::Client::new());

@@ -1,11 +1,10 @@
+use std::cell::RefCell;
 use std::sync::Arc;
-use std::thread::{self, JoinHandle};
 
 use failure::Fallible;
 
-use crossbeam_channel::{Receiver, Sender};
 use serde::{Deserialize, Serialize};
-use slog_scope::{error, info};
+use slog_scope::error;
 
 use crate::effects::Interpreter;
 
@@ -17,23 +16,9 @@ pub enum PlayerCommand {
     Terminate,
 }
 
-#[derive(Debug, Clone)]
-pub struct Handle {
-    handle: Arc<JoinHandle<()>>,
-    commands: Sender<PlayerCommand>,
-}
-
 pub struct Player {
     interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
-    commands: Receiver<PlayerCommand>,
-}
-
-impl Drop for Handle {
-    fn drop(&mut self) {
-        println!("Destroying Player");
-        let _ = self.commands.send(PlayerCommand::Terminate);
-        // FIXME?
-    }
+    stop_eff: RefCell<Option<Box<dyn Fn() -> Fallible<()>>>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -48,82 +33,46 @@ pub enum PlaybackResource {
     Http(String),
 }
 
-impl Handle {
-    pub fn playback(&self, request: PlaybackRequest) -> Result<(), Error> {
-        self.send_command(PlayerCommand::PlaybackRequest(request))
-    }
-    pub fn send_command(&self, cmd: PlayerCommand) -> Result<(), Error> {
-        self.commands.send(cmd)?;
-        Ok(())
-    }
-}
-
 impl Player {
-    fn main(self) {
-        use PlayerCommand::*;
-
-        let mut stop_effect = None;
-
-        loop {
-            let res = self.commands.recv();
-
-            match res {
-                Err(err) => {
-                    error!("Player: Failed to receive input command: {:?}", err);
-                }
-                Ok(cmd) => match cmd {
-                    PlayerCommand::PlaybackRequest(req) => match req {
-                        self::PlaybackRequest::Start(resource) => match resource {
-                            PlaybackResource::SpotifyUri(spotify_uri) => {
-                                stop_effect = Some(Box::new(|| self.interpreter.stop_spotify())
-                                    as Box<dyn Fn() -> Fallible<()>>);
-                                if let Err(err) = self.interpreter.play_spotify(&spotify_uri) {
-                                    error!("Failed to play Spotify URI '{}': {}", spotify_uri, err);
-                                }
-                            }
-                            PlaybackResource::Http(url) => {
-                                stop_effect = Some(Box::new(|| self.interpreter.stop_http())
-                                    as Box<dyn Fn() -> Fallible<()>>);
-                                if let Err(err) = self.interpreter.play_http(&url) {
-                                    error!("Failed to play HTTP URI '{}': {}", url, err);
-                                }
-                            }
-                        },
-                        self::PlaybackRequest::Stop => {
-                            if let Some(stop_eff) = stop_effect {
-                                if let Err(err) = stop_eff() {
-                                    error!("Failed to stop playback: {}", err);
-                                }
-                                stop_effect = None;
-                            }
-                        }
-                    },
-                    Terminate => {
-                        info!("Player received Terminate command, terminating");
-                        break;
+    pub fn playback(&self, req: PlaybackRequest) -> Result<(), Error> {
+        match req {
+            self::PlaybackRequest::Start(resource) => match resource {
+                PlaybackResource::SpotifyUri(spotify_uri) => {
+                    let interpreter = self.interpreter.clone();
+                    *(self.stop_eff.borrow_mut()) =
+                        Some(Box::new(move || interpreter.stop_spotify())
+                            as Box<dyn Fn() -> Fallible<()>>);
+                    if let Err(err) = self.interpreter.play_spotify(&spotify_uri) {
+                        error!("Failed to play Spotify URI '{}': {}", spotify_uri, err);
                     }
-                },
+                }
+                PlaybackResource::Http(url) => {
+                    let interpreter = self.interpreter.clone();
+                    *(self.stop_eff.borrow_mut()) =
+                        Some(Box::new(move || interpreter.stop_http())
+                            as Box<dyn Fn() -> Fallible<()>>);
+                    if let Err(err) = self.interpreter.play_http(&url) {
+                        error!("Failed to play HTTP URI '{}': {}", url, err);
+                    }
+                }
+            },
+            self::PlaybackRequest::Stop => {
+                // if let Some(stop_eff) = self.stop_eff.borrow() {
+                //     if let Err(err) = stop_eff() {
+                //         error!("Failed to stop playback: {}", err);
+                //     }
+                //     stop_effect = None;
+                // }
             }
         }
+        Ok(())
     }
-
-    pub fn new(interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>) -> Handle {
-        let (tx, rx) = crossbeam_channel::bounded(1);
-
+    pub fn new(interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>) -> Self {
         let player = Player {
-            commands: rx,
             interpreter,
+            stop_eff: RefCell::new(None),
         };
-
-        let handle = thread::Builder::new()
-            .name("player".to_string())
-            .spawn(|| player.main())
-            .unwrap();
-
-        Handle {
-            handle: Arc::new(handle),
-            commands: tx,
-        }
+        player
     }
 }
 

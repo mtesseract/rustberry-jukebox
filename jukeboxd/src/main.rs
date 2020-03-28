@@ -27,7 +27,6 @@ fn main_with_log() -> Fallible<()> {
     info!("Configuration"; o!("device_name" => &config.device_name));
 
     // // Create Effects Channel and Interpreter.
-    // let (tx, rx): (Sender<Effects>, Receiver<Effects>) = crossbeam_channel::bounded(2);
     let interpreter = ProdInterpreter::new(&config).unwrap();
 
     interpreter.wait_until_ready().map_err(|err| {
@@ -62,7 +61,7 @@ fn main_with_log() -> Fallible<()> {
 
 struct App {
     config: Config,
-    player_handle: player::Handle,
+    player: player::Player,
     interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>>,
     inputs: Vec<Receiver<Input>>,
 }
@@ -73,11 +72,11 @@ impl App {
         interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>>,
         inputs: &[Receiver<Input>],
     ) -> Self {
-        let player_handle = Player::new(interpreter.clone());
+        let player = Player::new(interpreter.clone());
         Self {
             config,
             inputs: inputs.to_vec(),
-            player_handle,
+            player,
             interpreter,
         }
     }
@@ -97,6 +96,7 @@ impl App {
                 Err(err) => {
                     if err.is_empty() {
                         // If the operation turns out not to be ready, retry.
+                        continue;
                     } else {
                         // FIXME
                         error!("Failed to receive input event: {}", err);
@@ -136,11 +136,8 @@ impl App {
                         }
                     },
                     Input::Playback(request) => {
-                        if let Err(err) = self.player_handle.playback(request.clone()) {
-                            error!(
-                                "Failed to send playback request {:?} to Player: {}",
-                                request, err
-                            );
+                        if let Err(err) = self.player.playback(request.clone()) {
+                            error!("Failed to execute playback request {:?}: {}", request, err);
                         }
                         match request {
                             PlaybackRequest::Start(_) => {
