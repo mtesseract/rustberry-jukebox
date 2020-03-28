@@ -57,12 +57,13 @@ impl Player {
                 }
             },
             self::PlaybackRequest::Stop => {
-                // if let Some(stop_eff) = self.stop_eff.borrow() {
-                //     if let Err(err) = stop_eff() {
-                //         error!("Failed to stop playback: {}", err);
-                //     }
-                //     stop_effect = None;
-                // }
+                let mut stop_eff = self.stop_eff.borrow_mut();
+                if let Some(ref eff) = *stop_eff {
+                    if let Err(err) = eff() {
+                        error!("Failed to stop playback: {}", err);
+                    }
+                    *stop_eff = None;
+                }
             }
         }
         Ok(())
