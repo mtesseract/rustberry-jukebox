@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use crossbeam_channel::{self, Receiver, Select};
 use failure::Fallible;
@@ -11,6 +12,8 @@ use rustberry::config::Config;
 use rustberry::effects::{Interpreter, ProdInterpreter};
 use rustberry::input_controller::{button, playback, Input};
 use rustberry::player::{self, PlaybackRequest, Player};
+
+use led::Blinker;
 
 fn main() -> Fallible<()> {
     let decorator = slog_term::TermDecorator::new().build();
@@ -26,16 +29,21 @@ fn main_with_log() -> Fallible<()> {
     let config = envy::from_env::<Config>()?;
     info!("Configuration"; o!("device_name" => &config.device_name));
 
-    // // Create Effects Channel and Interpreter.
+    // Create Effects Channel and Interpreter.
     let interpreter = ProdInterpreter::new(&config).unwrap();
+    let interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>> =
+        Arc::new(Box::new(interpreter));
+
+    let blinker = Blinker::new(interpreter.clone()).unwrap();
+    blinker.run_async(led::Cmd::Loop(Box::new(led::Cmd::Many(vec![
+        led::Cmd::On(Duration::from_millis(100)),
+        led::Cmd::Off(Duration::from_millis(100)),
+    ]))));
 
     interpreter.wait_until_ready().map_err(|err| {
         error!("Failed to wait for interpreter readiness: {}", err);
         err
     })?;
-
-    let interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>> =
-        Arc::new(Box::new(interpreter));
 
     // Prepare individual input channels.
     let button_controller_handle =
@@ -47,6 +55,7 @@ fn main_with_log() -> Fallible<()> {
     let application = App::new(
         config,
         interpreter.clone(),
+        blinker,
         &vec![
             button_controller_handle.channel(),
             playback_controller_handle.channel(),
@@ -64,12 +73,14 @@ struct App {
     player: player::Player,
     interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>>,
     inputs: Vec<Receiver<Input>>,
+    blinker: Blinker,
 }
 
 impl App {
     pub fn new(
         config: Config,
         interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>>,
+        blinker: Blinker,
         inputs: &[Receiver<Input>],
     ) -> Self {
         let player = Player::new(interpreter.clone());
@@ -78,10 +89,18 @@ impl App {
             inputs: inputs.to_vec(),
             player,
             interpreter,
+            blinker,
         }
     }
 
     pub fn run(self) -> Fallible<()> {
+        self.blinker.run_async(led::Cmd::Repeat(
+            1,
+            Box::new(led::Cmd::Many(vec![
+                led::Cmd::On(Duration::from_secs(1)),
+                led::Cmd::Off(Duration::from_secs(0)),
+            ])),
+        ));
         let mut sel = Select::new();
         for r in &self.inputs {
             sel.recv(r);
@@ -190,5 +209,101 @@ mod test {
         let produced_effects: Vec<Effects> = effects_rx.iter().collect();
 
         assert_eq!(produced_effects, effects_expected);
+    }
+}
+
+mod led {
+    use std::cell::RefCell;
+    use std::future::Future;
+    use std::pin::Pin;
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    use failure::Fallible;
+    use futures::future::AbortHandle;
+    use rustberry::effects::Interpreter;
+    use slog_scope::info;
+
+    pub struct Blinker {
+        interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
+        abort_handle: RefCell<Option<AbortHandle>>,
+        runtime: tokio::runtime::Runtime,
+    }
+
+    #[derive(Debug, Clone)]
+    pub enum Cmd {
+        Repeat(u32, Box<Cmd>),
+        Loop(Box<Cmd>),
+        On(Duration),
+        Off(Duration),
+        Many(Vec<Cmd>),
+    }
+
+    impl Blinker {
+        pub fn new(
+            interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
+        ) -> Fallible<Self> {
+            let abort_handle = RefCell::new(None);
+            let runtime = tokio::runtime::Builder::new()
+                .threaded_scheduler()
+                .enable_all()
+                .build()?;
+            let blinker = Self {
+                interpreter,
+                abort_handle,
+                runtime,
+            };
+            Ok(blinker)
+        }
+
+        fn run(
+            interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
+            cmd: Cmd,
+        ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+            Box::pin(async move {
+                match cmd {
+                    Cmd::On(duration) => {
+                        info!("Blinker switches on");
+                        let _ = interpreter.led_on();
+                        tokio::time::delay_for(duration).await;
+                    }
+                    Cmd::Off(duration) => {
+                        info!("Blinker switches off");
+                        let _ = interpreter.led_off();
+                        tokio::time::delay_for(duration).await;
+                    }
+                    Cmd::Many(cmds) => {
+                        info!("Blinker processes Many");
+                        for cmd in &cmds {
+                            Self::run(interpreter.clone(), cmd.clone()).await;
+                        }
+                    }
+                    Cmd::Repeat(n, cmd) => {
+                        info!("Blinker processes Repeat (n = {})", n);
+                        for _i in 0..n {
+                            Self::run(interpreter.clone(), (*cmd).clone()).await;
+                        }
+                    }
+                    Cmd::Loop(cmd) => loop {
+                        Self::run(interpreter.clone(), (*cmd).clone()).await;
+                    },
+                }
+            })
+        }
+
+        pub fn run_async(&self, spec: Cmd) {
+            info!("Blinker run_async()");
+            if let Some(ref abort_handle) = *(self.abort_handle.borrow()) {
+                info!("Terminating current blinking task");
+                abort_handle.abort();
+            }
+            let interpreter = self.interpreter.clone();
+            // let spec = spec.clone();
+            let (f, handle) =
+                futures::future::abortable(async move { Self::run(interpreter, spec).await });
+            let _join_handle = self.runtime.spawn(f);
+            info!("Created new blinking task");
+            *(self.abort_handle.borrow_mut()) = Some(handle);
+        }
     }
 }

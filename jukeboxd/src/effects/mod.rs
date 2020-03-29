@@ -44,6 +44,7 @@ pub struct ProdInterpreter {
 }
 
 pub trait Interpreter {
+    fn wait_until_ready(&self) -> Fallible<()>;
     fn play_http(&self, url: &str) -> Fallible<()>;
     fn stop_http(&self) -> Fallible<()>;
     fn play_spotify(&self, spotify_uri: &str) -> Fallible<()>;
@@ -54,6 +55,11 @@ pub trait Interpreter {
 }
 
 impl Interpreter for ProdInterpreter {
+    fn wait_until_ready(&self) -> Fallible<()> {
+        self.spotify_player.wait_until_ready()?;
+        Ok(())
+    }
+
     fn play_http(&self, url: &str) -> Fallible<()> {
         self.http_player.start_playback(url)?;
         Ok(())
@@ -121,12 +127,6 @@ impl ProdInterpreter {
             _config: config,
         })
     }
-
-    pub fn wait_until_ready(&self) -> Fallible<()> {
-        self.spotify_player.wait_until_ready()?;
-        Ok(())
-    }
-
     // fn handle(&mut self, effect: &Effects) -> Fallible<()> {
     //     match effect {
     //         Effects::PlaySpotify { spotify_uri } => {
@@ -218,6 +218,10 @@ pub mod test {
     // GenericCommand(String),
 
     impl Interpreter for TestInterpreter {
+        fn wait_until_ready(&self) -> Fallible<()> {
+            Ok(())
+        }
+
         fn play_http(&self, url: &str) -> Fallible<()> {
             self.tx
                 .send(PlayHttp {
