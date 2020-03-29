@@ -258,7 +258,11 @@ mod led {
                     let _ = interpreter.led_off();
                     thread::sleep(*duration);
                 }
-                XXX::Many(xxxs) => for xxx in xxxs {},
+                XXX::Many(xxxs) => for xxx in xxxs {
+                    for xxx in xxxs {
+                        Self::run(interpreter.clone(), xxx);
+                    }
+                },
                 XXX::Repeat(n, xxx) => {
                     for _i in 0..*n {
                         Self::run(interpreter.clone(), xxx)
