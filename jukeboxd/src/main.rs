@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use crossbeam_channel::{self, Receiver, Select};
 use failure::Fallible;
@@ -11,6 +12,8 @@ use rustberry::config::Config;
 use rustberry::effects::{Interpreter, ProdInterpreter};
 use rustberry::input_controller::{button, playback, Input};
 use rustberry::player::{self, PlaybackRequest, Player};
+
+use led::Blinker;
 
 fn main() -> Fallible<()> {
     let decorator = slog_term::TermDecorator::new().build();
@@ -26,7 +29,7 @@ fn main_with_log() -> Fallible<()> {
     let config = envy::from_env::<Config>()?;
     info!("Configuration"; o!("device_name" => &config.device_name));
 
-    // // Create Effects Channel and Interpreter.
+    // Create Effects Channel and Interpreter.
     let interpreter = ProdInterpreter::new(&config).unwrap();
 
     interpreter.wait_until_ready().map_err(|err| {
@@ -36,6 +39,8 @@ fn main_with_log() -> Fallible<()> {
 
     let interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>> =
         Arc::new(Box::new(interpreter));
+
+    let blinker = Blinker::new(interpreter.clone()).unwrap();
 
     // Prepare individual input channels.
     let button_controller_handle =
@@ -47,6 +52,7 @@ fn main_with_log() -> Fallible<()> {
     let application = App::new(
         config,
         interpreter.clone(),
+        blinker,
         &vec![
             button_controller_handle.channel(),
             playback_controller_handle.channel(),
@@ -64,12 +70,14 @@ struct App {
     player: player::Player,
     interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>>,
     inputs: Vec<Receiver<Input>>,
+    blinker: Blinker,
 }
 
 impl App {
     pub fn new(
         config: Config,
         interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>>,
+        blinker: Blinker,
         inputs: &[Receiver<Input>],
     ) -> Self {
         let player = Player::new(interpreter.clone());
@@ -78,10 +86,19 @@ impl App {
             inputs: inputs.to_vec(),
             player,
             interpreter,
+            blinker,
         }
     }
 
     pub fn run(self) -> Fallible<()> {
+        self.blinker.run_async(&led::XXX::Repeat(
+            20,
+            Box::new(led::XXX::Many(vec![
+                led::XXX::On(Duration::from_millis(5)),
+                led::XXX::Off(Duration::from_millis(5)),
+            ])),
+        ));
+
         let mut sel = Select::new();
         for r in &self.inputs {
             sel.recv(r);
@@ -190,5 +207,74 @@ mod test {
         let produced_effects: Vec<Effects> = effects_rx.iter().collect();
 
         assert_eq!(produced_effects, effects_expected);
+    }
+}
+
+mod led {
+    use std::cell::RefCell;
+    use std::sync::Arc;
+    use std::thread::{self};
+    use std::time::Duration;
+
+    use failure::Fallible;
+    use rustberry::effects::Interpreter;
+    use tokio::task::JoinHandle;
+
+    pub struct Blinker {
+        interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
+        handle: RefCell<Option<JoinHandle<()>>>,
+        runtime: tokio::runtime::Runtime,
+    }
+
+    #[derive(Debug, Clone)]
+    pub enum XXX {
+        On(Duration),
+        Off(Duration),
+        Many(Vec<XXX>),
+        Repeat(u32, Box<XXX>),
+    }
+
+    impl Blinker {
+        pub fn new(
+            interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
+        ) -> Fallible<Self> {
+            let handle: RefCell<Option<JoinHandle<()>>> = RefCell::new(None);
+            let runtime = tokio::runtime::Builder::new().basic_scheduler().build()?;
+            let blinker = Self {
+                interpreter,
+                handle,
+                runtime,
+            };
+            Ok(blinker)
+        }
+
+        fn run(interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>, xxx: &XXX) {
+            match xxx {
+                XXX::On(duration) => {
+                    let _ = interpreter.led_on();
+                    thread::sleep(*duration);
+                }
+                XXX::Off(duration) => {
+                    let _ = interpreter.led_off();
+                    thread::sleep(*duration);
+                }
+                XXX::Many(xxxs) => for xxx in xxxs {},
+                XXX::Repeat(n, xxx) => {
+                    for _i in 0..*n {
+                        Self::run(interpreter.clone(), xxx)
+                    }
+                }
+            }
+        }
+
+        pub fn run_async(&self, spec: &XXX) {
+            // TODO: destroy old
+            let interpreter = self.interpreter.clone();
+            let spec = spec.clone();
+            let handle = self.runtime.spawn(async move {
+                Self::run(interpreter, &spec);
+            });
+            *(self.handle.borrow_mut()) = Some(handle);
+        }
     }
 }

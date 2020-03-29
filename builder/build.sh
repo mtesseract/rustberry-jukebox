@@ -3,9 +3,6 @@
 set -e
 set -x
 
-# docker run --restart always --name rustberry-builder -d -p 4022:22
-#   rustberry-builder
-
 DIR=$(ssh rustberry-builder mktemp -d)
 
 PROGRAM=${1:-jukeboxd}

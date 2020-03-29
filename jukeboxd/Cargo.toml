@@ -19,7 +19,7 @@ futures = "0.3.4"
 # hyper = "0.12"
 mime = "0.3"
 dialoguer = "0.4.0"
-tokio = "0.2.13"
+tokio = {version = "0.2.13", features = ["rt-core"]}
 reqwest = {version = "0.10.4", features = ["blocking", "json", "stream"]}
 rodio = "0.11"
 failure = "0.1.5"
