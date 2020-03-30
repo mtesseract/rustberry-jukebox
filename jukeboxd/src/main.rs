@@ -44,8 +44,8 @@ fn main_with_log() -> Fallible<()> {
     blinker.run_async(led::XXX::Repeat(
         10,
         vec![
-            led::Primitive::On(Duration::from_millis(500)),
-            led::Primitive::Off(Duration::from_millis(500)),
+            led::Primitive::On(Duration::from_millis(50)),
+            led::Primitive::Off(Duration::from_millis(50)),
         ],
     ));
 
