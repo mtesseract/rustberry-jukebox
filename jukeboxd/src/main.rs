@@ -243,7 +243,7 @@ mod led {
             interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
         ) -> Fallible<Self> {
             let handle: RefCell<Option<JoinHandle<()>>> = RefCell::new(None);
-            let runtime = tokio::runtime::Builder::new().basic_scheduler().build()?;
+            let runtime = tokio::runtime::Builder::new().build()?;
             let blinker = Self {
                 interpreter,
                 handle,
@@ -253,7 +253,7 @@ mod led {
         }
 
         async fn run(interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>, xxx: &XXX) {
-            eprintln!("blinker run {:?}", &xxx);
+            eprintln!("blinker run: {:?}", &xxx);
             match xxx {
                 // XXX::On(duration) => {
                 //     info!("Blinker switches on");
