@@ -243,7 +243,7 @@ mod led {
             interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
         ) -> Fallible<Self> {
             let handle: RefCell<Option<JoinHandle<()>>> = RefCell::new(None);
-            let runtime = tokio::runtime::Builder::new().build()?;
+            let runtime = tokio::runtime::Builder::new().threaded_scheduler().enable_all().build()?;
             let blinker = Self {
                 interpreter,
                 handle,
