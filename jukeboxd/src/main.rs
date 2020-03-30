@@ -94,8 +94,8 @@ impl App {
         self.blinker.run_async(led::XXX::Repeat(
             20,
             vec![
-                led::Primitive::On(Duration::from_millis(5)),
-                led::Primitive::Off(Duration::from_millis(5)),
+                led::Primitive::On(Duration::from_millis(100)),
+                led::Primitive::Off(Duration::from_millis(100)),
             ],
         ));
 
