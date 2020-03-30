@@ -41,6 +41,13 @@ fn main_with_log() -> Fallible<()> {
         Arc::new(Box::new(interpreter));
 
     let blinker = Blinker::new(interpreter.clone()).unwrap();
+    blinker.run_async(led::XXX::Repeat(
+        10,
+        vec![
+            led::Primitive::On(Duration::from_millis(500)),
+            led::Primitive::Off(Duration::from_millis(500)),
+        ],
+    ));
 
     // Prepare individual input channels.
     let button_controller_handle =
@@ -91,14 +98,6 @@ impl App {
     }
 
     pub fn run(self) -> Fallible<()> {
-        self.blinker.run_async(led::XXX::Repeat(
-            20,
-            vec![
-                led::Primitive::On(Duration::from_millis(100)),
-                led::Primitive::Off(Duration::from_millis(100)),
-            ],
-        ));
-
         let mut sel = Select::new();
         for r in &self.inputs {
             sel.recv(r);
