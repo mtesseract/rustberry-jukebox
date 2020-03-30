@@ -253,7 +253,7 @@ mod led {
         }
 
         async fn run(interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>, xxx: &XXX) {
-            eprintln!("blinker run: {:?}", &xxx);
+            eprintln!("blinker run {:?}", &xxx);
             match xxx {
                 // XXX::On(duration) => {
                 //     info!("Blinker switches on");
