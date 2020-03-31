@@ -35,10 +35,10 @@ fn main_with_log() -> Fallible<()> {
         Arc::new(Box::new(interpreter));
 
     let blinker = Blinker::new(interpreter.clone()).unwrap();
-    blinker.run_async(led::XXX::Loop(vec![
-        led::Primitive::On(Duration::from_millis(100)),
-        led::Primitive::Off(Duration::from_millis(100)),
-    ]));
+    blinker.run_async(led::Cmd::Loop(Box::new(led::Cmd::Many(vec![
+        led::Cmd::On(Duration::from_millis(100)),
+        led::Cmd::Off(Duration::from_millis(100)),
+    ]))));
 
     interpreter.wait_until_ready().map_err(|err| {
         error!("Failed to wait for interpreter readiness: {}", err);
@@ -94,12 +94,12 @@ impl App {
     }
 
     pub fn run(self) -> Fallible<()> {
-        self.blinker.run_async(led::XXX::Repeat(
+        self.blinker.run_async(led::Cmd::Repeat(
             1,
-            vec![
-                led::Primitive::On(Duration::from_secs(1)),
-                led::Primitive::Off(Duration::from_secs(0)),
-            ],
+            Box::new(led::Cmd::Many(vec![
+                led::Cmd::On(Duration::from_secs(1)),
+                led::Cmd::Off(Duration::from_secs(0)),
+            ])),
         ));
         let mut sel = Select::new();
         for r in &self.inputs {
@@ -214,6 +214,8 @@ mod test {
 
 mod led {
     use std::cell::RefCell;
+    use std::future::Future;
+    use std::pin::Pin;
     use std::sync::Arc;
     use std::time::Duration;
 
@@ -229,15 +231,12 @@ mod led {
     }
 
     #[derive(Debug, Clone)]
-    pub enum Primitive {
+    pub enum Cmd {
+        Repeat(u32, Box<Cmd>),
+        Loop(Box<Cmd>),
         On(Duration),
         Off(Duration),
-    }
-
-    #[derive(Debug, Clone)]
-    pub enum XXX {
-        Repeat(u32, Vec<Primitive>),
-        Loop(Vec<Primitive>),
+        Many(Vec<Cmd>),
     }
 
     impl Blinker {
@@ -257,74 +256,51 @@ mod led {
             Ok(blinker)
         }
 
-        async fn run(interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>, xxx: &XXX) {
-            eprintln!("blinker run: {:?}", &xxx);
-            match xxx {
-                // XXX::On(duration) => {
-                //     info!("Blinker switches on");
-                //     let _ = interpreter.led_on();
-                //     tokio::time::delay_for(*duration).await;
-                // }
-                // XXX::Off(duration) => {
-                //     info!("Blinker switches off");
-                //     let _ = interpreter.led_off();
-                //     tokio::time::delay_for(*duration).await;
-                // }
-                // XXX::Many(xxxs) => {
-                //     info!("Blinker processes Many");
-                //     for xxx in xxxs {
-                //         Self::run(interpreter.clone(), xxx).await;
-                //     }
-                // }
-                XXX::Repeat(n, xxxs) => {
-                    info!("Blinker processes Repeat (n = {})", n);
-                    for _i in 0..*n {
-                        for xxx in xxxs {
-                            match xxx {
-                                Primitive::On(duration) => {
-                                    info!("Blinker switches on");
-                                    let _ = interpreter.led_on();
-                                    tokio::time::delay_for(*duration).await;
-                                }
-                                Primitive::Off(duration) => {
-                                    info!("Blinker switches off");
-                                    let _ = interpreter.led_off();
-                                    tokio::time::delay_for(*duration).await;
-                                }
-                            }
-                        }
-                        // Self::run(interpreter.clone(), xxx).await;
+        fn run(
+            interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
+            cmd: Cmd,
+        ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+            Box::pin(async move {
+                match cmd {
+                    Cmd::On(duration) => {
+                        info!("Blinker switches on");
+                        let _ = interpreter.led_on();
+                        tokio::time::delay_for(duration).await;
                     }
+                    Cmd::Off(duration) => {
+                        info!("Blinker switches off");
+                        let _ = interpreter.led_off();
+                        tokio::time::delay_for(duration).await;
+                    }
+                    Cmd::Many(cmds) => {
+                        info!("Blinker processes Many");
+                        for cmd in &cmds {
+                            Self::run(interpreter.clone(), cmd.clone()).await;
+                        }
+                    }
+                    Cmd::Repeat(n, cmd) => {
+                        info!("Blinker processes Repeat (n = {})", n);
+                        for _i in 0..n {
+                            Self::run(interpreter.clone(), (*cmd).clone()).await;
+                        }
+                    }
+                    Cmd::Loop(cmd) => loop {
+                        Self::run(interpreter.clone(), (*cmd).clone()).await;
+                    },
                 }
-                XXX::Loop(xxxs) => loop {
-                    for xxx in xxxs {
-                        match xxx {
-                            Primitive::On(duration) => {
-                                info!("Blinker switches on");
-                                let _ = interpreter.led_on();
-                                tokio::time::delay_for(*duration).await;
-                            }
-                            Primitive::Off(duration) => {
-                                info!("Blinker switches off");
-                                let _ = interpreter.led_off();
-                                tokio::time::delay_for(*duration).await;
-                            }
-                        }
-                    }
-                },
-            }
+            })
         }
 
-        pub fn run_async(&self, spec: XXX) {
+        pub fn run_async(&self, spec: Cmd) {
             info!("Blinker run_async()");
             if let Some(ref abort_handle) = *(self.abort_handle.borrow()) {
                 info!("Terminating current blinking task");
                 abort_handle.abort();
             }
             let interpreter = self.interpreter.clone();
-            let spec = spec.clone();
+            // let spec = spec.clone();
             let (f, handle) =
-                futures::future::abortable(async move { Self::run(interpreter, &spec).await });
+                futures::future::abortable(async move { Self::run(interpreter, spec).await });
             let _join_handle = self.runtime.spawn(f);
             info!("Created new blinking task");
             *(self.abort_handle.borrow_mut()) = Some(handle);
