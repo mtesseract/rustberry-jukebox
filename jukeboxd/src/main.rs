@@ -31,20 +31,19 @@ fn main_with_log() -> Fallible<()> {
 
     // Create Effects Channel and Interpreter.
     let interpreter = ProdInterpreter::new(&config).unwrap();
-
-    interpreter.wait_until_ready().map_err(|err| {
-        error!("Failed to wait for interpreter readiness: {}", err);
-        err
-    })?;
-
     let interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>> =
         Arc::new(Box::new(interpreter));
 
     let blinker = Blinker::new(interpreter.clone()).unwrap();
     blinker.run_async(led::XXX::Loop(vec![
-        led::Primitive::On(Duration::from_millis(50)),
-        led::Primitive::Off(Duration::from_millis(50)),
+        led::Primitive::On(Duration::from_millis(100)),
+        led::Primitive::Off(Duration::from_millis(100)),
     ]));
+
+    interpreter.wait_until_ready().map_err(|err| {
+        error!("Failed to wait for interpreter readiness: {}", err);
+        err
+    })?;
 
     // Prepare individual input channels.
     let button_controller_handle =
@@ -95,10 +94,13 @@ impl App {
     }
 
     pub fn run(self) -> Fallible<()> {
-        self.blinker.run_async(led::XXX::Loop(vec![
-            led::Primitive::On(Duration::from_secs(1)),
-            led::Primitive::Off(Duration::from_secs(0)),
-        ]));
+        self.blinker.run_async(led::XXX::Repeat(
+            1,
+            vec![
+                led::Primitive::On(Duration::from_secs(1)),
+                led::Primitive::Off(Duration::from_secs(0)),
+            ],
+        ));
         let mut sel = Select::new();
         for r in &self.inputs {
             sel.recv(r);
@@ -218,7 +220,7 @@ mod led {
     use failure::Fallible;
     use futures::future::AbortHandle;
     use rustberry::effects::Interpreter;
-    use slog_scope::{info};
+    use slog_scope::info;
 
     pub struct Blinker {
         interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
@@ -316,6 +318,7 @@ mod led {
         pub fn run_async(&self, spec: XXX) {
             info!("Blinker run_async()");
             if let Some(ref abort_handle) = *(self.abort_handle.borrow()) {
+                info!("Terminating current blinking task");
                 abort_handle.abort();
             }
             let interpreter = self.interpreter.clone();
@@ -323,6 +326,7 @@ mod led {
             let (f, handle) =
                 futures::future::abortable(async move { Self::run(interpreter, &spec).await });
             let _join_handle = self.runtime.spawn(f);
+            info!("Created new blinking task");
             *(self.abort_handle.borrow_mut()) = Some(handle);
         }
     }
