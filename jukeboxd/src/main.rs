@@ -41,13 +41,10 @@ fn main_with_log() -> Fallible<()> {
         Arc::new(Box::new(interpreter));
 
     let blinker = Blinker::new(interpreter.clone()).unwrap();
-    blinker.run_async(led::XXX::Repeat(
-        10,
-        vec![
-            led::Primitive::On(Duration::from_millis(50)),
-            led::Primitive::Off(Duration::from_millis(50)),
-        ],
-    ));
+    blinker.run_async(led::XXX::Loop(vec![
+        led::Primitive::On(Duration::from_millis(50)),
+        led::Primitive::Off(Duration::from_millis(50)),
+    ]));
 
     // Prepare individual input channels.
     let button_controller_handle =
@@ -98,6 +95,10 @@ impl App {
     }
 
     pub fn run(self) -> Fallible<()> {
+        self.blinker.run_async(led::XXX::Loop(vec![
+            led::Primitive::On(Duration::from_secs(1)),
+            led::Primitive::Off(Duration::from_secs(0)),
+        ]));
         let mut sel = Select::new();
         for r in &self.inputs {
             sel.recv(r);
@@ -213,16 +214,15 @@ mod led {
     use std::cell::RefCell;
     use std::sync::Arc;
     use std::time::Duration;
-    use std::future::Future;
 
-    use slog_scope::{info, error};
     use failure::Fallible;
+    use futures::future::AbortHandle;
     use rustberry::effects::Interpreter;
-    use tokio::task::JoinHandle;
+    use slog_scope::{info};
 
     pub struct Blinker {
         interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
-        handle: RefCell<Option<JoinHandle<()>>>,
+        abort_handle: RefCell<Option<AbortHandle>>,
         runtime: tokio::runtime::Runtime,
     }
 
@@ -235,17 +235,21 @@ mod led {
     #[derive(Debug, Clone)]
     pub enum XXX {
         Repeat(u32, Vec<Primitive>),
+        Loop(Vec<Primitive>),
     }
 
     impl Blinker {
         pub fn new(
             interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
         ) -> Fallible<Self> {
-            let handle: RefCell<Option<JoinHandle<()>>> = RefCell::new(None);
-            let runtime = tokio::runtime::Builder::new().threaded_scheduler().enable_all().build()?;
+            let abort_handle = RefCell::new(None);
+            let runtime = tokio::runtime::Builder::new()
+                .threaded_scheduler()
+                .enable_all()
+                .build()?;
             let blinker = Self {
                 interpreter,
-                handle,
+                abort_handle,
                 runtime,
             };
             Ok(blinker)
@@ -290,18 +294,36 @@ mod led {
                         // Self::run(interpreter.clone(), xxx).await;
                     }
                 }
+                XXX::Loop(xxxs) => loop {
+                    for xxx in xxxs {
+                        match xxx {
+                            Primitive::On(duration) => {
+                                info!("Blinker switches on");
+                                let _ = interpreter.led_on();
+                                tokio::time::delay_for(*duration).await;
+                            }
+                            Primitive::Off(duration) => {
+                                info!("Blinker switches off");
+                                let _ = interpreter.led_off();
+                                tokio::time::delay_for(*duration).await;
+                            }
+                        }
+                    }
+                },
             }
         }
 
         pub fn run_async(&self, spec: XXX) {
-            // TODO: destroy old
             info!("Blinker run_async()");
+            if let Some(ref abort_handle) = *(self.abort_handle.borrow()) {
+                abort_handle.abort();
+            }
             let interpreter = self.interpreter.clone();
             let spec = spec.clone();
-            let handle = self.runtime.spawn(async move {
-                Self::run(interpreter, &spec).await
-            });
-            *(self.handle.borrow_mut()) = Some(handle);
+            let (f, handle) =
+                futures::future::abortable(async move { Self::run(interpreter, &spec).await });
+            let _join_handle = self.runtime.spawn(f);
+            *(self.abort_handle.borrow_mut()) = Some(handle);
         }
     }
 }
