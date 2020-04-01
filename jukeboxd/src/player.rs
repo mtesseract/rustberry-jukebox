@@ -16,9 +16,23 @@ pub enum PlayerCommand {
     Terminate,
 }
 
+type StopPlayEffect = Box<dyn Fn() -> Fallible<()>>;
+
+enum PlayerState {
+    Idle,
+    Playing {
+        resource: PlaybackResource,
+        since: std::time::Instant,
+        stop_eff: StopPlayEffect,
+    },
+    Paused {
+        at: std::time::Duration,
+        prev_resource: PlaybackResource,
+    },
+}
 pub struct Player {
     interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
-    stop_eff: RefCell<Option<Box<dyn Fn() -> Fallible<()>>>>,
+    state: RefCell<PlayerState>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -34,35 +48,78 @@ pub enum PlaybackResource {
 }
 
 impl Player {
+    fn play_resource(&self, resource: &PlaybackResource) -> Result<StopPlayEffect, Error> {
+        match resource {
+            PlaybackResource::SpotifyUri(ref spotify_uri) => {
+                let interpreter = self.interpreter.clone();
+                if let Err(err) = self.interpreter.play_spotify(spotify_uri) {
+                    error!("Failed to play Spotify URI '{}': {}", spotify_uri, err);
+                    Err(Error::Spotify(err))
+                } else {
+                    Ok(Box::new(move || interpreter.stop_spotify())
+                        as Box<dyn Fn() -> Fallible<()>>)
+                }
+            }
+            PlaybackResource::Http(ref url) => {
+                let interpreter = self.interpreter.clone();
+                if let Err(err) = self.interpreter.play_http(url) {
+                    error!("Failed to play HTTP URI '{}': {}", url, err);
+                    Err(Error::HTTP(err))
+                } else {
+                    Ok(Box::new(move || interpreter.stop_http()) as Box<dyn Fn() -> Fallible<()>>)
+                }
+            }
+        }
+    }
+
     pub fn playback(&self, req: PlaybackRequest) -> Result<(), Error> {
         match req {
-            self::PlaybackRequest::Start(resource) => match resource {
-                PlaybackResource::SpotifyUri(spotify_uri) => {
-                    let interpreter = self.interpreter.clone();
-                    *(self.stop_eff.borrow_mut()) =
-                        Some(Box::new(move || interpreter.stop_spotify())
-                            as Box<dyn Fn() -> Fallible<()>>);
-                    if let Err(err) = self.interpreter.play_spotify(&spotify_uri) {
-                        error!("Failed to play Spotify URI '{}': {}", spotify_uri, err);
+            self::PlaybackRequest::Start(resource) => {
+                let mut state = self.state.borrow_mut();
+                match &*state {
+                    PlayerState::Idle | PlayerState::Playing { .. } => {
+                        let stop_eff = self.play_resource(&resource)?;
+                        *state = PlayerState::Playing {
+                            since: std::time::Instant::now(),
+                            stop_eff,
+                            resource,
+                        };
+                    }
+                    PlayerState::Paused { at, prev_resource } => {
+                        if resource == *prev_resource {
+                            // continue at position
+                            unimplemented!()
+                        } else {
+                            // new resource, play from beginning
+                            let stop_eff = self.play_resource(&resource)?;
+                            *state = PlayerState::Playing {
+                                since: std::time::Instant::now(),
+                                stop_eff,
+                                resource,
+                            };
+                        }
                     }
                 }
-                PlaybackResource::Http(url) => {
-                    let interpreter = self.interpreter.clone();
-                    *(self.stop_eff.borrow_mut()) =
-                        Some(Box::new(move || interpreter.stop_http())
-                            as Box<dyn Fn() -> Fallible<()>>);
-                    if let Err(err) = self.interpreter.play_http(&url) {
-                        error!("Failed to play HTTP URI '{}': {}", url, err);
-                    }
-                }
-            },
+            }
             self::PlaybackRequest::Stop => {
-                let mut stop_eff = self.stop_eff.borrow_mut();
-                if let Some(ref eff) = *stop_eff {
-                    if let Err(err) = eff() {
-                        error!("Failed to stop playback: {}", err);
+                let mut state = self.state.borrow_mut();
+                match &*state {
+                    PlayerState::Idle | PlayerState::Paused { .. } => {
+                        // nothing to do here.
                     }
-                    *stop_eff = None;
+                    PlayerState::Playing {
+                        since,
+                        resource,
+                        stop_eff,
+                    } => {
+                        let _ = stop_eff(); // FIXME
+                        let now = std::time::Instant::now();
+                        let paused_at = now.duration_since(*since);
+                        *state = PlayerState::Paused {
+                            prev_resource: resource.clone(),
+                            at: paused_at,
+                        };
+                    }
                 }
             }
         }
@@ -71,7 +128,7 @@ impl Player {
     pub fn new(interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>) -> Self {
         let player = Player {
             interpreter,
-            stop_eff: RefCell::new(None),
+            state: RefCell::new(PlayerState::Idle),
         };
         player
     }
@@ -83,14 +140,16 @@ pub mod err {
 
     #[derive(Debug)]
     pub enum Error {
-        HTTP(reqwest::Error),
+        Spotify(failure::Error),
+        HTTP(failure::Error),
         SendError(String),
     }
 
     impl Display for Error {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             match self {
-                Error::HTTP(err) => write!(f, "Spotify HTTP Error {}", err),
+                Error::Spotify(err) => write!(f, "Spotify Error {}", err),
+                Error::HTTP(err) => write!(f, "HTTP Error {}", err),
                 Error::SendError(err) => {
                     write!(f, "Failed to transmit command via channel: {}", err)
                 }
@@ -100,7 +159,7 @@ pub mod err {
 
     impl From<reqwest::Error> for Error {
         fn from(err: reqwest::Error) -> Self {
-            Error::HTTP(err)
+            Error::HTTP(err.into())
         }
     }
 
