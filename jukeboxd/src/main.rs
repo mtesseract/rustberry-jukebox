@@ -200,10 +200,11 @@ mod test {
             volume_up_command: None,
             volume_down_command: None,
         };
+        let blinker = Blinker::new(interpreter.clone()).unwrap();
         let inputs = vec![Input::Button(button::Command::Shutdown)];
         let effects_expected = vec![Effects::GenericCommand("sudo shutdown -h now".to_string())];
         let (input_tx, input_rx) = crossbeam_channel::unbounded();
-        let app = App::new(config, interpreter, &vec![input_rx]);
+        let app = App::new(config, interpreter, blinker, &vec![input_rx]);
         for input in inputs {
             input_tx.send(input).unwrap();
         }

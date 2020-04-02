@@ -127,11 +127,10 @@ mod test {
             Arc::new(Box::new(interpreter) as Box<dyn Interpreter + Send + Sync + 'static>);
         let player_handle = Player::new(interpreter);
         let playback_requests = vec![
-            PlayerCommand::PlaybackRequest(PlaybackRequest::Start(PlaybackResource::SpotifyUri(
+            PlaybackRequest::Start(PlaybackResource::SpotifyUri(
                 "spotify:track:5j6ZZwA9BnxZi5Bk0Ng4jB".to_string(),
-            ))),
-            PlayerCommand::PlaybackRequest(PlaybackRequest::Stop),
-            PlayerCommand::Terminate,
+            )),
+            PlaybackRequest::Stop,
         ];
         let effects_expected = vec![
             Effects::PlaySpotify {
@@ -140,7 +139,7 @@ mod test {
             Effects::StopSpotify,
         ];
         for req in playback_requests.iter() {
-            player_handle.send_command(req.clone()).unwrap();
+            player_handle.playback(req.clone()).unwrap();
         }
         let produced_effects: Vec<_> = effects_rx.iter().collect();
 
