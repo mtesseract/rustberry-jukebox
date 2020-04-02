@@ -121,53 +121,56 @@ impl App {
                         error!("Failed to receive input event: {}", err);
                     }
                 }
-                Ok(input) => match input {
-                    Input::Button(cmd) => match cmd {
-                        button::Command::Shutdown => {
-                            if let Err(err) = self.interpreter.generic_command(
-                                self.config
-                                    .shutdown_command
-                                    .clone()
-                                    .unwrap_or("sudo shutdown -h now".to_string()),
-                            ) {
-                                error!("Failed to execute shutdown command: {}", err);
+                Ok(input) => {
+                    self.blinker.stop();
+                    match input {
+                        Input::Button(cmd) => match cmd {
+                            button::Command::Shutdown => {
+                                if let Err(err) = self.interpreter.generic_command(
+                                    self.config
+                                        .shutdown_command
+                                        .clone()
+                                        .unwrap_or("sudo shutdown -h now".to_string()),
+                                ) {
+                                    error!("Failed to execute shutdown command: {}", err);
+                                }
                             }
-                        }
-                        button::Command::VolumeUp => {
-                            if let Err(err) = self.interpreter.generic_command(
-                                self.config
-                                    .volume_up_command
-                                    .clone()
-                                    .unwrap_or("amixer -q -M set PCM 10%+".to_string()),
-                            ) {
-                                error!("Failed to increase volume: {}", err);
+                            button::Command::VolumeUp => {
+                                if let Err(err) = self.interpreter.generic_command(
+                                    self.config
+                                        .volume_up_command
+                                        .clone()
+                                        .unwrap_or("amixer -q -M set PCM 10%+".to_string()),
+                                ) {
+                                    error!("Failed to increase volume: {}", err);
+                                }
                             }
-                        }
-                        button::Command::VolumeDown => {
-                            if let Err(err) = self.interpreter.generic_command(
-                                self.config
-                                    .volume_down_command
-                                    .clone()
-                                    .unwrap_or("amixer -q -M set PCM 10%-".to_string()),
-                            ) {
-                                error!("Failed to decrease volume: {}", err);
+                            button::Command::VolumeDown => {
+                                if let Err(err) = self.interpreter.generic_command(
+                                    self.config
+                                        .volume_down_command
+                                        .clone()
+                                        .unwrap_or("amixer -q -M set PCM 10%-".to_string()),
+                                ) {
+                                    error!("Failed to decrease volume: {}", err);
+                                }
                             }
-                        }
-                    },
-                    Input::Playback(request) => {
-                        if let Err(err) = self.player.playback(request.clone()) {
-                            error!("Failed to execute playback request {:?}: {}", request, err);
-                        }
-                        match request {
-                            PlaybackRequest::Start(_) => {
-                                let _ = self.interpreter.led_on();
+                        },
+                        Input::Playback(request) => {
+                            if let Err(err) = self.player.playback(request.clone()) {
+                                error!("Failed to execute playback request {:?}: {}", request, err);
                             }
-                            PlaybackRequest::Stop => {
-                                let _ = self.interpreter.led_off();
+                            match request {
+                                PlaybackRequest::Start(_) => {
+                                    let _ = self.interpreter.led_on();
+                                }
+                                PlaybackRequest::Stop => {
+                                    let _ = self.interpreter.led_off();
+                                }
                             }
                         }
                     }
-                },
+                }
             };
         }
     }
@@ -289,6 +292,15 @@ mod led {
                     },
                 }
             })
+        }
+
+        pub fn stop(&self) {
+            let mut opt_abort_handle = self.abort_handle.borrow_mut();
+            if let Some(ref abort_handle) = *opt_abort_handle {
+                info!("Terminating current blinking task");
+                abort_handle.abort();
+                *opt_abort_handle = None;
+            }
         }
 
         pub fn run_async(&self, spec: Cmd) {
