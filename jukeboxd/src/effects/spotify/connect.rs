@@ -54,7 +54,11 @@ pub mod external_command {
     struct SupervisedCommand {
         pub cmd: String,
         pub device_name: String,
+        pub username: String,
+        pub password: String,
+        pub cache_directory: String,
         pub device_id: Arc<RwLock<Option<String>>>,
+        pub librespot_cmd: String,
         pub access_token_provider: AccessTokenProvider,
         child: Arc<RwLock<Child>>,
     }
@@ -74,9 +78,40 @@ pub mod external_command {
         // fn kill_child(&mut self) -> Result<(), std::io::Error> {
         //     self.child.write().unwrap().kill()
         // }
+        //
+
+        fn spawn(
+            username: &str,
+            password: &str,
+            device_name: &str,
+            librespot_cmd: &str,
+            cache_directory: &str,
+        ) -> Result<Child, std::io::Error> {
+            Command::new(librespot_cmd)
+                .arg("--name")
+                .arg(device_name)
+                .arg("--username")
+                .arg(username)
+                .arg("--password")
+                .arg(password)
+                .arg("--bitrate")
+                .arg("160")
+                .arg("--cache")
+                .arg(cache_directory)
+                .arg("--enable-volume-normalisation")
+                .arg("--linear-volume")
+                .arg("--initial-volume=100")
+                .spawn()
+        }
 
         fn respawn(&mut self) -> Result<(), std::io::Error> {
-            let child = Command::new("sh").arg("-c").arg(&self.cmd).spawn()?;
+            let child = Self::spawn(
+                &self.username,
+                &self.password,
+                &self.device_name,
+                &self.librespot_cmd,
+                &self.cache_directory,
+            )?;
             *(self.child.write().unwrap()) = child;
             Ok(())
         }
@@ -159,7 +194,8 @@ pub mod external_command {
                         if let Err(err) = self.respawn() {
                             error!("Failed to respawn Spotify Connector: {}", err);
                         } else {
-                            info!("Respawned new Spotify Connector");
+                            let pid = self.child.read().unwrap().id();
+                            info!("Respawned new Spotify Connector (PID {})", pid);
                         }
                     }
                     Ok(None) => {}
@@ -178,10 +214,20 @@ pub mod external_command {
         pub fn new(
             cmd: String,
             device_name: &str,
+            librespot_cmd: String,
+            username: String,
+            password: String,
+            cache_directory: String,
             device_id: Arc<RwLock<Option<String>>>,
             access_token_provider: &AccessTokenProvider,
         ) -> Result<(Self, Arc<RwLock<Child>>), std::io::Error> {
-            let child = Command::new("sh").arg("-c").arg(&cmd).spawn()?;
+            let child = Self::spawn(
+                &username,
+                &password,
+                &device_name,
+                &librespot_cmd,
+                &cache_directory,
+            )?;
             let rw_child = Arc::new(RwLock::new(child));
             let supervised_cmd = SupervisedCommand {
                 cmd,
@@ -189,6 +235,10 @@ pub mod external_command {
                 access_token_provider: access_token_provider.clone(),
                 child: Arc::clone(&rw_child),
                 device_id,
+                librespot_cmd,
+                username,
+                password,
+                cache_directory,
             };
             Ok((supervised_cmd, rw_child))
         }
@@ -200,17 +250,38 @@ pub mod external_command {
             device_name: String,
         ) -> Fallible<Self> {
             let cmd = env::var("SPOTIFY_CONNECT_COMMAND").map_err(Context::new)?;
-            Self::new(access_token_provider, cmd, device_name)
+            let username = env::var("SPOTIFY_CONNECT_USERNAME").map_err(Context::new)?;
+            let password = env::var("SPOTIFY_CONNECT_PASSWORD").map_err(Context::new)?;
+            let librespot_cmd = env::var("SPOTIFY_CONNECT_LIBRESPOT").map_err(Context::new)?;
+            let cache_directory =
+                env::var("SPOTIFY_CONNECT_CACHE_DIRECTORY").map_err(Context::new)?;
+            Self::new(
+                access_token_provider,
+                cmd,
+                device_name,
+                username,
+                password,
+                cache_directory,
+                librespot_cmd,
+            )
         }
         pub fn new(
             access_token_provider: &AccessTokenProvider,
             cmd: String,
             device_name: String,
+            username: String,
+            password: String,
+            cache_directory: String,
+            librespot_cmd: String,
         ) -> Fallible<Self> {
             let device_id = Arc::new(RwLock::new(None));
             let (supervised_cmd, rw_child) = SupervisedCommand::new(
                 cmd.to_string().clone(),
                 &device_name,
+                librespot_cmd,
+                username,
+                password,
+                cache_directory,
                 Arc::clone(&device_id),
                 access_token_provider,
             )?;
