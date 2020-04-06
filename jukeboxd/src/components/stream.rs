@@ -48,6 +48,8 @@ impl FiniteStream {
         }
     }
 }
+
+/// NOTE: May block current threads.
 impl std::io::Seek for FiniteStream {
     fn seek(&mut self, pos: SeekFrom) -> Result<u64, std::io::Error> {
         let pos: u64 = match pos {
@@ -62,8 +64,7 @@ impl std::io::Seek for FiniteStream {
             }
             SeekFrom::Current(n) => {
                 if n < 0 {
-                    // fixme, underflow?
-                    self.pos as u64 - (n.abs() as u64)
+                    (self.pos as u64).checked_sub(n.abs() as u64).unwrap_or(0)
                 } else {
                     self.pos as u64 + (n as u64)
                 }
@@ -96,6 +97,7 @@ impl std::io::Seek for FiniteStream {
     }
 }
 
+/// NOTE: May block current threads.
 impl std::io::Read for FiniteStream {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, std::io::Error> {
         let n_buf = buf.len();
