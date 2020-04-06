@@ -1,7 +1,7 @@
 use failure::Fallible;
 use reqwest;
 use rodio::Sink;
-use slog_scope::{warn,info};
+use slog_scope::{info, warn};
 use std::convert::From;
 use std::env;
 use std::fmt::{self, Display};
