@@ -127,69 +127,6 @@ impl ProdInterpreter {
             _config: config,
         })
     }
-    // fn handle(&mut self, effect: &Effects) -> Fallible<()> {
-    //     match effect {
-    //         Effects::PlaySpotify { spotify_uri } => {
-    //             self.spotify_player.start_playback(&spotify_uri)?;
-    //             Ok(())
-    //         }
-    //         Effects::StopSpotify => {
-    //             self.spotify_player.stop_playback()?;
-    //             Ok(())
-    //         }
-    //         Effects::PlayHttp { url } => {
-    //             self.http_player.start_playback(&url)?;
-    //             Ok(())
-    //         }
-    //         Effects::StopHttp => {
-    //             self.http_player.stop_playback()?;
-    //             Ok(())
-    //         }
-    //         Effects::LedOn => {
-    //             info!("Switching LED on");
-    //             self.led_controller.switch_on(Led::Playback)
-    //         }
-    //         Effects::LedOff => {
-    //             info!("Switching LED off");
-    //             self.led_controller.switch_off(Led::Playback)
-    //         }
-    //         Effects::GenericCommand(cmd) => {
-    //             info!("Executing command '{}'", &cmd);
-    //             let res = Command::new("/bin/sh").arg("-c").arg(&cmd).status();
-    //             match res {
-    //                 Ok(exit_status) => {
-    //                     if exit_status.success() {
-    //                         info!("Command succeeded");
-    //                         Ok(())
-    //                     } else {
-    //                         warn!(
-    //                             "Command terminated with non-zero exit code: {:?}",
-    //                             exit_status
-    //                         );
-    //                         Err(failure::err_msg(format!(
-    //                             "Command terminated with exit status {}",
-    //                             exit_status
-    //                         )))
-    //                     }
-    //                 }
-    //                 Err(err) => {
-    //                     warn!("Failed to execute command: {}", err);
-    //                     Err(err.into())
-    //                 }
-    //             }
-    //         }
-    //     }
-    // }
-
-    // pub fn run(&mut self, channel: Receiver<Effects>) -> Fallible<()> {
-    //     // FIXME
-    //     for effect in channel.iter() {
-    //         if let Err(err) = self.handle(&effect) {
-    //             error!("Failed to execute effect {:?}: {}", effect, err);
-    //         }
-    //     }
-    //     Ok(())
-    // }
 }
 
 pub mod test {
@@ -208,14 +145,6 @@ pub mod test {
             (interpreter, rx)
         }
     }
-
-    // PlayHttp { url: String },
-    // StopHttp,
-    // PlaySpotify { spotify_uri: String },
-    // StopSpotify,
-    // LedOn,
-    // LedOff,
-    // GenericCommand(String),
 
     impl Interpreter for TestInterpreter {
         fn wait_until_ready(&self) -> Fallible<()> {
