@@ -1,14 +1,19 @@
 use std::cell::RefCell;
+use std::fmt;
 use std::sync::Arc;
-
-use failure::Fallible;
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
-use slog_scope::error;
+use slog_scope::{error, info};
 
 use crate::effects::Interpreter;
 
 pub use err::*;
+
+#[derive(Debug, Clone)]
+pub struct PauseState {
+    pos: Duration,
+}
 
 #[derive(Debug, Clone)]
 pub enum PlayerCommand {
@@ -16,8 +21,27 @@ pub enum PlayerCommand {
     Terminate,
 }
 
-type StopPlayEffect = Box<dyn Fn() -> Fallible<()>>;
+type StopPlayEffect = Box<dyn Fn() -> Result<(), failure::Error>>;
 
+impl fmt::Display for PlayerState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            PlayerState::Idle => write!(f, "Idle"),
+            PlayerState::Playing {
+                resource, since, ..
+            } => write!(
+                f,
+                "Playing {{ resource = {:?}, since = {:?} }}",
+                resource, since
+            ),
+            PlayerState::Paused { at, prev_resource } => write!(
+                f,
+                "Paused {{ prev_resource = {:?}, at = {:?} }}",
+                prev_resource, at
+            ),
+        }
+    }
+}
 enum PlayerState {
     Idle,
     Playing {
@@ -48,56 +72,73 @@ pub enum PlaybackResource {
 }
 
 impl Player {
-    fn play_resource(&self, resource: &PlaybackResource) -> Result<StopPlayEffect, Error> {
+    fn play_resource(
+        &self,
+        resource: &PlaybackResource,
+        pause_state: Option<PauseState>,
+    ) -> Result<StopPlayEffect, failure::Error> {
         match resource {
             PlaybackResource::SpotifyUri(ref spotify_uri) => {
                 let interpreter = self.interpreter.clone();
-                if let Err(err) = self.interpreter.play_spotify(spotify_uri) {
+                if let Err(err) = self.interpreter.play_spotify(spotify_uri, pause_state) {
                     error!("Failed to play Spotify URI '{}': {}", spotify_uri, err);
-                    Err(Error::Spotify(err))
+                    Err(Error::Spotify(err).into())
                 } else {
-                    Ok(Box::new(move || interpreter.stop_spotify())
-                        as Box<dyn Fn() -> Fallible<()>>)
+                    Ok(Box::new(move || interpreter.stop_spotify()) as StopPlayEffect)
                 }
             }
             PlaybackResource::Http(ref url) => {
                 let interpreter = self.interpreter.clone();
-                if let Err(err) = self.interpreter.play_http(url) {
+                if let Err(err) = self.interpreter.play_http(url, pause_state) {
                     error!("Failed to play HTTP URI '{}': {}", url, err);
-                    Err(Error::HTTP(err))
+                    Err(Error::HTTP(err).into())
                 } else {
-                    Ok(Box::new(move || interpreter.stop_http()) as Box<dyn Fn() -> Fallible<()>>)
+                    Ok(Box::new(move || interpreter.stop_http()) as StopPlayEffect)
                 }
             }
         }
     }
 
-    pub fn playback(&self, req: PlaybackRequest) -> Result<(), Error> {
+    pub fn playback(&self, req: PlaybackRequest) -> Result<(), failure::Error> {
+        let old_state = (*self.state.borrow()).to_string();
+
         match req {
             self::PlaybackRequest::Start(resource) => {
                 let mut state = self.state.borrow_mut();
                 match &*state {
-                    PlayerState::Idle | PlayerState::Playing { .. } => {
-                        let stop_eff = self.play_resource(&resource)?;
+                    PlayerState::Idle => {
+                        let stop_eff = self.play_resource(&resource, None)?;
                         *state = PlayerState::Playing {
                             since: std::time::Instant::now(),
                             stop_eff,
                             resource,
                         };
                     }
+                    PlayerState::Playing { resource, .. } => {
+                        // This code path should atually not happen.
+                        let stop_eff = self.play_resource(&resource, None)?;
+                        *state = PlayerState::Playing {
+                            since: std::time::Instant::now(),
+                            stop_eff,
+                            resource: (*resource).clone(),
+                        };
+                    }
                     PlayerState::Paused { at, prev_resource } => {
-                        if resource == *prev_resource {
+                        let pause_state = if resource == *prev_resource {
                             // continue at position
-                            unimplemented!()
+                            Some(PauseState { pos: *at })
                         } else {
                             // new resource, play from beginning
-                            let stop_eff = self.play_resource(&resource)?;
-                            *state = PlayerState::Playing {
-                                since: std::time::Instant::now(),
-                                stop_eff,
-                                resource,
-                            };
-                        }
+                            None
+                        };
+                        let stop_eff = self.play_resource(&resource, pause_state)?;
+                        let now = Instant::now();
+                        let since = now.checked_sub(*at).unwrap();
+                        *state = PlayerState::Playing {
+                            since,
+                            stop_eff,
+                            resource,
+                        };
                     }
                 }
             }
@@ -112,7 +153,10 @@ impl Player {
                         resource,
                         stop_eff,
                     } => {
-                        let _ = stop_eff(); // FIXME
+                        if let Err(err) = stop_eff() {
+                            error!("Failed to execute playback stop: {}", err);
+                            return Err(err);
+                        }
                         let now = std::time::Instant::now();
                         let paused_at = now.duration_since(*since);
                         *state = PlayerState::Paused {
@@ -123,8 +167,16 @@ impl Player {
                 }
             }
         }
+
+        let new_state = (*self.state.borrow()).to_string();
+
+        info!(
+            "Player State Transition from: {} -> {}",
+            old_state, new_state
+        );
         Ok(())
     }
+
     pub fn new(interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>) -> Self {
         let player = Player {
             interpreter,

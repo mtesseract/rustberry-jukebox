@@ -25,6 +25,8 @@ use slog_scope::{info, warn};
 use spotify::player::SpotifyPlayer;
 use std::process::Command;
 
+use crate::player::PauseState;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Effects {
     PlayHttp { url: String },
@@ -45,9 +47,9 @@ pub struct ProdInterpreter {
 
 pub trait Interpreter {
     fn wait_until_ready(&self) -> Fallible<()>;
-    fn play_http(&self, url: &str) -> Fallible<()>;
+    fn play_http(&self, url: &str, pause_state: Option<PauseState>) -> Fallible<()>;
     fn stop_http(&self) -> Fallible<()>;
-    fn play_spotify(&self, spotify_uri: &str) -> Fallible<()>;
+    fn play_spotify(&self, spotify_uri: &str, pause_state: Option<PauseState>) -> Fallible<()>;
     fn stop_spotify(&self) -> Fallible<()>;
     fn led_on(&self) -> Fallible<()>;
     fn led_off(&self) -> Fallible<()>;
@@ -60,17 +62,17 @@ impl Interpreter for ProdInterpreter {
         Ok(())
     }
 
-    fn play_http(&self, url: &str) -> Fallible<()> {
-        self.http_player.start_playback(url)?;
+    fn play_http(&self, url: &str, pause_state: Option<PauseState>) -> Fallible<()> {
+        self.http_player.start_playback(url, pause_state)?;
         Ok(())
     }
 
     fn stop_http(&self) -> Fallible<()> {
         self.http_player.stop_playback().map_err(|err| err.into())
     }
-    fn play_spotify(&self, spotify_uri: &str) -> Fallible<()> {
+    fn play_spotify(&self, spotify_uri: &str, pause_state: Option<PauseState>) -> Fallible<()> {
         self.spotify_player
-            .start_playback(&spotify_uri)
+            .start_playback(&spotify_uri, pause_state)
             .map_err(|err| err.into())
     }
     fn stop_spotify(&self) -> Fallible<()> {
@@ -151,7 +153,8 @@ pub mod test {
             Ok(())
         }
 
-        fn play_http(&self, url: &str) -> Fallible<()> {
+        fn play_http(&self, url: &str, pause_state: Option<PauseState>) -> Fallible<()> {
+            assert!(pause_state.is_none());
             self.tx
                 .send(PlayHttp {
                     url: url.to_string().clone(),
@@ -163,7 +166,8 @@ pub mod test {
             self.tx.send(StopHttp).unwrap();
             Ok(())
         }
-        fn play_spotify(&self, spotify_uri: &str) -> Fallible<()> {
+        fn play_spotify(&self, spotify_uri: &str, pause_state: Option<PauseState>) -> Fallible<()> {
+            assert!(pause_state.is_none());
             self.tx
                 .send(PlaySpotify {
                     spotify_uri: spotify_uri.to_string().clone(),

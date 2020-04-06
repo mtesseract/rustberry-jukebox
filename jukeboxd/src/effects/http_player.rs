@@ -1,7 +1,7 @@
 use failure::Fallible;
 use reqwest;
 use rodio::Sink;
-use slog_scope::info;
+use slog_scope::{warn,info};
 use std::convert::From;
 use std::env;
 use std::fmt::{self, Display};
@@ -15,6 +15,7 @@ use tokio::runtime::Runtime;
 pub use err::*;
 
 use crate::components::stream::FiniteStream;
+use crate::player::PauseState;
 
 pub struct HttpPlayer {
     _handle: Option<JoinHandle<()>>,
@@ -53,7 +54,11 @@ impl HttpPlayer {
         Ok(player)
     }
 
-    pub fn start_playback(&self, url: &str) -> Result<(), Error> {
+    pub fn start_playback(&self, url: &str, pause_state: Option<PauseState>) -> Result<(), Error> {
+        if let Some(pause_state) = pause_state {
+            warn!("Ignoring pause state: {:?}", pause_state);
+        }
+
         let url = url.clone().to_string();
         let http_client = self.http_client.clone();
         let basic_auth = self.basic_auth.clone();
