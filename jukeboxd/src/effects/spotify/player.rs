@@ -27,6 +27,8 @@ struct StartPlayback {
     context_uri: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     uris: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    position_ms: Option<u128>,
 }
 
 impl SpotifyPlayer {
@@ -65,16 +67,22 @@ impl SpotifyPlayer {
         Ok(())
     }
 
-    fn derive_start_playback_payload_from_spotify_uri(spotify_uri: &str) -> StartPlayback {
+    fn derive_start_playback_payload_from_spotify_uri(
+        spotify_uri: &str,
+        pause_state: &Option<PauseState>,
+    ) -> StartPlayback {
+        let position_ms = pause_state.as_ref().map(|x| x.pos.as_millis());
         if &spotify_uri[0..14] == "spotify:album:" {
             StartPlayback {
                 uris: None,
                 context_uri: Some(spotify_uri.clone().to_string()),
+                position_ms,
             }
         } else {
             StartPlayback {
                 uris: Some(vec![spotify_uri.clone().to_string()]),
                 context_uri: None,
+                position_ms,
             }
         }
     }
@@ -84,7 +92,7 @@ impl SpotifyPlayer {
         spotify_uri: &str,
         pause_state: Option<PauseState>,
     ) -> Result<(), Error> {
-        if let Some(pause_state) = pause_state {
+        if let Some(ref pause_state) = pause_state {
             warn!("Ignoring pause state: {:?}", pause_state);
         }
 
@@ -94,7 +102,7 @@ impl SpotifyPlayer {
             Some(device_id) => device_id,
             None => return Err(Error::NoSpotifyDevice),
         };
-        let req = Self::derive_start_playback_payload_from_spotify_uri(spotify_uri);
+        let req = Self::derive_start_playback_payload_from_spotify_uri(spotify_uri, &pause_state);
         self.http_client
             .put("https://api.spotify.com/v1/me/player/play")
             .query(&[("device_id", &device_id)])

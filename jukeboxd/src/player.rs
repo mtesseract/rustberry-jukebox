@@ -12,7 +12,7 @@ pub use err::*;
 
 #[derive(Debug, Clone)]
 pub struct PauseState {
-    pos: Duration,
+    pub pos: Duration,
 }
 
 #[derive(Debug, Clone)]
