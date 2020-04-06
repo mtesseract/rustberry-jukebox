@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
-use slog_scope::{error, info};
+use slog_scope::{error, info, warn};
 
 use crate::effects::Interpreter;
 
@@ -124,16 +124,21 @@ impl Player {
                         };
                     }
                     PlayerState::Paused { at, prev_resource } => {
-                        let pause_state = if resource == *prev_resource {
+                        let now = Instant::now();
+                        let (pause_state, since) = if resource == *prev_resource {
                             // continue at position
-                            Some(PauseState { pos: *at })
+                            let pause_state = Some(PauseState { pos: *at });
+                            if let Some(since) = now.checked_sub(*at) {
+                                (pause_state, since)
+                            } else {
+                                warn!("Failed to compute player timestamp given a duration of {:?}, ignoring pause state", at);
+                                (None, now)
+                            }
                         } else {
                             // new resource, play from beginning
-                            None
+                            (None, now)
                         };
                         let stop_eff = self.play_resource(&resource, pause_state)?;
-                        let now = Instant::now();
-                        let since = now.checked_sub(*at).unwrap();
                         *state = PlayerState::Playing {
                             since,
                             stop_eff,

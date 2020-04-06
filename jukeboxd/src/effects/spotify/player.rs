@@ -5,7 +5,7 @@ use failure::Fallible;
 use http::header::AUTHORIZATION;
 use reqwest::blocking::Client;
 use serde::Serialize;
-use slog_scope::{error, info, warn};
+use slog_scope::{error, info};
 
 use crate::components::access_token_provider::{self, AccessTokenProvider};
 use crate::config::Config;
@@ -92,10 +92,6 @@ impl SpotifyPlayer {
         spotify_uri: &str,
         pause_state: Option<PauseState>,
     ) -> Result<(), Error> {
-        if let Some(ref pause_state) = pause_state {
-            warn!("Ignoring pause state: {:?}", pause_state);
-        }
-
         let msg = "Failed to start Spotify playback";
         let access_token = self.access_token_provider.get_token()?;
         let device_id = match self.spotify_connector.device_id() {
