@@ -38,6 +38,7 @@ gpio-cdev = "0.2"
 sysfs_gpio = "0.5"
 rmp = "^0.8"
 bytes = "0.5.4"
+replace_with = "0.1.5"
 
 [[bin]]
 name = "jukeboxd"
