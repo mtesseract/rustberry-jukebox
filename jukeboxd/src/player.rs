@@ -316,10 +316,15 @@ impl Player {
                 PlayerCommand { result_transmitter, request } => {
                     let current_state = player.state.clone();
                     let (res, new_state) = Self::state_machine(player.interpreter.clone(), request, current_state).await;
+                    if let Err(ref err) = res {
+                        error!("Player State Transition Failure: {}, staying in State {}", err, &player.state);
+                    } else {
+                        info!("Player State Transition: {} -> {}", player.state, new_state);
+                    }
                     player.state = new_state;
                     result_transmitter.send(res).unwrap();
                 }
-            }
+        }
     }
 }
 

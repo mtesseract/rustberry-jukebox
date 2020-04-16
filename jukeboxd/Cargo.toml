@@ -9,7 +9,7 @@ name = "rustberry"
 path = "src/lib.rs"
 
 [dependencies]
-http = "0.2"
+http = "0.2.1"
 # gotham = "0.4.0"
 # gotham_derive = "0.4"
 serde = { version = "1.0", features = ["derive"] }

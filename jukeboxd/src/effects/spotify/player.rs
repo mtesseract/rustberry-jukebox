@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use failure::Fallible;
-use http::header::AUTHORIZATION;
+use http::header::{self, AUTHORIZATION};
 use reqwest::Client;
 use serde::Serialize;
 use slog_scope::{error, info};
@@ -56,6 +56,7 @@ impl PlaybackHandle for SpotifyPlaybackHandle {
             .put("https://api.spotify.com/v1/me/player/pause")
             .query(&[("device_id", &device_id)])
             .body("")
+            .header(header::CONTENT_LENGTH, 0)
             .header(AUTHORIZATION, format!("Bearer {}", access_token))
             .send().await
             .map_err(|err| {
@@ -90,6 +91,7 @@ impl PlaybackHandle for SpotifyPlaybackHandle {
             .put("https://api.spotify.com/v1/me/player/pause")
             .query(&[("device_id", &device_id)])
             .body("")
+            .header(header::CONTENT_LENGTH, 0)
             .header(AUTHORIZATION, format!("Bearer {}", access_token))
             .send().await
             .map_err(|err| {
