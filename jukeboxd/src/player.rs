@@ -148,8 +148,8 @@ impl Player {
                     Playing {
                         resource: current_resource,
                         playing_since,
-                        offset,
                         handle,
+                        ..
                     } => {
                         // This code path should atually not happen.
                         // It means that the player has received two consecutive Playback-Start-Requests,
@@ -196,6 +196,7 @@ impl Player {
                     } => {
                         if resource == prev_resource && handle.is_complete().await.unwrap_or(true) {
                             // start from beginning
+                            info!("Same resource, completed, replaying from beginning");
                             if let Err(err) = handle.replay().await {
                                 error!("Failed to initiate replay: {}", err);
                                 (
@@ -220,6 +221,7 @@ impl Player {
                         } else if resource == prev_resource {
                             // continue at position
                             let pause_state = PauseState { pos: at };
+                            info!("Same resource, not completed, continuing with pause state {:?}", &pause_state);
                             if let Err(err) = handle.cont(pause_state).await {
                                 error!("Failed to continue playback: {}", err);
                                 (
@@ -243,6 +245,7 @@ impl Player {
                             }
                         } else {
                             // new resource
+                            info!("New resource, playing from beginning");
                             if let Err(err) = handle.stop().await {
                                 error!("Failed to stop playback: {}", err);
                                 (
@@ -289,7 +292,7 @@ impl Player {
                         handle,
                     } => {
                         let now = std::time::Instant::now();
-                        let played_pos = now.duration_since(playing_since);
+                        let played_pos = offset + now.duration_since(playing_since);
                         if let Err(err) = handle.pause().await {
                             error!("Failed to execute playback pause: {}", err);
                             (Err(err), Idle)
