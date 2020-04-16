@@ -60,7 +60,8 @@ fn main_with_log() -> Fallible<()> {
             button_controller_handle.channel(),
             playback_controller_handle.channel(),
         ],
-    ).unwrap();
+    )
+    .unwrap();
     application.run().map_err(|err| {
         warn!("Jukebox loop terminated, terminating application: {}", err);
         err

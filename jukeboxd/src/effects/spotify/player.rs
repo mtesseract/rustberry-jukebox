@@ -58,7 +58,8 @@ impl PlaybackHandle for SpotifyPlaybackHandle {
             .body("")
             .header(header::CONTENT_LENGTH, 0)
             .header(AUTHORIZATION, format!("Bearer {}", access_token))
-            .send().await
+            .send()
+            .await
             .map_err(|err| {
                 error!("{}: Executing HTTP request failed: {}", msg, err);
                 err
@@ -78,7 +79,9 @@ impl PlaybackHandle for SpotifyPlaybackHandle {
             &*self.http_client,
             &*self.access_token_provider,
             &*self.device_name,
-        ).await.map(|x| !x)
+        )
+        .await
+        .map(|x| !x)
     }
     async fn pause(&self) -> Fallible<()> {
         let msg = "Failed to stop Spotify playback";
@@ -93,7 +96,8 @@ impl PlaybackHandle for SpotifyPlaybackHandle {
             .body("")
             .header(header::CONTENT_LENGTH, 0)
             .header(AUTHORIZATION, format!("Bearer {}", access_token))
-            .send().await
+            .send()
+            .await
             .map_err(|err| {
                 error!("{}: Executing HTTP request failed: {}", msg, err);
                 err
@@ -115,28 +119,29 @@ impl PlaybackHandle for SpotifyPlaybackHandle {
             Some(device_id) => device_id,
             None => return Err(Error::NoSpotifyDevice.into()),
         };
-        let req = Self::derive_start_playback_payload_from_spotify_uri(&self.uri, &Some(pause_state));
+        let req =
+            Self::derive_start_playback_payload_from_spotify_uri(&self.uri, &Some(pause_state));
 
         self.http_client
-        .put("https://api.spotify.com/v1/me/player/play")
-        .query(&[("device_id", &device_id)])
-        .header(AUTHORIZATION, format!("Bearer {}", access_token))
-        .json(&req)
-        .send()
-        .await
-        .map_err(|err| {
-            error!("{}: Executing HTTP request failed: {}", msg, err);
-            err
-        })
-        .map(|rsp| {
-            if !rsp.status().is_success() {
-                error!("{}: HTTP Failure {}", msg, rsp.status());
-            }
-            rsp
-        })?
-        .error_for_status()
-        .map(|_| ())
-        .map_err(|err| Error::HTTP(err).into())
+            .put("https://api.spotify.com/v1/me/player/play")
+            .query(&[("device_id", &device_id)])
+            .header(AUTHORIZATION, format!("Bearer {}", access_token))
+            .json(&req)
+            .send()
+            .await
+            .map_err(|err| {
+                error!("{}: Executing HTTP request failed: {}", msg, err);
+                err
+            })
+            .map(|rsp| {
+                if !rsp.status().is_success() {
+                    error!("{}: HTTP Failure {}", msg, rsp.status());
+                }
+                rsp
+            })?
+            .error_for_status()
+            .map(|_| ())
+            .map_err(|err| Error::HTTP(err).into())
     }
     async fn replay(&self) -> Fallible<()> {
         let msg = "Failed to start Spotify playback";
@@ -148,32 +153,29 @@ impl PlaybackHandle for SpotifyPlaybackHandle {
         let req = Self::derive_start_playback_payload_from_spotify_uri(&self.uri, &None);
 
         self.http_client
-        .put("https://api.spotify.com/v1/me/player/play")
-        .query(&[("device_id", &device_id)])
-        .header(AUTHORIZATION, format!("Bearer {}", access_token))
-        .json(&req)
-        .send()
-        .await
-        .map_err(|err| {
-            error!("{}: Executing HTTP request failed: {}", msg, err);
-            err
-        })
-        .map(|rsp| {
-            if !rsp.status().is_success() {
-                error!("{}: HTTP Failure {}", msg, rsp.status());
-            }
-            rsp
-        })?
-        .error_for_status()
-        .map(|_| ())
-        .map_err(|err| Error::HTTP(err).into())
+            .put("https://api.spotify.com/v1/me/player/play")
+            .query(&[("device_id", &device_id)])
+            .header(AUTHORIZATION, format!("Bearer {}", access_token))
+            .json(&req)
+            .send()
+            .await
+            .map_err(|err| {
+                error!("{}: Executing HTTP request failed: {}", msg, err);
+                err
+            })
+            .map(|rsp| {
+                if !rsp.status().is_success() {
+                    error!("{}: HTTP Failure {}", msg, rsp.status());
+                }
+                rsp
+            })?
+            .error_for_status()
+            .map(|_| ())
+            .map_err(|err| Error::HTTP(err).into())
     }
-
 }
 
 impl SpotifyPlaybackHandle {
-
-
     fn derive_start_playback_payload_from_spotify_uri(
         spotify_uri: &str,
         pause_state: &Option<PauseState>,
@@ -193,7 +195,6 @@ impl SpotifyPlaybackHandle {
             }
         }
     }
-
 }
 
 impl SpotifyPlayer {

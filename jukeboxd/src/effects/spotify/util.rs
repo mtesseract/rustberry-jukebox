@@ -2,6 +2,7 @@ use failure::{Fail, Fallible};
 use http::header::AUTHORIZATION;
 use reqwest::blocking::Client;
 use serde::Deserialize;
+use slog_scope::{error};
 
 use crate::components::access_token_provider::{AccessTokenProvider, AtpError};
 
@@ -109,6 +110,7 @@ pub async fn is_currently_playing(
     access_token_provider: &AccessTokenProvider,
     device_name: &str,
 ) -> Fallible<bool> {
+    let msg = "Failed to retrieve currently-playing information";
     let access_token = access_token_provider.get_bearer_token()?;
 
     let device =
@@ -120,20 +122,20 @@ pub async fn is_currently_playing(
         .body("")
         .header(AUTHORIZATION, format!("Bearer {}", access_token))
         .send()
-        .await?
-        // .map_err(|err| {
-        //     error!("{}: Executing HTTP request failed: {}", msg, err);
-        //     err
-        // })
-        // .map(|rsp| {
-        //     if !rsp.status().is_success() {
-        //         error!("{}: HTTP Failure {}", msg, rsp.status());
-        //     }
-        //     rsp
-        // })?
+        .await
+        .map_err(|err| {
+            error!("{}: Executing HTTP request failed: {}", msg, err);
+            err
+        })
+        .map(|rsp| {
+            if !rsp.status().is_success() {
+                error!("{}: HTTP Failure {}", msg, rsp.status());
+            }
+            rsp
+        })?
         .error_for_status()?
-        .json::<CurrentlyPlayingObject>()
-        .await?;
+    .json::<CurrentlyPlayingObject>()
+    .await?;
 
     Ok(device.is_active && currently_playing.is_playing)
 }

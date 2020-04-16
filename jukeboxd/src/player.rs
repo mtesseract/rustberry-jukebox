@@ -4,10 +4,10 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
+use crossbeam_channel::{Receiver, Sender};
 use failure::Fallible;
 use serde::{Deserialize, Serialize};
 use slog_scope::{error, info, warn};
-use crossbeam_channel::{Sender, Receiver};
 use tokio::runtime;
 
 use crate::effects::Interpreter;
@@ -29,7 +29,7 @@ pub struct PauseState {
 
 #[derive(Debug, Clone)]
 pub struct PlayerCommand {
-    result_transmitter: Sender<Result<(),failure::Error>>,
+    result_transmitter: Sender<Result<(), failure::Error>>,
     request: PlaybackRequest,
 }
 
@@ -81,7 +81,7 @@ pub struct Player {
 }
 
 pub struct PlayerHandle {
-    tx: Sender<PlayerCommand>
+    tx: Sender<PlayerCommand>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -97,11 +97,15 @@ pub enum PlaybackResource {
 }
 
 impl PlayerHandle {
-
     pub fn playback(&self, req: PlaybackRequest) -> Fallible<()> {
         let (tx, rx) = crossbeam_channel::bounded(1);
 
-        self.tx.send(PlayerCommand { result_transmitter: tx, request: req}).unwrap();
+        self.tx
+            .send(PlayerCommand {
+                result_transmitter: tx,
+                request: req,
+            })
+            .unwrap();
         rx.recv().unwrap()
     }
 }
@@ -194,34 +198,13 @@ impl Player {
                         at,
                         prev_resource,
                     } => {
-                        if resource == prev_resource && handle.is_complete().await.unwrap_or(true) {
-                            // start from beginning
-                            info!("Same resource, completed, replaying from beginning");
-                            if let Err(err) = handle.replay().await {
-                                error!("Failed to initiate replay: {}", err);
-                                (
-                                    Err(err),
-                                    Paused {
-                                        handle,
-                                        at,
-                                        prev_resource,
-                                    },
-                                )
-                            } else {
-                                (
-                                    Ok(()),
-                                    Playing {
-                                        playing_since,
-                                        offset: Duration::from_secs(0),
-                                        handle,
-                                        resource,
-                                    },
-                                )
-                            }
-                        } else if resource == prev_resource {
+                        if resource == prev_resource  {
                             // continue at position
                             let pause_state = PauseState { pos: at };
-                            info!("Same resource, not completed, continuing with pause state {:?}", &pause_state);
+                            info!(
+                                "Same resource, not completed, continuing with pause state {:?}",
+                                &pause_state
+                            );
                             if let Err(err) = handle.cont(pause_state).await {
                                 error!("Failed to continue playback: {}", err);
                                 (
@@ -291,20 +274,27 @@ impl Player {
                         resource,
                         handle,
                     } => {
+                        let is_completed = handle.is_complete().await.unwrap_or(true);
+
                         let now = std::time::Instant::now();
                         let played_pos = offset + now.duration_since(playing_since);
+
                         if let Err(err) = handle.pause().await {
                             error!("Failed to execute playback pause: {}", err);
                             (Err(err), Idle)
                         } else {
-                            (
-                                Ok(()),
-                                Paused {
-                                    prev_resource: resource.clone(),
-                                    at: played_pos,
-                                    handle,
-                                },
-                            )
+                            if is_completed {
+                                (Ok(()), Idle)
+                            } else {
+                                (
+                                    Ok(()),
+                                    Paused {
+                                        prev_resource: resource.clone(),
+                                        at: played_pos,
+                                        handle,
+                                    },
+                                )
+                            }
                         }
                     }
                 }
@@ -316,23 +306,33 @@ impl Player {
         loop {
             let command = player.rx.recv().unwrap();
             match command {
-                PlayerCommand { result_transmitter, request } => {
+                PlayerCommand {
+                    result_transmitter,
+                    request,
+                } => {
                     let current_state = player.state.clone();
-                    let (res, new_state) = Self::state_machine(player.interpreter.clone(), request, current_state).await;
+                    let (res, new_state) =
+                        Self::state_machine(player.interpreter.clone(), request, current_state)
+                            .await;
                     if let Err(ref err) = res {
-                        error!("Player State Transition Failure: {}, staying in State {}", err, &player.state);
+                        error!(
+                            "Player State Transition Failure: {}, staying in State {}",
+                            err, &player.state
+                        );
                     } else {
                         info!("Player State Transition: {} -> {}", player.state, new_state);
                     }
                     player.state = new_state;
                     result_transmitter.send(res).unwrap();
                 }
+            }
         }
     }
-}
 
-
-    pub fn new(runtime: &runtime::Handle, interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>) -> Fallible<PlayerHandle> {
+    pub fn new(
+        runtime: &runtime::Handle,
+        interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
+    ) -> Fallible<PlayerHandle> {
         let (tx, rx) = crossbeam_channel::bounded(1);
 
         let player = Player {
@@ -343,9 +343,7 @@ impl Player {
 
         runtime.spawn(Self::player_loop(player));
 
-        let player_handle = PlayerHandle {
-            tx
-        };
+        let player_handle = PlayerHandle { tx };
 
         Ok(player_handle)
     }

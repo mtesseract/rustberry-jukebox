@@ -34,14 +34,14 @@ pub struct HttpPlaybackHandle {
 
 impl HttpPlaybackHandle {
     pub async fn queue(&self) -> Fallible<()> {
-            let mut builder = self.http_client.get(&self.url);
-            if let Some((ref username, ref password)) = &self.basic_auth {
-                builder = builder.basic_auth(username, Some(password));
-            }
-            let response = builder.send().await.unwrap();
-            let stream = FiniteStream::from_response(response).unwrap();
-            let source = rodio::Decoder::new(BufReader::new(stream)).unwrap();
-            self.sink.append(source);
+        let mut builder = self.http_client.get(&self.url);
+        if let Some((ref username, ref password)) = &self.basic_auth {
+            builder = builder.basic_auth(username, Some(password));
+        }
+        let response = builder.send().await.unwrap();
+        let stream = FiniteStream::from_response(response).unwrap();
+        let source = rodio::Decoder::new(BufReader::new(stream)).unwrap();
+        self.sink.append(source);
         Ok(())
     }
 }
@@ -56,7 +56,7 @@ impl PlaybackHandle for HttpPlaybackHandle {
     }
     async fn is_complete(&self) -> Fallible<bool> {
         warn!("is_complete() functionality deactivated, always start new track after pause");
-        Ok(!self.sink.is_paused())
+        Ok(self.sink.empty())
     }
 
     async fn pause(&self) -> Fallible<()> {
@@ -137,7 +137,11 @@ impl HttpPlayer {
             http_client: self.http_client.clone(),
         };
         handle.queue().await?;
-        handle.cont(PauseState { pos: std::time::Duration::from_secs(0)}).await?;
+        handle
+            .cont(PauseState {
+                pos: std::time::Duration::from_secs(0),
+            })
+            .await?;
         Ok(handle)
     }
 }
