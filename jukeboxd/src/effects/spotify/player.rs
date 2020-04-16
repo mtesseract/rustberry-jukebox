@@ -74,11 +74,11 @@ impl PlaybackHandle for SpotifyPlaybackHandle {
             .map_err(|err| Error::HTTP(err).into())
     }
     async fn is_complete(&self) -> Fallible<bool> {
-        !is_currently_playing(
+        is_currently_playing(
             &*self.http_client,
             &*self.access_token_provider,
             &*self.device_name,
-        ).await
+        ).await.map(|x| !x)
     }
     async fn pause(&self) -> Fallible<()> {
         let msg = "Failed to stop Spotify playback";
