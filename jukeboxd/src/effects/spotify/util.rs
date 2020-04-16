@@ -117,8 +117,8 @@ pub async fn is_currently_playing(
         async_lookup_device_by_name(&http_client, access_token_provider, device_name).await?;
 
     let currently_playing = http_client
-        .put("https://api.spotify.com/v1/me/player/currently-playing")
-        .query(&[("device_id", &device.id)])
+        .get("https://api.spotify.com/v1/me/player/currently-playing")
+        // .query(&[("device_id", &device.id)])
         .body("")
         .header(header::CONTENT_LENGTH, 0)
         .header(AUTHORIZATION, format!("Bearer {}", access_token))
