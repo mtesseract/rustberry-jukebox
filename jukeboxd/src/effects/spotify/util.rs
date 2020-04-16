@@ -121,7 +121,7 @@ pub async fn is_currently_playing(
         // .query(&[("device_id", &device.id)])
         .body("")
         .header(header::CONTENT_LENGTH, 0)
-        .header(AUTHORIZATION, format!("Bearer {}", access_token))
+        .header(AUTHORIZATION, format!(access_token))
         .send()
         .await
         .map_err(|err| {
