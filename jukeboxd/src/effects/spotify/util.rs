@@ -1,5 +1,5 @@
 use failure::{Fail, Fallible};
-use http::header::AUTHORIZATION;
+use http::header::{self,AUTHORIZATION};
 use reqwest::blocking::Client;
 use serde::Deserialize;
 use slog_scope::{error};
@@ -120,6 +120,7 @@ pub async fn is_currently_playing(
         .put("https://api.spotify.com/v1/me/player/currently-playing")
         .query(&[("device_id", &device.id)])
         .body("")
+        .header(header::CONTENT_LENGTH, 0)
         .header(AUTHORIZATION, format!("Bearer {}", access_token))
         .send()
         .await
