@@ -60,7 +60,7 @@ fn main_with_log() -> Fallible<()> {
             button_controller_handle.channel(),
             playback_controller_handle.channel(),
         ],
-    );
+    ).unwrap();
     application.run().map_err(|err| {
         warn!("Jukebox loop terminated, terminating application: {}", err);
         err
@@ -70,10 +70,11 @@ fn main_with_log() -> Fallible<()> {
 
 struct App {
     config: Config,
-    player: player::Player,
+    player: player::PlayerHandle,
     interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>>,
     inputs: Vec<Receiver<Input>>,
     blinker: Blinker,
+    runtime: tokio::runtime::Runtime,
 }
 
 impl App {
@@ -82,18 +83,23 @@ impl App {
         interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>>,
         blinker: Blinker,
         inputs: &[Receiver<Input>],
-    ) -> Self {
-        let player = Player::new(interpreter.clone());
-        Self {
+    ) -> Fallible<Self> {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let player = Player::new(runtime.handle(), interpreter.clone())?;
+        let app = Self {
+            runtime,
             config,
             inputs: inputs.to_vec(),
             player,
             interpreter,
             blinker,
-        }
+        };
+        Ok(app)
     }
 
     pub fn run(self) -> Fallible<()> {
+        let runtime = tokio::runtime::Runtime::new();
+
         self.blinker.run_async(led::Cmd::Repeat(
             1,
             Box::new(led::Cmd::Many(vec![
@@ -204,7 +210,7 @@ mod test {
         let inputs = vec![Input::Button(button::Command::Shutdown)];
         let effects_expected = vec![Effects::GenericCommand("sudo shutdown -h now".to_string())];
         let (input_tx, input_rx) = crossbeam_channel::unbounded();
-        let app = App::new(config, interpreter, blinker, &vec![input_rx]);
+        let app = App::new(config, interpreter, blinker, &vec![input_rx]).unwrap();
         for input in inputs {
             input_tx.send(input).unwrap();
         }

@@ -18,6 +18,7 @@ pub mod spotify;
 use std::sync::Arc;
 
 use crate::config::Config;
+use async_trait::async_trait;
 use failure::Fallible;
 use http_player::HttpPlayer;
 use led::{Led, LedController};
@@ -25,7 +26,7 @@ use slog_scope::{info, warn};
 use spotify::player::SpotifyPlayer;
 use std::process::Command;
 
-use crate::player::PauseState;
+use crate::player::{DynPlaybackHandle, PauseState, PlaybackHandle, PlaybackResource};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Effects {
@@ -45,41 +46,53 @@ pub struct ProdInterpreter {
     _config: Config,
 }
 
+#[async_trait]
+
 pub trait Interpreter {
     fn wait_until_ready(&self) -> Fallible<()>;
-    fn play_http(&self, url: &str, pause_state: Option<PauseState>) -> Fallible<()>;
-    fn stop_http(&self) -> Fallible<()>;
-    fn play_spotify(&self, spotify_uri: &str, pause_state: Option<PauseState>) -> Fallible<()>;
-    fn stop_spotify(&self) -> Fallible<()>;
+    async fn play(
+        &self,
+        res: PlaybackResource,
+        pause_state: Option<PauseState>,
+    ) -> Fallible<DynPlaybackHandle>;
+    // fn stop(&self, handle: DynPlaybackHandle) -> Fallible<()>;
     fn led_on(&self) -> Fallible<()>;
     fn led_off(&self) -> Fallible<()>;
     fn generic_command(&self, cmd: String) -> Fallible<()>;
 }
 
+#[async_trait]
 impl Interpreter for ProdInterpreter {
     fn wait_until_ready(&self) -> Fallible<()> {
         self.spotify_player.wait_until_ready()?;
         Ok(())
     }
 
-    fn play_http(&self, url: &str, pause_state: Option<PauseState>) -> Fallible<()> {
-        self.http_player.start_playback(url, pause_state)?;
-        Ok(())
+    async fn play(
+        &self,
+        res: PlaybackResource,
+        pause_state: Option<PauseState>,
+    ) -> Fallible<DynPlaybackHandle> {
+        use PlaybackResource::*;
+        match res {
+            SpotifyUri(uri) => self
+                .spotify_player
+                .start_playback(&uri, pause_state)
+                .await
+                .map(|x| Box::new(x) as DynPlaybackHandle)
+                .map_err(|err| err.into()),
+            Http(url) => self
+                .http_player
+                .start_playback(&url, pause_state)
+                .await
+                .map(|x| Box::new(x) as DynPlaybackHandle)
+                .map_err(|err| err.into()),
+        }
     }
 
-    fn stop_http(&self) -> Fallible<()> {
-        self.http_player.stop_playback().map_err(|err| err.into())
-    }
-    fn play_spotify(&self, spotify_uri: &str, pause_state: Option<PauseState>) -> Fallible<()> {
-        self.spotify_player
-            .start_playback(&spotify_uri, pause_state)
-            .map_err(|err| err.into())
-    }
-    fn stop_spotify(&self) -> Fallible<()> {
-        self.spotify_player
-            .stop_playback()
-            .map_err(|err| err.into())
-    }
+    // fn stop(&self, handle: DynPlaybackHandle) -> Fallible<()> {
+    // }
+
     fn led_on(&self) -> Fallible<()> {
         info!("Switching LED on");
         self.led_controller.switch_on(Led::Playback)
@@ -133,6 +146,7 @@ impl ProdInterpreter {
 
 pub mod test {
     use super::*;
+    use async_trait::async_trait;
     use crossbeam_channel::{self, Receiver, Sender};
     use Effects::*;
 
@@ -148,37 +162,51 @@ pub mod test {
         }
     }
 
+    struct DummyPlaybackHandle;
+
+    #[async_trait]
+    impl PlaybackHandle for DummyPlaybackHandle {
+        async fn stop(&self) -> Fallible<()> {
+            unimplemented!()
+        }
+        async fn is_complete(&self) -> Fallible<bool> {
+            unimplemented!()
+        }
+        async fn pause(&self) -> Fallible<()> {
+            unimplemented!()
+        }
+        async fn cont(&self, pause_state: PauseState) -> Fallible<()> {
+            unimplemented!()
+        }
+        async fn replay(&self) -> Fallible<()> {
+            unimplemented!()
+        }
+    }
+
+    #[async_trait]
     impl Interpreter for TestInterpreter {
         fn wait_until_ready(&self) -> Fallible<()> {
             Ok(())
         }
 
-        fn play_http(&self, url: &str, pause_state: Option<PauseState>) -> Fallible<()> {
-            assert!(pause_state.is_none());
-            self.tx
-                .send(PlayHttp {
+        async fn play(
+            &self,
+            res: PlaybackResource,
+            pause_state: Option<PauseState>,
+        ) -> Fallible<DynPlaybackHandle> {
+            use PlaybackResource::*;
+
+            match res {
+                SpotifyUri(uri) => self.tx.send(PlaySpotify {
+                    spotify_uri: uri.to_string().clone(),
+                })?,
+                Http(url) => self.tx.send(PlayHttp {
                     url: url.to_string().clone(),
-                })
-                .unwrap();
-            Ok(())
+                })?,
+            }
+            Ok(Box::new(DummyPlaybackHandle) as DynPlaybackHandle)
         }
-        fn stop_http(&self) -> Fallible<()> {
-            self.tx.send(StopHttp).unwrap();
-            Ok(())
-        }
-        fn play_spotify(&self, spotify_uri: &str, pause_state: Option<PauseState>) -> Fallible<()> {
-            assert!(pause_state.is_none());
-            self.tx
-                .send(PlaySpotify {
-                    spotify_uri: spotify_uri.to_string().clone(),
-                })
-                .unwrap();
-            Ok(())
-        }
-        fn stop_spotify(&self) -> Fallible<()> {
-            self.tx.send(StopSpotify).unwrap();
-            Ok(())
-        }
+
         fn led_on(&self) -> Fallible<()> {
             self.tx.send(LedOn).unwrap();
             Ok(())

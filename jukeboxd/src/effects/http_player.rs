@@ -9,26 +9,77 @@ use std::io::BufReader;
 use std::sync::Arc;
 use std::thread::{Builder, JoinHandle};
 
+use async_trait::async_trait;
 use crossbeam_channel::{self, Receiver, Sender};
 use tokio::runtime::Runtime;
 
 pub use err::*;
 
 use crate::components::stream::FiniteStream;
-use crate::player::PauseState;
+use crate::player::{PauseState, PlaybackHandle};
 
 pub struct HttpPlayer {
     _handle: Option<JoinHandle<()>>,
-    rx: Receiver<()>,
-    tx: Sender<()>,
     basic_auth: Option<(String, String)>,
     http_client: Arc<reqwest::Client>,
+}
+
+pub struct HttpPlaybackHandle {
+    tx: Sender<()>,
+    sink: Arc<Sink>,
+    basic_auth: Option<(String, String)>,
+    url: String,
+    http_client: Arc<reqwest::Client>,
+}
+
+impl HttpPlaybackHandle {
+    pub async fn queue(&self) -> Fallible<()> {
+            let mut builder = self.http_client.get(&self.url);
+            if let Some((ref username, ref password)) = &self.basic_auth {
+                builder = builder.basic_auth(username, Some(password));
+            }
+            let response = builder.send().await.unwrap();
+            let stream = FiniteStream::from_response(response).unwrap();
+            let source = rodio::Decoder::new(BufReader::new(stream)).unwrap();
+            self.sink.append(source);
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl PlaybackHandle for HttpPlaybackHandle {
+    async fn stop(&self) -> Fallible<()> {
+        // info!("Cancelling HTTP Player");
+        // self.tx.send(()).unwrap();
+        self.sink.stop();
+        Ok(())
+    }
+    async fn is_complete(&self) -> Fallible<bool> {
+        warn!("is_complete() functionality deactivated, always start new track after pause");
+        Ok(!self.sink.is_paused())
+    }
+
+    async fn pause(&self) -> Fallible<()> {
+        self.sink.pause();
+        Ok(())
+    }
+    async fn cont(&self, pause_state: PauseState) -> Fallible<()> {
+        self.sink.play();
+        Ok(())
+    }
+
+    async fn replay(&self) -> Fallible<()> {
+        self.sink.stop();
+        self.queue().await?;
+        self.sink.play();
+        Ok(())
+    }
 }
 
 impl HttpPlayer {
     pub fn new() -> Fallible<Self> {
         info!("Creating new HttpPlayer...");
-        let (tx, rx) = crossbeam_channel::bounded(1);
+        // let (tx, rx) = crossbeam_channel::bounded(1);
         let http_client = Arc::new(reqwest::Client::new());
         let basic_auth = {
             let username: Option<String> = env::var("HTTP_PLAYER_USERNAME")
@@ -47,52 +98,47 @@ impl HttpPlayer {
             _handle: None,
             basic_auth,
             http_client,
-            tx,
-            rx,
         };
 
         Ok(player)
     }
 
-    pub fn start_playback(&self, url: &str, pause_state: Option<PauseState>) -> Result<(), Error> {
+    pub async fn start_playback(
+        &self,
+        url: &str,
+        pause_state: Option<PauseState>,
+    ) -> Result<HttpPlaybackHandle, failure::Error> {
         if let Some(pause_state) = pause_state {
             warn!("Ignoring pause state: {:?}", pause_state);
         }
-
+        let device = rodio::default_output_device().unwrap();
         let url = url.clone().to_string();
         let http_client = self.http_client.clone();
         let basic_auth = self.basic_auth.clone();
-        let rx = self.rx.clone();
-
+        let (tx, rx) = crossbeam_channel::bounded(1);
+        let sink = Arc::new(Sink::new(&device));
+        let sink_cp = sink.clone();
         let _handle = Builder::new()
             .name("http-player".to_string())
             .spawn(move || {
                 let mut rt = Runtime::new().unwrap();
-                let device = rodio::default_output_device().unwrap();
-                let sink = Sink::new(&device);
                 let f = async {
-                    let mut builder = http_client.get(&url);
-                    if let Some((username, password)) = basic_auth {
-                        builder = builder.basic_auth(username, Some(password));
-                    }
-                    let response = builder.send().await.unwrap();
-                    let stream = FiniteStream::from_response(response).unwrap();
-                    let source = rodio::Decoder::new(BufReader::new(stream)).unwrap();
-                    sink.append(source);
-                    sink.play();
                     let _msg = rx.recv();
                 };
                 rt.block_on(f);
             })
             .unwrap();
 
-        Ok(())
-    }
-
-    pub fn stop_playback(&self) -> Result<(), Error> {
-        info!("Cancelling HTTP Player");
-        self.tx.send(()).unwrap();
-        Ok(())
+        let handle = HttpPlaybackHandle {
+            tx,
+            sink,
+            basic_auth,
+            url,
+            http_client: self.http_client.clone(),
+        };
+        handle.queue().await?;
+        handle.cont(PauseState { pos: std::time::Duration::from_secs(0)}).await?;
+        Ok(handle)
     }
 }
 

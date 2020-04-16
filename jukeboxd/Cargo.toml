@@ -19,7 +19,7 @@ futures = "0.3.4"
 # hyper = "0.12"
 mime = "0.3"
 dialoguer = "0.4.0"
-tokio = {version = "0.2.13", features = ["rt-threaded"]}
+tokio = {version = "0.2.13", features = ["full", "rt-threaded"]}
 reqwest = {version = "0.10.4", features = ["blocking", "json", "stream"]}
 rodio = "0.11"
 failure = "0.1.5"
@@ -38,7 +38,7 @@ gpio-cdev = "0.2"
 sysfs_gpio = "0.5"
 rmp = "^0.8"
 bytes = "0.5.4"
-replace_with = "0.1.5"
+async-trait = "0.1.30"
 
 [[bin]]
 name = "jukeboxd"

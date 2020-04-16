@@ -1,23 +1,26 @@
-use std::cell::RefCell;
+// use std::cell::RefCell;
 use std::fmt;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use async_trait::async_trait;
 use failure::Fallible;
-use replace_with::replace_with_and_return;
 use serde::{Deserialize, Serialize};
 use slog_scope::{error, info, warn};
+use crossbeam_channel::{Sender, Receiver};
+use tokio::runtime;
 
 use crate::effects::Interpreter;
 
 pub use err::*;
 
+#[async_trait]
 pub trait PlaybackHandle {
-    fn stop(&self) -> Fallible<()>;
-    fn is_complete(&self) -> Fallible<bool>;
-    fn pause(&self) -> Fallible<()>;
-    fn cont(&self) -> Fallible<()>;
-    fn replay(&self) -> Fallible<()>;
+    async fn stop(&self) -> Fallible<()>;
+    async fn is_complete(&self) -> Fallible<bool>;
+    async fn pause(&self) -> Fallible<()>;
+    async fn cont(&self, pause_state: PauseState) -> Fallible<()>;
+    async fn replay(&self) -> Fallible<()>;
 }
 #[derive(Debug, Clone)]
 pub struct PauseState {
@@ -25,13 +28,13 @@ pub struct PauseState {
 }
 
 #[derive(Debug, Clone)]
-pub enum PlayerCommand {
-    PlaybackRequest(PlaybackRequest),
-    Terminate,
+pub struct PlayerCommand {
+    result_transmitter: Sender<Result<(),failure::Error>>,
+    request: PlaybackRequest,
 }
 
 // type StopPlayEffect = Box<dyn Fn() -> Result<(), failure::Error>>;
-type DynPlaybackHandle = Box<dyn PlaybackHandle>;
+pub type DynPlaybackHandle = Box<dyn PlaybackHandle + Send + Sync + 'static>;
 
 impl fmt::Display for PlayerState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -73,7 +76,12 @@ enum PlayerState {
 }
 pub struct Player {
     interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
-    state: RefCell<PlayerState>,
+    state: PlayerState,
+    rx: Receiver<PlayerCommand>,
+}
+
+pub struct PlayerHandle {
+    tx: Sender<PlayerCommand>
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -88,56 +96,30 @@ pub enum PlaybackResource {
     Http(String),
 }
 
-// FIXME
-impl PlaybackHandle for () {
-    fn stop(&self) -> Fallible<()> {
-        unimplemented!()
-    }
-    fn is_complete(&self) -> Fallible<bool> {
-        unimplemented!()
-    }
-    fn pause(&self) -> Fallible<()> {
-        unimplemented!()
-    }
-    fn cont(&self) -> Fallible<()> {
-        unimplemented!()
-    }
-    fn replay(&self) -> Fallible<()> {
-        unimplemented!()
+impl PlayerHandle {
+
+    pub fn playback(&self, req: PlaybackRequest) -> Fallible<()> {
+        let (tx, rx) = crossbeam_channel::bounded(1);
+
+        self.tx.send(PlayerCommand { result_transmitter: tx, request: req}).unwrap();
+        rx.recv().unwrap()
     }
 }
 
 impl Player {
-    fn play_resource(
+    async fn play_resource(
         interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
         resource: &PlaybackResource,
         pause_state: Option<PauseState>,
     ) -> Result<Arc<DynPlaybackHandle>, failure::Error> {
-        match resource {
-            PlaybackResource::SpotifyUri(ref spotify_uri) => {
-                let interpreter = interpreter.clone();
-                match interpreter.play_spotify(spotify_uri, pause_state) {
-                    Err(err) => {
-                        error!("Failed to play Spotify URI '{}': {}", spotify_uri, err);
-                        Err(Error::Spotify(err).into())
-                    }
-                    Ok(handle) => Ok(Arc::new(Box::new(handle) as DynPlaybackHandle)),
-                }
-            }
-            PlaybackResource::Http(ref url) => {
-                let interpreter = interpreter.clone();
-                match interpreter.play_http(url, pause_state) {
-                    Err(err) => {
-                        error!("Failed to play HTTP URI '{}': {}", url, err);
-                        Err(Error::HTTP(err).into())
-                    }
-                    Ok(handle) => Ok(Arc::new(Box::new(handle) as DynPlaybackHandle)),
-                }
-            }
-        }
+        let interpreter = interpreter.clone();
+        interpreter
+            .play(resource.clone(), pause_state)
+            .await
+            .map(|x| Arc::new(x))
     }
 
-    fn state_machine(
+    async fn state_machine(
         interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
         req: PlaybackRequest,
         state: PlayerState,
@@ -150,7 +132,7 @@ impl Player {
                 match state {
                     Idle => {
                         let offset = Duration::from_secs(0);
-                        match Self::play_resource(interpreter, &resource, None) {
+                        match Self::play_resource(interpreter, &resource, None).await {
                             Ok(handle) => (
                                 Ok(()),
                                 Playing {
@@ -176,7 +158,7 @@ impl Player {
                         // Nevertheless we handle the case here inside the player: We keep it simple and update
                         // the playback.
                         let offset = Duration::from_secs(0);
-                        if let Err(err) = handle.stop() {
+                        if let Err(err) = handle.stop().await {
                             error!("Failed to stop playback: {}", err);
                             (
                                 Err(err),
@@ -189,7 +171,7 @@ impl Player {
                             )
                         } else {
                             drop(handle);
-                            match Self::play_resource(interpreter, &resource, None) {
+                            match Self::play_resource(interpreter, &resource, None).await {
                                 Ok(handle) => (
                                     Ok(()),
                                     Playing {
@@ -212,9 +194,9 @@ impl Player {
                         at,
                         prev_resource,
                     } => {
-                        if resource == prev_resource && handle.is_complete().unwrap_or(true) {
+                        if resource == prev_resource && handle.is_complete().await.unwrap_or(true) {
                             // start from beginning
-                            if let Err(err) = handle.replay() {
+                            if let Err(err) = handle.replay().await {
                                 error!("Failed to initiate replay: {}", err);
                                 (
                                     Err(err),
@@ -237,7 +219,8 @@ impl Player {
                             }
                         } else if resource == prev_resource {
                             // continue at position
-                            if let Err(err) = handle.cont() {
+                            let pause_state = PauseState { pos: at };
+                            if let Err(err) = handle.cont(pause_state).await {
                                 error!("Failed to continue playback: {}", err);
                                 (
                                     Err(err),
@@ -260,7 +243,7 @@ impl Player {
                             }
                         } else {
                             // new resource
-                            if let Err(err) = handle.stop() {
+                            if let Err(err) = handle.stop().await {
                                 error!("Failed to stop playback: {}", err);
                                 (
                                     Err(err),
@@ -272,7 +255,7 @@ impl Player {
                                 )
                             } else {
                                 // drop(handle);
-                                match Self::play_resource(interpreter, &resource, None) {
+                                match Self::play_resource(interpreter, &resource, None).await {
                                     Ok(handle) => (
                                         Ok(()),
                                         PlayerState::Playing {
@@ -307,7 +290,7 @@ impl Player {
                     } => {
                         let now = std::time::Instant::now();
                         let played_pos = now.duration_since(playing_since);
-                        if let Err(err) = handle.pause() {
+                        if let Err(err) = handle.pause().await {
                             error!("Failed to execute playback pause: {}", err);
                             (Err(err), Idle)
                         } else {
@@ -326,53 +309,37 @@ impl Player {
         }
     }
 
-    pub fn playback(&self, req: PlaybackRequest) -> Fallible<()> {
-        let (tx, rx) = crossbeam_channel::bounded(1);
-        let interpreter = Arc::clone(&self.interpreter);
-        self.state.replace_with(move |state| {
-            let current_state = state.clone();
-            let (res, new_state) = Self::state_machine(interpreter, req, current_state);
-            tx.send(res).unwrap();
-            new_state
-        });
-        rx.recv().unwrap()
-        //     &mut *state,
-        //     || PlayerState::Idle,
-        //     move |state| Self::state_machine(interpreter, req, state),
-        // ) {
-        //     error!("Failed to produce new state: {}", err);
-        //     Err(err)
-        // } else {
-        //     Ok(())
-        // }
-        // let interpreter = Arc::clone(&self.interpreter);
-        // let mut state = self.state.borrow_mut();
-        // if let Err(err) = replace_with_and_return(
-        //     &mut *state,
-        //     || PlayerState::Idle,
-        //     move |state| Self::state_machine(interpreter, req, state),
-        // ) {
-        //     error!("Failed to produce new state: {}", err);
-        //     Err(err)
-        // } else {
-        //     Ok(())
-        // }
-        // let (res, new_state) = Self::state_machine(interpreter, req, *state);
-        // *state = new_state;
-        // if let Err(err) = res {
-        //     error!("Failed to produce new state: {}", err);
-        //     Err(err)
-        // } else {
-        //     Ok(())
-        // }
+    async fn player_loop(mut player: Player) {
+        loop {
+            let command = player.rx.recv().unwrap();
+            match command {
+                PlayerCommand { result_transmitter, request } => {
+                    let current_state = player.state.clone();
+                    let (res, new_state) = Self::state_machine(player.interpreter.clone(), request, current_state).await;
+                    player.state = new_state;
+                    result_transmitter.send(res).unwrap();
+                }
+            }
     }
+}
 
-    pub fn new(interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>) -> Self {
+
+    pub fn new(runtime: &runtime::Handle, interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>) -> Fallible<PlayerHandle> {
+        let (tx, rx) = crossbeam_channel::bounded(1);
+
         let player = Player {
             interpreter,
-            state: RefCell::new(PlayerState::Idle),
+            state: PlayerState::Idle,
+            rx,
         };
-        player
+
+        runtime.spawn(Self::player_loop(player));
+
+        let player_handle = PlayerHandle {
+            tx
+        };
+
+        Ok(player_handle)
     }
 }
 

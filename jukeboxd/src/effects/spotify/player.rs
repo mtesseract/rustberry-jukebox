@@ -1,24 +1,28 @@
 use std::convert::From;
 use std::fmt::{self, Display};
+use std::sync::Arc;
 
+use async_trait::async_trait;
 use failure::Fallible;
 use http::header::AUTHORIZATION;
-use reqwest::blocking::Client;
+use reqwest::Client;
 use serde::Serialize;
 use slog_scope::{error, info};
 
 use crate::components::access_token_provider::{self, AccessTokenProvider};
 use crate::config::Config;
-use crate::player::PauseState;
+use crate::player::{PauseState, PlaybackHandle};
 
 use super::connect::{self, SpotifyConnector};
+use super::util::is_currently_playing;
 
 pub use err::*;
 
 pub struct SpotifyPlayer {
-    http_client: Client,
-    access_token_provider: AccessTokenProvider,
-    spotify_connector: Box<dyn SpotifyConnector + 'static + Sync + Send>,
+    http_client: Arc<Client>,
+    access_token_provider: Arc<AccessTokenProvider>,
+    spotify_connector: Arc<Box<dyn SpotifyConnector + 'static + Sync + Send>>,
+    device_name: Arc<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -31,41 +35,142 @@ struct StartPlayback {
     position_ms: Option<u128>,
 }
 
-impl SpotifyPlayer {
-    pub fn new(config: &Config) -> Fallible<Self> {
-        let http_client = Client::new();
-        // Create Access Token Provider
-        let access_token_provider = access_token_provider::AccessTokenProvider::new(
-            &config.client_id,
-            &config.client_secret,
-            &config.refresh_token,
-        )?;
-        let spotify_connector = Box::new(
-            connect::external_command::ExternalCommand::new_from_env(
-                &access_token_provider.clone(),
-                config.device_name.clone(),
-            )
-            .unwrap(),
-        );
+pub struct SpotifyPlaybackHandle {
+    device_name: Arc<String>,
+    http_client: Arc<Client>,
+    access_token_provider: Arc<AccessTokenProvider>,
+    uri: String,
+    spotify_connector: Arc<Box<dyn SpotifyConnector + 'static + Sync + Send>>,
+}
 
-        info!("Creating new SpotifyPlayer...");
+#[async_trait]
+impl PlaybackHandle for SpotifyPlaybackHandle {
+    async fn stop(&self) -> Fallible<()> {
+        let msg = "Failed to stop Spotify playback";
+        let access_token = self.access_token_provider.get_token()?;
+        let device_id = match self.spotify_connector.device_id() {
+            Some(device_id) => device_id,
+            None => return Err(Error::NoSpotifyDevice.into()),
+        };
+        self.http_client
+            .put("https://api.spotify.com/v1/me/player/pause")
+            .query(&[("device_id", &device_id)])
+            .body("")
+            .header(AUTHORIZATION, format!("Bearer {}", access_token))
+            .send().await
+            .map_err(|err| {
+                error!("{}: Executing HTTP request failed: {}", msg, err);
+                err
+            })
+            .map(|rsp| {
+                if !rsp.status().is_success() {
+                    error!("{}: HTTP Failure {}", msg, rsp.status());
+                }
+                rsp
+            })?
+            .error_for_status()
+            .map(|_| ())
+            .map_err(|err| Error::HTTP(err).into())
+    }
+    async fn is_complete(&self) -> Fallible<bool> {
+        is_currently_playing(
+            &*self.http_client,
+            &*self.access_token_provider,
+            &*self.device_name,
+        ).await
+    }
+    async fn pause(&self) -> Fallible<()> {
+        let msg = "Failed to stop Spotify playback";
+        let access_token = self.access_token_provider.get_token()?;
+        let device_id = match self.spotify_connector.device_id() {
+            Some(device_id) => device_id,
+            None => return Err(Error::NoSpotifyDevice.into()),
+        };
+        self.http_client
+            .put("https://api.spotify.com/v1/me/player/pause")
+            .query(&[("device_id", &device_id)])
+            .body("")
+            .header(AUTHORIZATION, format!("Bearer {}", access_token))
+            .send().await
+            .map_err(|err| {
+                error!("{}: Executing HTTP request failed: {}", msg, err);
+                err
+            })
+            .map(|rsp| {
+                if !rsp.status().is_success() {
+                    error!("{}: HTTP Failure {}", msg, rsp.status());
+                }
+                rsp
+            })?
+            .error_for_status()
+            .map(|_| ())
+            .map_err(|err| Error::HTTP(err).into())
+    }
+    async fn cont(&self, pause_state: PauseState) -> Fallible<()> {
+        let msg = "Failed to start Spotify playback";
+        let access_token = self.access_token_provider.get_token()?;
+        let device_id = match self.spotify_connector.device_id() {
+            Some(device_id) => device_id,
+            None => return Err(Error::NoSpotifyDevice.into()),
+        };
+        let req = Self::derive_start_playback_payload_from_spotify_uri(&self.uri, &Some(pause_state));
 
-        Ok(SpotifyPlayer {
-            http_client,
-            access_token_provider,
-            spotify_connector,
+        self.http_client
+        .put("https://api.spotify.com/v1/me/player/play")
+        .query(&[("device_id", &device_id)])
+        .header(AUTHORIZATION, format!("Bearer {}", access_token))
+        .json(&req)
+        .send()
+        .await
+        .map_err(|err| {
+            error!("{}: Executing HTTP request failed: {}", msg, err);
+            err
         })
+        .map(|rsp| {
+            if !rsp.status().is_success() {
+                error!("{}: HTTP Failure {}", msg, rsp.status());
+            }
+            rsp
+        })?
+        .error_for_status()
+        .map(|_| ())
+        .map_err(|err| Error::HTTP(err).into())
+    }
+    async fn replay(&self) -> Fallible<()> {
+        let msg = "Failed to start Spotify playback";
+        let access_token = self.access_token_provider.get_token()?;
+        let device_id = match self.spotify_connector.device_id() {
+            Some(device_id) => device_id,
+            None => return Err(Error::NoSpotifyDevice.into()),
+        };
+        let req = Self::derive_start_playback_payload_from_spotify_uri(&self.uri, &None);
+
+        self.http_client
+        .put("https://api.spotify.com/v1/me/player/play")
+        .query(&[("device_id", &device_id)])
+        .header(AUTHORIZATION, format!("Bearer {}", access_token))
+        .json(&req)
+        .send()
+        .await
+        .map_err(|err| {
+            error!("{}: Executing HTTP request failed: {}", msg, err);
+            err
+        })
+        .map(|rsp| {
+            if !rsp.status().is_success() {
+                error!("{}: HTTP Failure {}", msg, rsp.status());
+            }
+            rsp
+        })?
+        .error_for_status()
+        .map(|_| ())
+        .map_err(|err| Error::HTTP(err).into())
     }
 
-    pub fn wait_until_ready(&self) -> Result<(), Error> {
-        self.spotify_connector
-            .wait_until_ready()
-            .map_err(|_err| Error::NoSpotifyDevice)?;
-        self.access_token_provider
-            .wait_for_token()
-            .map_err(|_err| Error::NoToken)?;
-        Ok(())
-    }
+}
+
+impl SpotifyPlaybackHandle {
+
 
     fn derive_start_playback_payload_from_spotify_uri(
         spotify_uri: &str,
@@ -87,65 +192,63 @@ impl SpotifyPlayer {
         }
     }
 
-    pub fn start_playback(
+}
+
+impl SpotifyPlayer {
+    pub fn new(config: &Config) -> Fallible<Self> {
+        let http_client = Arc::new(Client::new());
+        // Create Access Token Provider
+        let access_token_provider = Arc::new(access_token_provider::AccessTokenProvider::new(
+            &config.client_id,
+            &config.client_secret,
+            &config.refresh_token,
+        )?);
+        let spotify_connector = Arc::new(Box::new(
+            connect::external_command::ExternalCommand::new_from_env(
+                &access_token_provider.clone(),
+                config.device_name.clone(),
+            )
+            .unwrap(),
+        )
+            as Box<dyn SpotifyConnector + 'static + Sync + Send>);
+
+        info!("Creating new SpotifyPlayer...");
+
+        Ok(SpotifyPlayer {
+            http_client,
+            access_token_provider,
+            spotify_connector,
+            device_name: Arc::new(config.device_name.clone()),
+        })
+    }
+
+    pub fn wait_until_ready(&self) -> Result<(), Error> {
+        self.spotify_connector
+            .wait_until_ready()
+            .map_err(|_err| Error::NoSpotifyDevice)?;
+        self.access_token_provider
+            .wait_for_token()
+            .map_err(|_err| Error::NoToken)?;
+        Ok(())
+    }
+
+    pub async fn start_playback(
         &self,
         spotify_uri: &str,
         pause_state: Option<PauseState>,
-    ) -> Result<(), Error> {
-        let msg = "Failed to start Spotify playback";
-        let access_token = self.access_token_provider.get_token()?;
-        let device_id = match self.spotify_connector.device_id() {
-            Some(device_id) => device_id,
-            None => return Err(Error::NoSpotifyDevice),
+    ) -> Result<SpotifyPlaybackHandle, failure::Error> {
+        // let req = Self::derive_start_playback_payload_from_spotify_uri(spotify_uri, &pause_state);
+        let handle = SpotifyPlaybackHandle {
+            http_client: self.http_client.clone(),
+            access_token_provider: self.access_token_provider.clone(),
+            uri: spotify_uri.to_string().clone(),
+            spotify_connector: self.spotify_connector.clone(),
+            device_name: self.device_name.clone(),
         };
-        let req = Self::derive_start_playback_payload_from_spotify_uri(spotify_uri, &pause_state);
-        self.http_client
-            .put("https://api.spotify.com/v1/me/player/play")
-            .query(&[("device_id", &device_id)])
-            .header(AUTHORIZATION, format!("Bearer {}", access_token))
-            .json(&req)
-            .send()
-            .map_err(|err| {
-                error!("{}: Executing HTTP request failed: {}", msg, err);
-                err
-            })
-            .map(|rsp| {
-                if !rsp.status().is_success() {
-                    error!("{}: HTTP Failure {}", msg, rsp.status());
-                }
-                rsp
-            })?
-            .error_for_status()
-            .map(|_| ())
-            .map_err(|err| Error::HTTP(err))
-    }
 
-    pub fn stop_playback(&self) -> Result<(), Error> {
-        let msg = "Failed to stop Spotify playback";
-        let access_token = self.access_token_provider.get_token()?;
-        let device_id = match self.spotify_connector.device_id() {
-            Some(device_id) => device_id,
-            None => return Err(Error::NoSpotifyDevice),
-        };
-        self.http_client
-            .put("https://api.spotify.com/v1/me/player/pause")
-            .query(&[("device_id", &device_id)])
-            .body("")
-            .header(AUTHORIZATION, format!("Bearer {}", access_token))
-            .send()
-            .map_err(|err| {
-                error!("{}: Executing HTTP request failed: {}", msg, err);
-                err
-            })
-            .map(|rsp| {
-                if !rsp.status().is_success() {
-                    error!("{}: HTTP Failure {}", msg, rsp.status());
-                }
-                rsp
-            })?
-            .error_for_status()
-            .map(|_| ())
-            .map_err(|err| Error::HTTP(err))
+        let _ = handle.replay().await?;
+
+        Ok(handle)
     }
 }
 

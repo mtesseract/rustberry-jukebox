@@ -1,4 +1,4 @@
-use failure::Fail;
+use failure::{Fail, Fallible};
 use http::header::AUTHORIZATION;
 use reqwest::blocking::Client;
 use serde::Deserialize;
@@ -70,4 +70,70 @@ pub fn lookup_device_by_name(
         })
         .into()),
     }
+}
+
+pub async fn async_lookup_device_by_name(
+    http_client: &reqwest::Client,
+    access_token_provider: &AccessTokenProvider,
+    device_name: &str,
+) -> Result<Device, JukeboxError> {
+    let access_token = access_token_provider.get_bearer_token()?;
+    let rsp = http_client
+        .get("https://api.spotify.com/v1/me/player/devices")
+        .header(AUTHORIZATION, &access_token)
+        .send()
+        .await?
+        .json::<DevicesResponse>()
+        .await?;
+    let opt_dev = rsp
+        .devices
+        .into_iter()
+        .filter(|x| x.name == device_name)
+        .next();
+    match opt_dev {
+        Some(dev) => Ok(dev),
+        None => Err((JukeboxError::DeviceNotFound {
+            device_name: device_name.clone().to_string(),
+        })
+        .into()),
+    }
+}
+
+#[derive(Deserialize, Debug, Clone)]
+struct CurrentlyPlayingObject {
+    pub is_playing: bool,
+}
+
+pub async fn is_currently_playing(
+    http_client: &reqwest::Client,
+    access_token_provider: &AccessTokenProvider,
+    device_name: &str,
+) -> Fallible<bool> {
+    let access_token = access_token_provider.get_bearer_token()?;
+
+    let device =
+        async_lookup_device_by_name(&http_client, access_token_provider, device_name).await?;
+
+    let currently_playing = http_client
+        .put("https://api.spotify.com/v1/me/player/currently-playing")
+        .query(&[("device_id", &device.id)])
+        .body("")
+        .header(AUTHORIZATION, format!("Bearer {}", access_token))
+        .send()
+        .await?
+        // .map_err(|err| {
+        //     error!("{}: Executing HTTP request failed: {}", msg, err);
+        //     err
+        // })
+        // .map(|rsp| {
+        //     if !rsp.status().is_success() {
+        //         error!("{}: HTTP Failure {}", msg, rsp.status());
+        //     }
+        //     rsp
+        // })?
+        .error_for_status()?
+        .json::<CurrentlyPlayingObject>()
+        .await?;
+
+    Ok(device.is_active && currently_playing.is_playing)
 }
