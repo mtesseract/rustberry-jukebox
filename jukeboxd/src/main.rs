@@ -12,6 +12,7 @@ use rustberry::config::Config;
 use rustberry::effects::{Interpreter, ProdInterpreter};
 use rustberry::input_controller::{button, playback, Input};
 use rustberry::player::{self, PlaybackRequest, Player};
+use rustberry::cache::Cache;
 
 use led::Blinker;
 
@@ -28,6 +29,7 @@ fn main() -> Fallible<()> {
 fn main_with_log() -> Fallible<()> {
     let config = envy::from_env::<Config>()?;
     info!("Configuration"; o!("device_name" => &config.device_name));
+
 
     // Create Effects Channel and Interpreter.
     let interpreter = ProdInterpreter::new(&config).unwrap();
