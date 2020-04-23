@@ -198,7 +198,7 @@ impl Player {
                         at,
                         prev_resource,
                     } => {
-                        if resource == prev_resource  {
+                        if resource == prev_resource {
                             // continue at position
                             let pause_state = PauseState { pos: at };
                             info!(
@@ -391,8 +391,8 @@ mod test {
     use failure::Fallible;
     use tokio::runtime::Runtime;
 
-    use crate::effects::{test::TestInterpreter, Effects};
     use super::*;
+    use crate::effects::{test::TestInterpreter, Effects};
 
     #[test]
     fn player_plays_resource_on_playback_request() -> Fallible<()> {

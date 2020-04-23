@@ -8,11 +8,12 @@ use slog_async;
 use slog_scope::{error, info, warn};
 use slog_term;
 
+use rustberry::cache::Cache;
 use rustberry::config::Config;
-use rustberry::effects::{Interpreter, ProdInterpreter};
+use rustberry::effects::{test::TestInterpreter, Interpreter, ProdInterpreter};
 use rustberry::input_controller::{button, playback, Input};
 use rustberry::player::{self, PlaybackRequest, Player};
-use rustberry::cache::Cache;
+use rustberry::server::Server;
 
 use led::Blinker;
 
@@ -26,11 +27,27 @@ fn main() -> Fallible<()> {
     slog_scope::scope(&slog_scope::logger().new(o!()), || main_with_log())
 }
 
-fn main_with_log() -> Fallible<()> {
-    let config = envy::from_env::<Config>()?;
-    info!("Configuration"; o!("device_name" => &config.device_name));
+fn create_mock_app(config: Config) -> Fallible<App> {
+    let (inputs_tx, inputs_rx) = crossbeam_channel::bounded(1);
+    let (interpreter, interpreted_effects) = TestInterpreter::new();
+    let interpreter =
+        Arc::new(Box::new(interpreter) as Box<dyn Interpreter + Sync + Send + 'static>);
 
+    let blinker = Blinker::new(interpreter.clone()).unwrap();
 
+    let _handle = std::thread::Builder::new()
+    .name("mock-effect-interpreter".to_string())
+    .spawn(move || for eff in interpreted_effects.iter() {
+        info!("Mock interpreter received effect: {:?}", eff);
+    })
+    .unwrap();
+    
+    let application = App::new(config, interpreter, blinker, &vec![inputs_rx]).unwrap();
+    std::mem::forget(inputs_tx);
+    Ok(application)
+}
+
+fn create_production_app(config: Config) -> Fallible<App> {
     // Create Effects Channel and Interpreter.
     let interpreter = ProdInterpreter::new(&config).unwrap();
     let interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>> =
@@ -64,7 +81,20 @@ fn main_with_log() -> Fallible<()> {
         ],
     )
     .unwrap();
-    application.run().map_err(|err| {
+    Ok(application)
+}
+
+fn main_with_log() -> Fallible<()> {
+    let config = envy::from_env::<Config>()?;
+    info!("Configuration"; o!("device_name" => &config.device_name));
+
+    let app = if std::env::var("MOCK_MODE").map(|x| x == "YES").unwrap_or(false) {
+        create_mock_app(config)?
+    } else {
+        create_production_app(config)?
+    };
+
+    app.run().map_err(|err| {
         warn!("Jukebox loop terminated, terminating application: {}", err);
         err
     })?;
@@ -103,6 +133,8 @@ impl App {
     pub fn run(self) -> Fallible<()> {
         let runtime = tokio::runtime::Runtime::new();
 
+        Server::start();
+
         self.blinker.run_async(led::Cmd::Repeat(
             1,
             Box::new(led::Cmd::Many(vec![
@@ -125,8 +157,12 @@ impl App {
                     if err.is_empty() {
                         // If the operation turns out not to be ready, retry.
                         continue;
+                    } else if err.is_disconnected() {
+                        error!("Input channel disconnected, terminating: {}", err);
+                        return Err(err.into());
                     } else {
-                        error!("Failed to receive input event: {}", err);
+                        error!("Unexpected error while receiving input event: {}", err);
+                        return Err(err.into());
                     }
                 }
                 Ok(input) => {

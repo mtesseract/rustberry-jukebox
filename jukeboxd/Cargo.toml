@@ -4,6 +4,10 @@ version = "0.2.2"
 authors = ["Moritz Clasmeier <mtesseract@silverratio.net>"]
 edition = "2018"
 
+[features]
+default = []
+raspberry = ["blinkt"]
+
 [lib]
 name = "rustberry"
 path = "src/lib.rs"
@@ -17,6 +21,7 @@ serde_json = "1.0"
 crossbeam-channel = "0.4"
 fxhash = "0.2.1"
 futures = "0.3.4"
+blinkt = { version = "0.5.0", optional = true }
 mime = "0.3"
 dialoguer = "0.4.0"
 tokio = {version = "0.2.13", features = ["full", "rt-threaded"]}
