@@ -13,8 +13,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-    - name: Install xmllint
-      run: sudo apt-get install --yes alsa-lib
+    - name: Install Dependencies
+      run: sudo apt-get install --yes curl gcc gcc-multilib-arm-linux-gnueabihf pkg-config libssl-dev \
     - name: Build
       run: cd jukeboxd && cargo build --verbose
     - name: Run tests
