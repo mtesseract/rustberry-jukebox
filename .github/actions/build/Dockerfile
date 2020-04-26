@@ -4,9 +4,8 @@ ENV DEBIAN_FRONTEND noninteractive
 
 RUN apt-get update && apt-get dist-upgrade --yes \
     && apt-get install --yes make curl git gcc gcc-multilib-arm-linux-gnueabihf pkg-config libssl-dev openssh-server \
-    && useradd -ms /bin/bash builder
 
-RUN cd /usr/local && \
+    RUN cd /usr/local && \
     VERS="1.1.1d" && \
     curl -O "https://www.openssl.org/source/openssl-$VERS.tar.gz" && \
     tar xzf "openssl-$VERS.tar.gz" && \
