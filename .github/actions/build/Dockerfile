@@ -1,5 +1,7 @@
 FROM ubuntu:latest
 
+ENV DEBIAN_FRONTEND noninteractive
+
 RUN apt-get update && apt-get dist-upgrade --yes \
     && apt-get install --yes curl git gcc gcc-multilib-arm-linux-gnueabihf pkg-config libssl-dev openssh-server \
     && useradd -ms /bin/bash builder
