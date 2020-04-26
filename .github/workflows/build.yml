@@ -1,0 +1,17 @@
+push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Build
+      id: build
+      uses: ./.github/actions/build
+      with:
+          who-to-greet: 'Mona the Octocat'
