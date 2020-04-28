@@ -17,6 +17,10 @@ jobs:
 
     - name: PWD
       run: pwd
+    - name: ID
+      run: id
+    - name: home
+      run: echo $HOME
     - name: Touch
       run: touch ~/.foo
     - name: Touch2
