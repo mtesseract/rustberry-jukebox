@@ -50,6 +50,8 @@ jobs:
       with:
         path: jukeboxd/target
         key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+    - name: chown
+      run: chown -R runner:docker ~/.cargo/{registry,git}
 
     # - name: Build
     #   id: build
