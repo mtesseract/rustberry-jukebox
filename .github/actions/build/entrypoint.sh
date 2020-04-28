@@ -15,8 +15,4 @@ export PKG_CONFIG_ALLOW_CROSS=1
 export PATH="/root/.cargo/bin:$PATH"
 export CARGO_HOME=/root/.cargo
 export RUSTUP_HOME=/root/.rustup
-#cargo build --release --bin jukeboxd --target=armv7-unknown-linux-gnueabihf
-
-cargo new foo
-cd foo
-cargo build
+cargo build --release --bin jukeboxd --target=armv7-unknown-linux-gnueabihf
