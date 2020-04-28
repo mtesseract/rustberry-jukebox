@@ -19,6 +19,8 @@ jobs:
       run: pwd
     - name: Touch
       run: touch ~/.foo
+    - name: Touch2
+      run: touch ~/.cargo/foo
     - name: ls 1
       run: ls -ld ~
     - name: ls 2
