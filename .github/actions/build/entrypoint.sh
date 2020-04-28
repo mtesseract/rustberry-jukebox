@@ -15,7 +15,5 @@ export PKG_CONFIG_ALLOW_CROSS=1
 export PATH="/root/.cargo/bin:$PATH"
 export CARGO_HOME=/root/.cargo
 export RUSTUP_HOME=/root/.rustup
-ls
-cd jukeboxd
-ls
-cargo build --release --bin rustberry-write-spotify-uri --target=armv7-unknown-linux-gnueabihf
+
+cargo build --release --bin jukeboxd --target=armv7-unknown-linux-gnueabihf
