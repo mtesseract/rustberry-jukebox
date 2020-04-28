@@ -15,7 +15,8 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
-
+    - name: PWD
+      run: pwd
     - name: Cache cargo registry
       uses: actions/cache@v1
       with:
