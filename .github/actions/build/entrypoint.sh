@@ -10,4 +10,5 @@ export OPENSSL_LIB_DIR=/usr/local/openssl
 export OPENSSL_INCLUDE_DIR=/usr/local/openssl/include
 export PKG_CONFIG_ALLOW_CROSS=1
 export PATH="/root/.cargo/bin:$PATH"
+export CARGO_HOME=/root/.cargo
 cargo build --release --bin jukeboxd --target=armv7-unknown-linux-gnueabihf
