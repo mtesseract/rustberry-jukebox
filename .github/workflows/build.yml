@@ -50,7 +50,7 @@ jobs:
       with:
         path: jukeboxd/target
         key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
-    - name: Build
+    - name: Build it
       id: build
       uses: ./.github/actions/build
       with:
