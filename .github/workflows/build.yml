@@ -51,7 +51,7 @@ jobs:
         path: jukeboxd/target
         key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
     - name: chown
-      run: sudo chown -R runner:docker ~/.cargo/{registry}
+      run: sudo chown -R runner:docker ~/.cargo/registry
 
     # - name: Build
     #   id: build
