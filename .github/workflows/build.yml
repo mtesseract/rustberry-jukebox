@@ -17,11 +17,21 @@ jobs:
 
     - name: PWD
       run: pwd
+    - name: Touch
+      run: touch ~/.foo
+    - name: ls 1
+      run: ls -ld ~
+    - name: ls 2
+      run: ls -la ~/
+    - name: find 1
+      run: find ~/.cargo/registry
     - name: Cache cargo registry
       uses: actions/cache@v1
       with:
         path: ~/.cargo/registry
         key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+    - name: find 2
+      run: find ~/.cargo/registry
     - name: Cache cargo index
       uses: actions/cache@v1
       with:
@@ -33,8 +43,8 @@ jobs:
         path: jukeboxd/target
         key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
 
-    - name: Build
-      id: build
-      uses: ./.github/actions/build
-      with:
-          who-to-greet: 'Mona the Octocat'
+    # - name: Build
+    #   id: build
+    #   uses: ./.github/actions/build
+    #   with:
+    #       who-to-greet: 'Mona the Octocat'
