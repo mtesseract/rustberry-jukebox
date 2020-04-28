@@ -25,8 +25,10 @@ jobs:
       run: ls -ld ~
     - name: ls 2
       run: ls -la ~/
+    - name: ls 3
+      run: ls -la ~/.cargo/registry
     - name: find 1
-      run: find ~/.cargo/registry
+      run: find ~/.cargo/registry | xargs ls -l
     - name: Cache cargo registry
       uses: actions/cache@v1
       with:
