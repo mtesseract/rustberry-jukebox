@@ -16,4 +16,5 @@ export PATH="/root/.cargo/bin:$PATH"
 export CARGO_HOME=/root/.cargo
 export RUSTUP_HOME=/root/.rustup
 
+cd jukeboxd
 cargo build --release --bin jukeboxd --target=armv7-unknown-linux-gnueabihf
