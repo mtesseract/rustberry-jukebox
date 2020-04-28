@@ -1159,7 +1159,7 @@ dependencies = [
 
 [[package]]
 name = "rustberry"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "async-trait 0.1.30 (registry+https://github.com/rust-lang/crates.io-index)",
  "base64 0.10.1 (registry+https://github.com/rust-lang/crates.io-index)",
