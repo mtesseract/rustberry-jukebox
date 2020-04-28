@@ -50,8 +50,15 @@ jobs:
       with:
         path: jukeboxd/target
         key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+    - name: Build
+      id: build
+      uses: ./.github/actions/build
+      with:
+          who-to-greet: 'Mona the Octocat'
     - name: chown
       run: sudo chown -R runner:docker ~/.cargo/registry
+    - name: chown 2
+      run: sudo chown -R runner:docker jukeboxd/target
 
     # - name: Build
     #   id: build
