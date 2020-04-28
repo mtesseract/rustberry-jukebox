@@ -4,7 +4,7 @@ echo "Hello $1"
 time=$(date)
 echo "::set-output name=time::$time"
 
-. ~/.cargo/env
+. /root/.cargo/env
 export OPENSSL_LIB_DIR=/usr/local/openssl
 export OPENSSL_INCLUDE_DIR=/usr/local/openssl/include
 export OPENSSL_LIB_DIR=/usr/local/openssl
