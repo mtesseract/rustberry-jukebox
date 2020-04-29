@@ -17,6 +17,7 @@ export CARGO_HOME=/root/.cargo
 export RUSTUP_HOME=/root/.rustup
 
 cd jukeboxd
-cargo build-deps --release  --target=armv7-unknown-linux-gnueabihf
-cp -r target target-deps
+# cargo build-deps --release  --target=armv7-unknown-linux-gnueabihf
 cargo build --release --bin jukeboxd --target=armv7-unknown-linux-gnueabihf
+cp -r target target-deps
+#cargo build --release --bin jukeboxd --target=armv7-unknown-linux-gnueabihf
