@@ -59,6 +59,10 @@ jobs:
       uses: ./.github/actions/build
       with:
           who-to-greet: 'Mona the Octocat'
+    - name: list registry
+      run: find /home/runner/work/_temp/_github_home/caches/registry/
+    - name: du registry
+      run: du -sm /home/runner/work/_temp/_github_home/caches/registry/ || true
     - name: chown target link
       run: sudo chown -R runner:docker jukeboxd/target
     - name: ls target link
