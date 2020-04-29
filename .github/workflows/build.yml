@@ -15,6 +15,8 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
+    - name: rm old registry
+      run: rm -rf ~/.cargo/registry
     - name: PWD
       run: pwd
     - name: ID
@@ -34,6 +36,8 @@ jobs:
         key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
           ${{ runner.os }}-cargo-registry-
+    - name: rm old registry (2)
+      run: rm -rf ~/.cargo/registry
     - name: find 2
       run: find ~/.cargo/registry
     # - name: Cache cargo index
