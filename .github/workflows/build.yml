@@ -51,7 +51,7 @@ jobs:
         path: jukeboxd/target
         key: ${{ runner.os }}-cargo-build-target
     - name: inspect target link
-      run: ls -ld jukeboxd/target
+      run: ls -ld jukeboxd/target || true
     - name: Build it
       id: build
       uses: ./.github/actions/build
