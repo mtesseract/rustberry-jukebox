@@ -25,4 +25,4 @@ ln -sf /github/home/caches/git $CARGO_HOME/git
 cd jukeboxd
 cargo build --release --bin jukeboxd --target=$TARGET_ARCH
 mkdir _artifacts
-cp jukeboxd/target/$TARGET_ARCH/release/jukeboxd _artifacts
+cp target/$TARGET_ARCH/release/jukeboxd _artifacts
