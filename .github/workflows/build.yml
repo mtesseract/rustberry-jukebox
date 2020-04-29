@@ -27,7 +27,7 @@ jobs:
       run: ls -la ~/
     - name: ls 3
       run: ls -la ~/.cargo/registry
-    - name: Cache cargo registry
+    - name: Cache cargo registry (updated)
       uses: actions/cache@v1
       with:
         path: ~/.cargo/registry
