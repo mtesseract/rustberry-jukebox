@@ -50,13 +50,15 @@ jobs:
       with:
         path: jukeboxd/target
         key: ${{ runner.os }}-cargo-build-target
+    - name: inspect target link
+      run: ls -ld jukeboxd/target
     - name: Build it
       id: build
       uses: ./.github/actions/build
       with:
           who-to-greet: 'Mona the Octocat'
     - name: del target link
-      run: rm jukeboxd/target
+      run: ls -ld jukeboxd/target
     - name: fix target
       run: mv jukeboxd/target-deps jukeboxd/target 
     - name: chown
