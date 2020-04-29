@@ -1,6 +1,6 @@
 [package]
 name = "rustberry"
-version = "0.2.6"
+version = "0.2.7"
 authors = ["Moritz Clasmeier <mtesseract@silverratio.net>"]
 edition = "2018"
 
