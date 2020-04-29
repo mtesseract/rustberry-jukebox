@@ -19,6 +19,7 @@ echo caches
 ls /github/home/caches
 echo .
 
+rm -rf $CARGO_HOME/registry
 ln -sf /github/home/caches/registry $CARGO_HOME/registry
 # ln -sf /github/home/caches/target /github/workspace/jukeboxd/target
 
