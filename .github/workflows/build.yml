@@ -61,12 +61,12 @@ jobs:
       run: sudo chown -R runner:docker jukeboxd/target
     - name: ls target link
       run: ls -ld jukeboxd/target
-    - name: fix target
-      run: mv jukeboxd/target-deps jukeboxd/target 
-    - name: chown
+    # - name: fix target
+    #   run: mv jukeboxd/target-deps jukeboxd/target 
+    - name: chown registry
       run: sudo chown -R runner:docker ~/.cargo/registry
-    - name: chown 2
-      run: sudo chown -R runner:docker jukeboxd/target
+    # - name: chown 2
+    #   run: sudo chown -R runner:docker jukeboxd/target
 
     # - name: Build
     #   id: build
