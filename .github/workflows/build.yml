@@ -29,10 +29,12 @@ jobs:
       run: ls -la ~/ || true
     - name: ls 3
       run: ls -la ~/.cargo/registry || true
+    - name: mkdir
+      run: mkdir /home/runner/work/_temp/_github_home/caches
     - name: Cache cargo registry (updated)
       uses: actions/cache@v1
       with:
-        path: /home/runner/work/_temp/_github_home/.cargo/registry
+        path: /home/runner/work/_temp/_github_home/caches/registry
         key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
           ${{ runner.os }}-cargo-registry-
@@ -46,7 +48,7 @@ jobs:
     - name: Cache cargo build (updated)
       uses: actions/cache@v1
       with:
-        path: jukeboxd/target
+        path: /home/runner/work/rustberry/rustberry/jukeboxd/target
         key: ${{ runner.os }}-cargo-target-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
           ${{ runner.os }}-cargo-target-
@@ -60,11 +62,11 @@ jobs:
     - name: chown target link
       run: sudo chown -R runner:docker jukeboxd/target
     - name: ls target link
-      run: ls -ld jukeboxd/target
+      run: ls -ld jukeboxd/target || false
     # - name: fix target
     #   run: mv jukeboxd/target-deps jukeboxd/target 
     - name: chown registry
-      run: sudo chown -R runner:docker ~/.cargo/registry
+      run: sudo chown -R runner:docker /home/runner/work/_temp/_github_home/caches/registry
     # - name: chown 2
     #   run: sudo chown -R runner:docker jukeboxd/target
 
