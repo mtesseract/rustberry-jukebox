@@ -30,7 +30,7 @@ jobs:
     - name: ls 3
       run: ls -la ~/.cargo/registry || true
     - name: mkdir
-      run: mkdir -p /home/runner/work/_temp/_github_home/caches
+      run: mkdir -p /home/runner/work/_temp/_github_home/caches/registry
     - name: Cache cargo registry (updated)
       uses: actions/cache@v1
       with:
