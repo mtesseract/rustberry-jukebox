@@ -35,7 +35,7 @@ jobs:
       uses: actions/cache@v1
       with:
         path: /home/runner/work/_temp/_github_home/caches/registry
-        key: ${{ runner.os }}-registry-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-registryx-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
           ${{ runner.os }}-registry-
     # - name: rm old registry (2)
@@ -49,7 +49,7 @@ jobs:
       uses: actions/cache@v1
       with:
         path: /home/runner/work/rustberry/rustberry/jukeboxd/target
-        key: ${{ runner.os }}-target-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-targetx-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
           ${{ runner.os }}-target-
     - name: inspect target link
