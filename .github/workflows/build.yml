@@ -24,11 +24,11 @@ jobs:
     - name: home
       run: echo $HOME
     - name: ls 1
-      run: ls -ld ~
+      run: ls -ld ~ || true
     - name: ls 2
-      run: ls -la ~/
+      run: ls -la ~/ || true
     - name: ls 3
-      run: ls -la ~/.cargo/registry
+      run: ls -la ~/.cargo/registry || true
     - name: Cache cargo registry (updated)
       uses: actions/cache@v1
       with:
