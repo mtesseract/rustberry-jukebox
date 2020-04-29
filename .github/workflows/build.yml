@@ -37,7 +37,7 @@ jobs:
       uses: actions/cache@v1
       with:
         path: ~/.cargo/registry
-        key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-cargo-registry
     - name: find 2
       run: find ~/.cargo/registry
     # - name: Cache cargo index
@@ -49,12 +49,16 @@ jobs:
       uses: actions/cache@v1
       with:
         path: jukeboxd/target
-        key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-cargo-build-target
     - name: Build it
       id: build
       uses: ./.github/actions/build
       with:
           who-to-greet: 'Mona the Octocat'
+    - name: del target link
+      run: rm jukeboxd/target
+    - name: fix target
+      run: mv jukeboxd/target-deps jukeboxd/target 
     - name: chown
       run: sudo chown -R runner:docker ~/.cargo/registry
     - name: chown 2
