@@ -35,9 +35,9 @@ jobs:
       uses: actions/cache@v1
       with:
         path: /home/runner/work/_temp/_github_home/caches/registry
-        key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-registry-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
-          ${{ runner.os }}-cargo-registry-
+          ${{ runner.os }}-registry-
     # - name: rm old registry (2)
     #   run: rm -rf ~/.cargo/registry
     # - name: Cache cargo index
@@ -49,9 +49,9 @@ jobs:
       uses: actions/cache@v1
       with:
         path: /home/runner/work/rustberry/rustberry/jukeboxd/target
-        key: ${{ runner.os }}-cargo-target-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-target-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
-          ${{ runner.os }}-cargo-target-
+          ${{ runner.os }}-target-
     - name: inspect target link
       run: ls -ld jukeboxd/target || true
     - name: Build it
