@@ -41,7 +41,7 @@ jobs:
     #   with:
     #     path: ~/.cargo/git
     #     key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
-    - name: Cache cargo build
+    - name: Cache cargo build (updated)
       uses: actions/cache@v1
       with:
         path: jukeboxd/target
