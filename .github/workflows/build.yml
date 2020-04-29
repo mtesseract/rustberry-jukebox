@@ -1,0 +1,56 @@
+
+name: Rust
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Cache Preparation
+      run: |
+        mkdir -p /home/runner/work/_temp/_github_home/caches/registry
+        mkdir -p /home/runner/work/_temp/_github_home/caches/git
+    - name: Cache Cargo registry
+      uses: actions/cache@v1
+      with:
+        path: /home/runner/work/_temp/_github_home/caches/registry
+        key: ${{ runner.os }}-registry-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-registry-
+    - name: Cache Cargo git
+      uses: actions/cache@v1
+      with:
+        path: /home/runner/work/_temp/_github_home/caches/git
+        key: ${{ runner.os }}-git-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-git-
+    - name: Cache Cargo target
+      uses: actions/cache@v1
+      with:
+        path: /home/runner/work/rustberry/rustberry/jukeboxd/target
+        key: ${{ runner.os }}-target-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-target-
+    - name: Cargo Build
+      id: build
+      uses: ./.github/actions/build
+      with:
+          who-to-greet: 'Mona the Octocat'
+    - name: Cache Upload Preparation
+      run: |
+        sudo chown -R runner:docker /home/runner/work/_temp/_github_home/caches/registry
+        sudo chown -R runner:docker /home/runner/work/_temp/_github_home/caches/git
+        sudo chown -R runner:docker /home/runner/work/rustberry/rustberry/jukeboxd/target
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v1
+      with:
+        name: rustberry-jukeboxd
+        path: jukeboxd/target/armv7-unknown-linux-gnueabihf/release/jukeboxd
