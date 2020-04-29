@@ -57,7 +57,9 @@ jobs:
       uses: ./.github/actions/build
       with:
           who-to-greet: 'Mona the Octocat'
-    - name: del target link
+    - name: chown target link
+      run: sudo chown -R runner:docker jukeboxd/target
+    - name: ls target link
       run: ls -ld jukeboxd/target
     - name: fix target
       run: mv jukeboxd/target-deps jukeboxd/target 
