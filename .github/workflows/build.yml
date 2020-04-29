@@ -38,8 +38,6 @@ jobs:
           ${{ runner.os }}-cargo-registry-
     - name: rm old registry (2)
       run: rm -rf ~/.cargo/registry
-    - name: find 2
-      run: find ~/.cargo/registry
     # - name: Cache cargo index
     #   uses: actions/cache@v1
     #   with:
