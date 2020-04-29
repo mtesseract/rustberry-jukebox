@@ -21,23 +21,19 @@ jobs:
       run: id
     - name: home
       run: echo $HOME
-    - name: Touch
-      run: touch ~/.foo
-    - name: Touch2
-      run: touch ~/.cargo/foo
     - name: ls 1
       run: ls -ld ~
     - name: ls 2
       run: ls -la ~/
     - name: ls 3
       run: ls -la ~/.cargo/registry
-    - name: find 1
-      run: find ~/.cargo/registry | xargs ls -l
     - name: Cache cargo registry
       uses: actions/cache@v1
       with:
         path: ~/.cargo/registry
-        key: ${{ runner.os }}-cargo-registry
+        key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-registry-
     - name: find 2
       run: find ~/.cargo/registry
     # - name: Cache cargo index
@@ -49,7 +45,9 @@ jobs:
       uses: actions/cache@v1
       with:
         path: jukeboxd/target
-        key: ${{ runner.os }}-cargo-build-target
+        key: ${{ runner.os }}-cargo-target-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-target-
     - name: inspect target link
       run: ls -ld jukeboxd/target || true
     - name: Build it
