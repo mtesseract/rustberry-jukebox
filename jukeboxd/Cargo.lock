@@ -140,6 +140,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "blinkt"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "79d15ea9a07575a51090608b28024481560220fdc25a7bea23f63cc48958c8f3"
+dependencies = [
+ "quick-error",
+ "rppal",
+]
+
+[[package]]
 name = "bumpalo"
 version = "3.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1100,6 +1110,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "quick-error"
+version = "1.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a1d01941d82fa2ab50be1e79e6714289dd7cde78eba4c074bc5a4374f650dfe0"
+
+[[package]]
 name = "quote"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1262,6 +1278,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "rppal"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1154df4b7b87fdb9d0032c7af1b45f47247a4585b7ae71c06f2d3e1d152d3650"
+dependencies = [
+ "libc",
+ "quick-error",
+]
+
+[[package]]
 name = "rust-argon2"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1279,6 +1305,7 @@ version = "0.2.5"
 dependencies = [
  "async-trait",
  "base64 0.10.1",
+ "blinkt",
  "bytes",
  "crossbeam-channel",
  "dialoguer",
