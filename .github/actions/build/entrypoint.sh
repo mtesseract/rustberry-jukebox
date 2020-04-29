@@ -15,6 +15,10 @@ export PATH="/root/.cargo/bin:$PATH"
 export CARGO_HOME=/root/.cargo
 export RUSTUP_HOME=/root/.rustup
 
+echo caches
+ls /github/home/caches
+echo .
+
 ln -sf /github/home/caches/registry $CARGO_HOME/registry
 # ln -sf /github/home/caches/target /github/workspace/jukeboxd/target
 
