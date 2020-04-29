@@ -14,68 +14,38 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-
-    # - name: rm old registry
-    #   run: rm -rf ~/.cargo/registry
-    - name: PWD
-      run: pwd
-    - name: ID
-      run: id
-    - name: home
-      run: echo $HOME
-    - name: ls 1
-      run: ls -ld ~ || true
-    - name: ls 2
-      run: ls -la ~/ || true
-    - name: ls 3
-      run: ls -la ~/.cargo/registry || true
-    - name: mkdir
-      run: mkdir -p /home/runner/work/_temp/_github_home/caches/registry
-    - name: Cache cargo registry (updated)
+    - name: Cache Preparation
+      run: |
+        mkdir -p /home/runner/work/_temp/_github_home/caches/registry
+        mkdir -p /home/runner/work/_temp/_github_home/caches/git
+    - name: Cache Cargo registry
       uses: actions/cache@v1
       with:
         path: /home/runner/work/_temp/_github_home/caches/registry
-        key: ${{ runner.os }}-registryx-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-registry-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
           ${{ runner.os }}-registry-
-    # - name: rm old registry (2)
-    #   run: rm -rf ~/.cargo/registry
-    # - name: Cache cargo index
-    #   uses: actions/cache@v1
-    #   with:
-    #     path: ~/.cargo/git
-    #     key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
-    - name: Cache cargo build (updated)
+    - name: Cache Cargo git
+      uses: actions/cache@v1
+      with:
+        path: /home/runner/work/_temp/_github_home/caches/git
+        key: ${{ runner.os }}-git-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-git-
+    - name: Cache Cargo target
       uses: actions/cache@v1
       with:
         path: /home/runner/work/rustberry/rustberry/jukeboxd/target
-        key: ${{ runner.os }}-targetx-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-target-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
           ${{ runner.os }}-target-
-    - name: inspect target link
-      run: ls -ld jukeboxd/target || true
-    - name: Build it
+    - name: Cargo Build
       id: build
       uses: ./.github/actions/build
       with:
           who-to-greet: 'Mona the Octocat'
-    - name: list registry
-      run: find /home/runner/work/_temp/_github_home/caches/registry/
-    - name: du registry
-      run: du -sm /home/runner/work/_temp/_github_home/caches/registry/ || true
-    - name: chown target link
-      run: sudo chown -R runner:docker jukeboxd/target
-    - name: ls target link
-      run: ls -ld jukeboxd/target || false
-    # - name: fix target
-    #   run: mv jukeboxd/target-deps jukeboxd/target 
-    - name: chown registry
-      run: sudo chown -R runner:docker /home/runner/work/_temp/_github_home/caches/registry
-    # - name: chown 2
-    #   run: sudo chown -R runner:docker jukeboxd/target
-
-    # - name: Build
-    #   id: build
-    #   uses: ./.github/actions/build
-    #   with:
-    #       who-to-greet: 'Mona the Octocat'
+    - name: Cache Upload Preparation
+      run: |
+        sudo chown -R runner:docker /home/runner/work/_temp/_github_home/caches/registry
+        sudo chown -R runner:docker /home/runner/work/_temp/_github_home/caches/git
+        sudo chown -R runner:docker /home/runner/work/rustberry/rustberry/jukeboxd/target

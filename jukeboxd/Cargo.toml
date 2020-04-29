@@ -1,8 +1,9 @@
 [package]
 name = "rustberry"
-version = "0.2.6"
+version = "0.2.0"
 authors = ["Moritz Clasmeier <mtesseract@silverratio.net>"]
 edition = "2018"
+description = "XXX Rustberry Jukebox"
 
 [lib]
 name = "rustberry"
@@ -14,7 +15,7 @@ http = "0.2.1"
 # gotham_derive = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-# crossbeam-channel = "0.4"
+crossbeam-channel = "0.4"
 # futures = "0.3.4"
 # blinkt = "0.5.0"
 # mime = "0.3"
