@@ -7,6 +7,6 @@ inputs:
     required: true
 runs:
   using: 'docker'
-  image: ${{ inputs.target-arch }}/Dockerfile
+  image: '${{ inputs.target-arch }}/Dockerfile'
   args:
     - ${{ inputs.target-arch }}
