@@ -21,6 +21,6 @@ ln -sf /github/home/caches/registry $CARGO_HOME/registry
 ln -sf /github/home/caches/git $CARGO_HOME/git
 
 cd jukeboxd
-cargo build --release --bin jukeboxd --target=$TARGET_ARCH
+cargo build --release --bin jukeboxd --target=armv7-unknown-linux-gnueabihf
 mkdir _artifacts
-cp target/$TARGET_ARCH/release/jukeboxd _artifacts
+cp target/armv7-unknown-linux-gnueabihf/release/jukeboxd _artifacts
