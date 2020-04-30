@@ -1,7 +1,5 @@
 #!/bin/sh -l
 
-TARGET_ARCH="$1"
-
 echo "Building inside container..."
 
 export OPENSSL_LIB_DIR=/usr/local/openssl
