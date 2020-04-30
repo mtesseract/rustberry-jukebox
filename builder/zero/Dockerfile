@@ -1,8 +1,9 @@
 FROM ubuntu:latest
 
+ENV DEBIAN_FRONTEND noninteractive
+
 RUN apt-get update && apt-get dist-upgrade --yes \
-    && apt-get install --yes vi curl git pkg-config libssl-dev openssh-server \
-    && useradd -ms /bin/bash builder
+    && apt-get install --yes make curl git pkg-config libssl-dev
 
 ARG RASPBERRY_PI_TOOLS_COMMIT_ID=b0c869bc929587a7e1d20a98e2dc828a24ca396a
 RUN curl -sL https://github.com/raspberrypi/tools/archive/$RASPBERRY_PI_TOOLS_COMMIT_ID.tar.gz \
@@ -31,24 +32,8 @@ RUN cd /usr/local && \
     make && \
     make install
 
-RUN mkdir /cache && chown -R builder /cache
-
-USER builder 
-
 RUN curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
     && . ~/.cargo/env \
     && echo "source ~/.cargo/env > ~builder/.bash_profile" \
-    && rustup target add arm-unknown-linux-gnueabihf
-
-
-RUN echo "[target.arm-unknown-linux-gnueabihf]" > /home/builder/.cargo/config && \
-    echo "linker = \"arm-linux-gnueabihf-gcc\"" >> /home/builder/.cargo/config && \
-    chown builder /home/builder/.cargo/config
-
-ADD rustberry-builder.pub /home/builder/.ssh/authorized_keys
-
-VOLUME /cache
-
-USER root
-
-CMD /etc/init.d/ssh start && while true; do sleep 60; done
+    && rustup target add arm-unknown-linux-gnueabihf \
+    && echo "[target.arm-unknown-linux-gnueabihf]\nlinker = \"arm-linux-gnueabihf-gcc\"" > ~/.cargo/config
