@@ -1,0 +1,5 @@
+# action.yml
+name: 'Build for armv7-unknown-linux-gnuabihf'
+runs:
+  using: 'docker'
+  image: 'Dockerfile'
