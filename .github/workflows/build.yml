@@ -12,6 +12,12 @@ jobs:
 
     runs-on: ubuntu-latest
 
+    strategy:
+      matrix:
+        arch:
+        # - armv7-unknown-linux-musleabihf
+        - armv7-unknown-linux-gnueabihf
+
     steps:
     - uses: actions/checkout@v2
     - name: Cache Preparation
@@ -41,7 +47,7 @@ jobs:
           ${{ runner.os }}-target-
     - name: Cargo Build
       id: build
-      uses: ./.github/actions/build
+      uses: ./.github/actions/build/${{ matrix.arch }}
     - name: Cache Upload Preparation
       run: |
         sudo chown -R runner:docker /home/runner/work/_temp/_github_home/caches/registry
