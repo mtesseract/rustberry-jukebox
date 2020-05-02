@@ -45,9 +45,10 @@ jobs:
         key: ${{ runner.os }}-target-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
           ${{ runner.os }}-target-
-    - name: Cargo Build
-      id: build
-      uses: ./.github/actions/build/${{ matrix.arch }}
+    - name: Cargo Build (target: armv7-unknown-linux-gnueabihf)
+      id: build-armv7-unknown-linux-gnueabihf
+      if: ${{ matrix.arch == "armv7-unknown-linux-gnueabihf" }}
+      uses: ./.github/actions/build/armv7-unknown-linux-gnueabihf
     - name: Cache Upload Preparation
       run: |
         sudo chown -R runner:docker /home/runner/work/_temp/_github_home/caches/registry
