@@ -20,7 +20,7 @@ rm -rf $CARGO_HOME/git
 ln -sf /github/home/caches/registry $CARGO_HOME/registry
 ln -sf /github/home/caches/git $CARGO_HOME/git
 
-ln -s $CC /usr/bin/cc
+ln -s $(which $CC) /usr/bin/cc
 ls -l /usr/bin/cc
 echo "PATH: $PATH"
 
