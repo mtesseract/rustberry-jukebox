@@ -45,7 +45,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-${{ matrix.arch }}-target-
       - name: "Cargo Build (target: arm-unknown-linux-gnueabihf)"
-        id: build-armv7-unknown-linux-gnueabihf
+        id: build-arm-unknown-linux-gnueabihf
         if: ${{ matrix.arch }} == "arm-unknown-linux-gnueabihf"
         uses: ./.github/actions/build/arm-unknown-linux-gnueabihf
       - name: "Cargo Build (target: armv7-unknown-linux-gnueabihf)"
