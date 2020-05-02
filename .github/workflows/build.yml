@@ -28,7 +28,7 @@ jobs:
       uses: actions/cache@v1
       with:
         path: /home/runner/work/_temp/_github_home/caches/registry
-        key: ${{ runner.os }}-registry-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-${{ matrix.arch }}-registry-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
           ${{ runner.os }}-registry-
     - name: Cache Cargo git
@@ -42,9 +42,9 @@ jobs:
       uses: actions/cache@v1
       with:
         path: /home/runner/work/rustberry/rustberry/jukeboxd/target
-        key: ${{ runner.os }}-target-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-${{ matrix.arch }}-target-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
-          ${{ runner.os }}-target-
+          ${{ runner.os }}-${{ matrix.arch }}-target-
     - name: "Cargo Build (target: armv7-unknown-linux-gnueabihf)"
       id: build-armv7-unknown-linux-gnueabihf
       if: ${{ matrix.arch }} == "armv7-unknown-linux-gnueabihf"
