@@ -21,6 +21,8 @@ ln -sf /github/home/caches/registry $CARGO_HOME/registry
 ln -sf /github/home/caches/git $CARGO_HOME/git
 
 ln -s $CC /usr/bin/cc
+ls -l /usr/bin/cc
+echo "PATH: $PATH"
 
 cd jukeboxd
 cargo build --release --bin jukeboxd --target=arm-unknown-linux-gnueabihf
