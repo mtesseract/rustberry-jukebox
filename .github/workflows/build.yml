@@ -1,56 +1,64 @@
-
-name: Rust
+name: Build Rustberry Jukebox
 
 on:
   push:
-    branches: [ master ]
+    branches: [master]
   pull_request:
-    branches: [ master ]
+    branches: [master]
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
+    strategy:
+      matrix:
+        arch:
+          # - armv7-unknown-linux-musleabihf
+          # - armv7-unknown-linux-gnueabihf
+          - arm-unknown-linux-gnueabihf
+
     steps:
-    - uses: actions/checkout@v2
-    - name: Cache Preparation
-      run: |
-        mkdir -p /home/runner/work/_temp/_github_home/caches/registry
-        mkdir -p /home/runner/work/_temp/_github_home/caches/git
-    - name: Cache Cargo registry
-      uses: actions/cache@v1
-      with:
-        path: /home/runner/work/_temp/_github_home/caches/registry
-        key: ${{ runner.os }}-registry-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-registry-
-    - name: Cache Cargo git
-      uses: actions/cache@v1
-      with:
-        path: /home/runner/work/_temp/_github_home/caches/git
-        key: ${{ runner.os }}-git-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-git-
-    - name: Cache Cargo target
-      uses: actions/cache@v1
-      with:
-        path: /home/runner/work/rustberry/rustberry/jukeboxd/target
-        key: ${{ runner.os }}-target-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-target-
-    - name: Cargo Build
-      id: build
-      uses: ./.github/actions/build
-      with:
-        target-arch: 'armv7-unknown-linux-gnueabihf'
-    - name: Cache Upload Preparation
-      run: |
-        sudo chown -R runner:docker /home/runner/work/_temp/_github_home/caches/registry
-        sudo chown -R runner:docker /home/runner/work/_temp/_github_home/caches/git
-        sudo chown -R runner:docker /home/runner/work/rustberry/rustberry/jukeboxd/target
-    - name: Upload Artifact
-      uses: actions/upload-artifact@v1
-      with:
-        name: rustberry-jukeboxd
-        path: jukeboxd/_artifacts/jukeboxd
+      - uses: actions/checkout@v2
+      - name: Cache Preparation
+        run: |
+          mkdir -p /home/runner/work/_temp/_github_home/caches/registry
+          mkdir -p /home/runner/work/_temp/_github_home/caches/git
+      - name: Cache Cargo registry
+        uses: actions/cache@v1
+        with:
+          path: /home/runner/work/_temp/_github_home/caches/registry
+          key: ${{ runner.os }}-${{ matrix.arch }}-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-registry-
+      - name: Cache Cargo git
+        uses: actions/cache@v1
+        with:
+          path: /home/runner/work/_temp/_github_home/caches/git
+          key: ${{ runner.os }}-git-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-git-
+      - name: Cache Cargo target
+        uses: actions/cache@v1
+        with:
+          path: /home/runner/work/rustberry/rustberry/jukeboxd/target
+          key: ${{ runner.os }}-${{ matrix.arch }}-target-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.arch }}-target-
+      - name: "Cargo Build (target: arm-unknown-linux-gnueabihf)"
+        id: build-arm-unknown-linux-gnueabihf
+        if: matrix.arch == 'arm-unknown-linux-gnueabihf'
+        uses: ./.github/actions/build/arm-unknown-linux-gnueabihf
+      - name: "Cargo Build (target: armv7-unknown-linux-gnueabihf)"
+        id: build-armv7-unknown-linux-gnueabihf
+        if: matrix.arch == 'armv7-unknown-linux-gnueabihf'
+        uses: ./.github/actions/build/armv7-unknown-linux-gnueabihf
+      - name: Cache Upload Preparation
+        run: |
+          sudo chown -R runner:docker /home/runner/work/_temp/_github_home/caches/registry
+          sudo chown -R runner:docker /home/runner/work/_temp/_github_home/caches/git
+          sudo chown -R runner:docker /home/runner/work/rustberry/rustberry/jukeboxd/target
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v1
+        with:
+          name: rustberry-jukeboxd
+          path: jukeboxd/_artifacts/jukeboxd

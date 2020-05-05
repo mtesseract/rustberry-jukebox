@@ -1,4 +1,4 @@
-FROM mtesseract/rustberry-builder:latest
+FROM mtesseract/rustberry-builder-arm-unknown-linux-gnueabihf:latest
 
 # Copies your code file from your action repository to the filesystem path `/` of the container
 COPY entrypoint.sh /entrypoint.sh
