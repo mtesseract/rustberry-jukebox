@@ -17,3 +17,6 @@ cd jukeboxd
 cargo build --release --bin jukeboxd --target=arm-unknown-linux-gnueabihf
 mkdir _artifacts
 cp target/arm-unknown-linux-gnueabihf/release/jukeboxd _artifacts
+
+version=$(cargo pkgid | cut -d# -f2 | cut -d: -f2)
+echo "::set-output name=version::v${version}"

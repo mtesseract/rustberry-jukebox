@@ -48,18 +48,18 @@ jobs:
         id: build-arm-unknown-linux-gnueabihf
         if: matrix.arch == 'arm-unknown-linux-gnueabihf'
         uses: ./.github/actions/build/arm-unknown-linux-gnueabihf
-      - name: "Cargo Build (target: armv7-unknown-linux-gnueabihf)"
-        id: build-armv7-unknown-linux-gnueabihf
-        if: matrix.arch == 'armv7-unknown-linux-gnueabihf'
-        uses: ./.github/actions/build/armv7-unknown-linux-gnueabihf
+      # - name: "Cargo Build (target: armv7-unknown-linux-gnueabihf)"
+      #   id: build-armv7-unknown-linux-gnueabihf
+      #   if: matrix.arch == 'armv7-unknown-linux-gnueabihf'
+      #   uses: ./.github/actions/build/armv7-unknown-linux-gnueabihf
       - name: Create Release
         id: create_release
         uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
+          tag_name: ${{ steps.build-arm-unknown-linux-gnueabihf.outputs.version }}
+          release_name: Release ${{ steps.build-arm-unknown-linux-gnueabihf.outputs.version }}
           draft: true
           prerelease: false
       - name: Cache Upload Preparation

@@ -1,5 +1,8 @@
 # action.yml
-name: 'Build for arm-unknown-linux-gnueabihf'
+name: "Build for arm-unknown-linux-gnueabihf"
 runs:
-  using: 'docker'
-  image: 'Dockerfile'
+  using: "docker"
+  image: "Dockerfile"
+outputs:
+  version:
+    description: "Application Version"
