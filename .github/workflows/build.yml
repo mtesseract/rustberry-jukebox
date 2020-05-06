@@ -52,6 +52,16 @@ jobs:
         id: build-armv7-unknown-linux-gnueabihf
         if: matrix.arch == 'armv7-unknown-linux-gnueabihf'
         uses: ./.github/actions/build/armv7-unknown-linux-gnueabihf
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          draft: true
+          prerelease: false
       - name: Cache Upload Preparation
         run: |
           sudo chown -R runner:docker /home/runner/work/_temp/_github_home/caches/registry
