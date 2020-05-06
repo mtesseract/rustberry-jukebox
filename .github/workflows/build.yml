@@ -74,21 +74,16 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./my-artifact.zip
-          asset_name: my-artifact.zip
-          asset_content_type: application/zip
+          asset_path: ./rustberry-jukebox-${{ steps.build-arm-unknown-linux-gnueabihf.outputs.version }}.tar.gz
+          asset_name: rustberry-jukebox-${{ steps.build-arm-unknown-linux-gnueabihf.outputs.version }}.tar.gz
+          asset_content_type: application/gzip
       - name: Cache Upload Preparation
         run: |
           sudo chown -R runner:docker /home/runner/work/_temp/_github_home/caches/registry
           sudo chown -R runner:docker /home/runner/work/_temp/_github_home/caches/git
           sudo chown -R runner:docker /home/runner/work/rustberry/rustberry/jukeboxd/target
-      - name: Upload Release Asset
-        id: upload-release-asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v1
         with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./rustberry-jukebox-${{ steps.build-arm-unknown-linux-gnueabihf.outputs.version }}.tar.gz
-          asset_name: rustberry-jukebox-${{ steps.build-arm-unknown-linux-gnueabihf.outputs.version }}.tar.gz
-          asset_content_type: application/gzip
+          name: rustberry-jukeboxd
+          path: jukeboxd/_artifacts/jukeboxd
