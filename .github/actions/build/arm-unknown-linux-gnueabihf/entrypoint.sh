@@ -19,4 +19,4 @@ mkdir _artifacts
 cp target/arm-unknown-linux-gnueabihf/release/jukeboxd _artifacts
 
 version=$(cargo pkgid | cut -d# -f2 | cut -d: -f2)
-echo "::set-output name=version::v${version}"
+echo "::set-output name=version::${version}"
