@@ -56,7 +56,7 @@ jobs:
         id: package
         run: |
           tar czf 'rustberry-jukebox-${{ steps.build-arm-unknown-linux-gnueabihf.outputs.version }}.tar.gz' \
-            _artifacts/jukeboxd
+            jukeboxd/_artifacts/jukeboxd
       - name: Create Release
         id: create_release
         uses: actions/create-release@v1
