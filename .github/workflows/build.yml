@@ -55,8 +55,9 @@ jobs:
       - name: Package
         id: package
         run: |
-          tar czf 'rustberry-jukebox-${{ steps.build-arm-unknown-linux-gnueabihf.outputs.version }}.tar.gz' \
-            jukeboxd/_artifacts/jukeboxd
+          cd jukeboxd/_artifacts
+          tar czvf '../../rustberry-jukebox-${{ steps.build-arm-unknown-linux-gnueabihf.outputs.version }}-${{ matrix.arch }}.tar.gz' \
+            jukeboxd
       - name: Create Release
         id: create_release
         uses: actions/create-release@v1
@@ -74,8 +75,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./rustberry-jukebox-${{ steps.build-arm-unknown-linux-gnueabihf.outputs.version }}.tar.gz
-          asset_name: rustberry-jukebox-${{ steps.build-arm-unknown-linux-gnueabihf.outputs.version }}.tar.gz
+          asset_path: ./rustberry-jukebox-${{ steps.build-arm-unknown-linux-gnueabihf.outputs.version }}-${{ matrix.arch }}.tar.gz
+          asset_name: rustberry-jukebox-${{ steps.build-arm-unknown-linux-gnueabihf.outputs.version }}-${{ matrix.arch }}.tar.gz
           asset_content_type: application/gzip
       - name: Cache Upload Preparation
         run: |
