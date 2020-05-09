@@ -40,7 +40,7 @@ jobs:
       - name: Cache Cargo target
         uses: actions/cache@v1
         with:
-          path: /home/runner/work/rustberry/rustberry/jukeboxd/target
+          path: /home/runner/work/rustberry/rustberry/target
           key: ${{ runner.os }}-${{ matrix.arch }}-target-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-${{ matrix.arch }}-target-
@@ -55,8 +55,8 @@ jobs:
       - name: Package
         id: package
         run: |
-          cd jukeboxd/_artifacts
-          tar czvf '../../rustberry-jukebox-${{ steps.build-arm-unknown-linux-gnueabihf.outputs.version }}-${{ matrix.arch }}.tar.gz' \
+          cd _artifacts
+          tar czvf '../rustberry-jukebox-${{ steps.build-arm-unknown-linux-gnueabihf.outputs.version }}-${{ matrix.arch }}.tar.gz' \
             jukeboxd
       - name: Create Release
         id: create_release
@@ -82,9 +82,9 @@ jobs:
         run: |
           sudo chown -R runner:docker /home/runner/work/_temp/_github_home/caches/registry
           sudo chown -R runner:docker /home/runner/work/_temp/_github_home/caches/git
-          sudo chown -R runner:docker /home/runner/work/rustberry/rustberry/jukeboxd/target
+          sudo chown -R runner:docker /home/runner/work/rustberry/rustberry/target
       - name: Upload Artifact
         uses: actions/upload-artifact@v1
         with:
           name: rustberry-jukeboxd
-          path: jukeboxd/_artifacts/jukeboxd
+          path: _artifacts/jukeboxd

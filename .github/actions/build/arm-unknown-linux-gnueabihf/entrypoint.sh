@@ -13,7 +13,6 @@ ln -sf /github/home/caches/registry $CARGO_HOME/registry
 ln -sf /github/home/caches/git $CARGO_HOME/git
 
 # Build it
-cd jukeboxd
 cargo build --release --bin jukeboxd --target=arm-unknown-linux-gnueabihf
 mkdir _artifacts
 cp target/arm-unknown-linux-gnueabihf/release/jukeboxd _artifacts
