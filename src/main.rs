@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use crossbeam_channel::{self, Receiver, Select};
+use crossbeam_channel::{self, Receiver, Select, Sender};
 use failure::Fallible;
 use slog::{self, o, Drain};
 use slog_async;
@@ -33,8 +33,9 @@ fn main_with_log() -> Fallible<()> {
     let interpreter = ProdInterpreter::new(&config).unwrap();
     let interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>> =
         Arc::new(Box::new(interpreter));
+    let runtime = tokio::runtime::Runtime::new().unwrap();
 
-    let blinker = Blinker::new(interpreter.clone()).unwrap();
+    let blinker = Blinker::new(runtime.handle().clone(), interpreter.clone()).unwrap();
     blinker.run_async(led::Cmd::Loop(Box::new(led::Cmd::Many(vec![
         led::Cmd::On(Duration::from_millis(100)),
         led::Cmd::Off(Duration::from_millis(100)),
@@ -51,17 +52,29 @@ fn main_with_log() -> Fallible<()> {
     let playback_controller_handle =
         playback::rfid::PlaybackRequestTransmitterRfid::new(|req| Some(Input::Playback(req)))?;
 
-    // Execute Application Logic, producing Effects.
-    let application = App::new(
+    // // Execute Application Logic, producing Effects.
+    // let application = App::new(
+    //     config,
+    //     interpreter.clone(),
+    //     blinker,
+    //     &vec![
+    //         button_controller_handle.channel(),
+    //         playback_controller_handle.channel(),
+    //     ],
+    // )
+    // .unwrap();
+    //
+
+    let mut application = MetaApp::new(
         config,
-        interpreter.clone(),
+        interpreter,
+        runtime,
         blinker,
         &vec![
             button_controller_handle.channel(),
             playback_controller_handle.channel(),
         ],
-    )
-    .unwrap();
+    )?;
     application.run().map_err(|err| {
         warn!("Jukebox loop terminated, terminating application: {}", err);
         err
@@ -75,18 +88,94 @@ struct App {
     interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>>,
     inputs: Vec<Receiver<Input>>,
     blinker: Blinker,
+    runtime: tokio::runtime::Handle,
+}
+
+struct MetaApp {
+    config: Config,
     runtime: tokio::runtime::Runtime,
+    control_rx: Receiver<AppControl>,
+    control_tx: Sender<AppControl>,
+    interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>>,
+    inputs: Vec<Receiver<Input>>,
+    blinker: Blinker,
+}
+
+impl MetaApp {
+    pub fn control_tx(&self) -> Sender<AppControl> {
+        unimplemented!()
+    }
+
+    pub fn new(
+        config: Config,
+        interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>>,
+        runtime: tokio::runtime::Runtime,
+        blinker: Blinker,
+        inputs: &[Receiver<Input>],
+    ) -> Fallible<Self> {
+        let (control_tx, control_rx) = crossbeam_channel::bounded(1);
+
+        let inputs = inputs.to_vec();
+        let meta_app = MetaApp {
+            control_rx,
+            control_tx,
+            config,
+            runtime,
+            inputs,
+            blinker,
+            interpreter,
+        };
+        Ok(meta_app)
+    }
+
+    pub fn run(&mut self) -> Fallible<()> {
+        //
+        // let start_mode = AppMode::Jukebox;
+        let current_mode = AppMode::Starting;
+
+        let (f, abortable_handle) =
+            futures::future::abortable(
+                App::new(
+                    self.config.clone(),
+                    self.runtime.handle().clone(),
+                    self.interpreter.clone(),
+                    self.blinker.clone(),
+                    &self.inputs,
+                )?.run());
+
+        let current_task = self.runtime.block_on(f);
+
+        unreachable!();
+
+        // loop {
+        //     // read from control_rx
+        //     let cmd = unimplemented();
+        //     match cmd {
+
+        //     }
+        // }
+    }
+}
+
+enum AppMode {
+    Starting,
+    Jukebox,
+    Admin,
+}
+
+enum AppControl {
+    SetMode(AppMode),
 }
 
 impl App {
     pub fn new(
         config: Config,
+        runtime: tokio::runtime::Handle,
         interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>>,
         blinker: Blinker,
         inputs: &[Receiver<Input>],
     ) -> Fallible<Self> {
-        let runtime = tokio::runtime::Runtime::new().unwrap();
-        let player = Player::new(runtime.handle(), interpreter.clone())?;
+        let player = Player::new(runtime.clone(), interpreter.clone())?;
         let app = Self {
             runtime,
             config,
@@ -98,9 +187,7 @@ impl App {
         Ok(app)
     }
 
-    pub fn run(self) -> Fallible<()> {
-        let runtime = tokio::runtime::Runtime::new();
-
+    pub async fn run(self) -> Fallible<()> {
         self.blinker.run_async(led::Cmd::Repeat(
             1,
             Box::new(led::Cmd::Many(vec![
@@ -108,6 +195,7 @@ impl App {
                 led::Cmd::Off(Duration::from_secs(0)),
             ])),
         ));
+
         let mut sel = Select::new();
         for r in &self.inputs {
             sel.recv(r);
@@ -210,7 +298,15 @@ mod test {
         let inputs = vec![Input::Button(button::Command::Shutdown)];
         let effects_expected = vec![Effects::GenericCommand("sudo shutdown -h now".to_string())];
         let (input_tx, input_rx) = crossbeam_channel::unbounded();
-        let app = App::new(config, interpreter, blinker, &vec![input_rx]).unwrap();
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let app = App::new(
+            config,
+            runtime.handle(),
+            interpreter,
+            blinker,
+            &vec![input_rx],
+        )
+        .unwrap();
         for input in inputs {
             input_tx.send(input).unwrap();
         }
@@ -234,10 +330,11 @@ mod led {
     use rustberry::effects::Interpreter;
     use slog_scope::info;
 
+    #[derive(Clone)]
     pub struct Blinker {
         interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
         abort_handle: RefCell<Option<AbortHandle>>,
-        runtime: tokio::runtime::Runtime,
+        runtime: tokio::runtime::Handle,
     }
 
     #[derive(Debug, Clone)]
@@ -251,13 +348,10 @@ mod led {
 
     impl Blinker {
         pub fn new(
+            runtime: tokio::runtime::Handle,
             interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
         ) -> Fallible<Self> {
             let abort_handle = RefCell::new(None);
-            let runtime = tokio::runtime::Builder::new()
-                .threaded_scheduler()
-                .enable_all()
-                .build()?;
             let blinker = Self {
                 interpreter,
                 abort_handle,

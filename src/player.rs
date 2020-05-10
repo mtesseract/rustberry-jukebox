@@ -330,7 +330,7 @@ impl Player {
     }
 
     pub fn new(
-        runtime: &runtime::Handle,
+        runtime: runtime::Handle,
         interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
     ) -> Fallible<PlayerHandle> {
         let (tx, rx) = crossbeam_channel::bounded(1);
