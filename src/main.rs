@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use crossbeam_channel::{self, Receiver, Select, Sender};
+use crossbeam_channel::{self, Receiver, Select};
 use failure::Fallible;
 use slog::{self, o, Drain};
 use slog_async;
@@ -9,9 +9,10 @@ use slog_scope::{error, info, warn};
 use slog_term;
 
 use rustberry::config::Config;
-use rustberry::effects::{Interpreter, ProdInterpreter};
+use rustberry::effects::{Interpreter, test::TestInterpreter, ProdInterpreter};
 use rustberry::input_controller::{button, playback, Input};
 use rustberry::player::{self, PlaybackRequest, Player};
+use futures_util::TryFutureExt;
 
 use led::Blinker;
 
@@ -25,21 +26,39 @@ fn main() -> Fallible<()> {
     slog_scope::scope(&slog_scope::logger().new(o!()), || main_with_log())
 }
 
-fn main_with_log() -> Fallible<()> {
-    let config = envy::from_env::<Config>()?;
-    info!("Configuration"; o!("device_name" => &config.device_name));
+async fn create_mock_meta_app(config: Config) -> Fallible<MetaApp> {
+    warn!("Creating Mock Application");
+    let (inputs_tx, inputs_rx) = crossbeam_channel::bounded(1);
+    let (interpreter, interpreted_effects) = TestInterpreter::new();
+    let interpreter =
+        Arc::new(Box::new(interpreter) as Box<dyn Interpreter + Sync + Send + 'static>);
 
+    let blinker = Blinker::new(interpreter.clone()).unwrap();
+
+    let _handle = std::thread::Builder::new()
+    .name("mock-effect-interpreter".to_string())
+    .spawn(move || for eff in interpreted_effects.iter() {
+        info!("Mock interpreter received effect: {:?}", eff);
+    })
+    .unwrap();
+    
+    let application = MetaApp::new(config, interpreter, blinker, &vec![inputs_rx]).await.unwrap();
+    std::mem::forget(inputs_tx);
+    Ok(application)
+}
+
+async fn create_production_meta_app(config: Config) -> Fallible<MetaApp> {
+    info!("Creating Production Application");    
     // Create Effects Channel and Interpreter.
     let interpreter = ProdInterpreter::new(&config).unwrap();
     let interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>> =
         Arc::new(Box::new(interpreter));
-    let runtime = tokio::runtime::Runtime::new().unwrap();
 
-    let blinker = Blinker::new(runtime.handle().clone(), interpreter.clone()).unwrap();
+    let blinker = Blinker::new(interpreter.clone()).unwrap();
     blinker.run_async(led::Cmd::Loop(Box::new(led::Cmd::Many(vec![
         led::Cmd::On(Duration::from_millis(100)),
         led::Cmd::Off(Duration::from_millis(100)),
-    ]))));
+    ])))).await;
 
     interpreter.wait_until_ready().map_err(|err| {
         error!("Failed to wait for interpreter readiness: {}", err);
@@ -52,100 +71,190 @@ fn main_with_log() -> Fallible<()> {
     let playback_controller_handle =
         playback::rfid::PlaybackRequestTransmitterRfid::new(|req| Some(Input::Playback(req)))?;
 
-    // // Execute Application Logic, producing Effects.
-    // let application = App::new(
-    //     config,
-    //     interpreter.clone(),
-    //     blinker,
-    //     &vec![
-    //         button_controller_handle.channel(),
-    //         playback_controller_handle.channel(),
-    //     ],
-    // )
-    // .unwrap();
-    //
-
     let mut application = MetaApp::new(
         config,
         interpreter,
-        runtime,
         blinker,
         &vec![
             button_controller_handle.channel(),
             playback_controller_handle.channel(),
         ],
-    )?;
-    application.run().map_err(|err| {
-        warn!("Jukebox loop terminated, terminating application: {}", err);
-        err
-    })?;
-    unreachable!();
+    ).await?;
+
+    Ok(application)
 }
 
+fn main_with_log() -> Fallible<()> {
+    let config = envy::from_env::<Config>()?;
+    info!("Configuration"; o!("device_name" => &config.device_name));
+
+    // let mut runtime = tokio::runtime::Runtime::new().unwrap();
+    let mut runtime = tokio::runtime::Builder::new()
+    .threaded_scheduler()
+    .enable_all()
+    .build()?;
+    
+    // let mut application = create_production_meta_app(config, runtime.handle())?;
+
+    runtime.block_on(async move {
+        let application = if std::env::var("MOCK_MODE").map(|x| x == "YES").unwrap_or(false) {
+            create_mock_meta_app(config).await?
+        } else {
+            create_production_meta_app(config).await?
+        };
+    
+        dbg!("about to block on application");
+        application.run().map_err(|err| {
+            warn!("Jukebox loop terminated, terminating application: {}", err);
+            err
+        }).await
+    });
+
+    dbg!("application temrinated");
+    Ok(())
+}
+
+#[derive(Clone)]
 struct App {
     config: Config,
     player: player::PlayerHandle,
     interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>>,
     inputs: Vec<Receiver<Input>>,
     blinker: Blinker,
-    runtime: tokio::runtime::Handle,
+    // runtime: tokio::runtime::Handle,
 }
 
+// #[derive(Clone)]
 struct MetaApp {
     config: Config,
-    runtime: tokio::runtime::Runtime,
-    control_rx: Receiver<AppControl>,
-    control_tx: Sender<AppControl>,
+    // runtime: tokio::runtime::Handle,
+    control_rx: tokio::sync::mpsc::Receiver<AppControl>,
+    control_tx: tokio::sync::mpsc::Sender<AppControl>,
     interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>>,
-    inputs: Vec<Receiver<Input>>,
+    // inputs: Vec<Receiver<Input>>,
+    app: App,
     blinker: Blinker,
 }
 
+use warp::Filter;
+use warp::http::StatusCode;
+use std::convert::Infallible;
+
+#[derive(Clone)]
+struct MetaAppHandle {
+    control_tx: tokio::sync::mpsc::Sender<AppControl>
+}
+
+impl MetaAppHandle {
+    async fn current_mode(&self) -> AppMode {
+        let (os_tx, os_rx) = tokio::sync::oneshot::channel();
+        let mut control_tx = self.control_tx.clone();
+        control_tx.try_send(AppControl::RequestCurrentMode(os_tx)).unwrap(); // FIXME
+        os_rx.await.unwrap()
+    }
+    
+    async fn set_mode(&self, mode: AppMode) {
+        let mut control_tx = self.control_tx.clone();
+        control_tx.try_send(AppControl::SetMode(AppMode::Admin));
+    }
+}
+
+
 impl MetaApp {
-    pub fn control_tx(&self) -> Sender<AppControl> {
-        unimplemented!()
+    pub fn handle(&self) -> MetaAppHandle {
+        let control_tx = self.control_tx.clone();
+        let meta_app_handle = MetaAppHandle { control_tx };
+        meta_app_handle
     }
 
-    pub fn new(
+    pub async fn new(
         config: Config,
         interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>>,
-        runtime: tokio::runtime::Runtime,
         blinker: Blinker,
         inputs: &[Receiver<Input>],
     ) -> Fallible<Self> {
-        let (control_tx, control_rx) = crossbeam_channel::bounded(1);
+        let (control_tx, control_rx) = tokio::sync::mpsc::channel(1);
 
-        let inputs = inputs.to_vec();
+        let app =  App::new(
+            config.clone(),
+            interpreter.clone(),
+            blinker.clone(),
+            inputs,
+        ).await?;
+
         let meta_app = MetaApp {
             control_rx,
             control_tx,
             config,
-            runtime,
-            inputs,
+            app,
             blinker,
             interpreter,
         };
         Ok(meta_app)
     }
 
-    pub fn run(&mut self) -> Fallible<()> {
-        //
-        // let start_mode = AppMode::Jukebox;
-        let current_mode = AppMode::Starting;
+    async fn get_current_mode(meta_app_handle: MetaAppHandle) -> Result<impl warp::Reply, Infallible> {
+        info!("get_current_mode()");
 
-        let (f, abortable_handle) =
-            futures::future::abortable(
-                App::new(
-                    self.config.clone(),
-                    self.runtime.handle().clone(),
-                    self.interpreter.clone(),
-                    self.blinker.clone(),
-                    &self.inputs,
-                )?.run());
+        let current_mode = meta_app_handle.current_mode().await;
+        let current_mode: String = format!("{:?}", current_mode);
 
-        let current_task = self.runtime.block_on(f);
+        Ok(warp::reply::json(&current_mode))
+    }
 
-        unreachable!();
+    fn with_db(db: MetaAppHandle) -> impl Filter<Extract = (MetaAppHandle,), Error = std::convert::Infallible> + Clone {
+        warp::any().map(move || db.clone())
+    }
+
+
+    async fn set_mode_admin(meta_app_handle: MetaAppHandle) -> Result<impl warp::Reply, Infallible> {
+        info!("set_mode_admin()");
+
+        meta_app_handle.set_mode(AppMode::Admin).await;
+        Ok(StatusCode::OK)
+    }
+
+    pub async fn run(mut self) -> Fallible<()> {
+        let meta_app_handle = self.handle();
+        let hello = warp::path!("hello" / String).map(|name| format!("Hello, {}!", name));
+        let ep_mode = {
+            let meta_app_handle = meta_app_handle.clone();
+            warp::path!("mode").and(Self::with_db(meta_app_handle)).and_then( Self::get_current_mode)
+        };
+        let ep_mode_admin = {
+            let meta_app_handle = meta_app_handle.clone();
+            warp::path!("mode-admin").and(Self::with_db(meta_app_handle)).and_then( Self::set_mode_admin)
+        };
+        
+        let routes = warp::get().and(hello.or(ep_mode).or(ep_mode_admin));
+
+        tokio::spawn(warp::serve(routes).run(([0, 0, 0, 0], 3030)));
+
+        let current_mode = AppMode::Jukebox;
+
+        let (f, abortable_handle) = futures::future::abortable(
+            self.app.clone().run()
+        );
+
+        tokio::spawn(f);
+
+        loop {
+            let cmd = self.control_rx.recv().await.unwrap();
+            info!("MetaApp Ctrl Cmd: {:?}", &cmd);
+            match cmd {
+                AppControl::RequestCurrentMode(os_tx) => {
+                    os_tx.send(current_mode.clone());
+                }
+
+                AppControl::SetMode(mode) => {
+                    // FIXME
+                    info!("Shutting down Jukebox App");
+                    abortable_handle.abort()
+                }
+            }
+        }
+
+        // let current_task = self.runtime.block_on(f);
 
         // loop {
         //     // read from control_rx
@@ -154,30 +263,35 @@ impl MetaApp {
 
         //     }
         // }
+        // 
+        // Ok(())
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum AppMode {
     Starting,
     Jukebox,
     Admin,
 }
 
+#[derive(Debug)]
 enum AppControl {
     SetMode(AppMode),
+    RequestCurrentMode(tokio::sync::oneshot::Sender<AppMode>)
 }
 
 impl App {
-    pub fn new(
+    pub async fn new(
         config: Config,
-        runtime: tokio::runtime::Handle,
+        // runtime: tokio::runtime::Handle,
         interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>>,
         blinker: Blinker,
         inputs: &[Receiver<Input>],
     ) -> Fallible<Self> {
-        let player = Player::new(runtime.clone(), interpreter.clone())?;
+        let player = Player::new(interpreter.clone()).await?;
         let app = Self {
-            runtime,
+            // runtime,
             config,
             inputs: inputs.to_vec(),
             player,
@@ -188,14 +302,15 @@ impl App {
     }
 
     pub async fn run(self) -> Fallible<()> {
+        info!("Running Jukebox App");
         self.blinker.run_async(led::Cmd::Repeat(
-            1,
+            10,
             Box::new(led::Cmd::Many(vec![
                 led::Cmd::On(Duration::from_secs(1)),
                 led::Cmd::Off(Duration::from_secs(0)),
             ])),
-        ));
-
+        )).await;
+        dbg!("here");
         let mut sel = Select::new();
         for r in &self.inputs {
             sel.recv(r);
@@ -283,7 +398,7 @@ mod test {
         let (interpreter, effects_rx) = TestInterpreter::new();
         let interpreter =
             Arc::new(Box::new(interpreter) as Box<dyn Interpreter + Send + Sync + 'static>);
-        let (effects_tx, effects_rx) = crossbeam_channel::bounded(10);
+        // let (effects_tx, effects_rx) = crossbeam_channel::bounded(10);
         let config: Config = Config {
             refresh_token: "token".to_string(),
             client_id: "client".to_string(),
@@ -294,14 +409,14 @@ mod test {
             volume_up_command: None,
             volume_down_command: None,
         };
-        let blinker = Blinker::new(interpreter.clone()).unwrap();
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let blinker = Blinker::new(runtime.handle().clone(), interpreter.clone()).unwrap();
         let inputs = vec![Input::Button(button::Command::Shutdown)];
         let effects_expected = vec![Effects::GenericCommand("sudo shutdown -h now".to_string())];
         let (input_tx, input_rx) = crossbeam_channel::unbounded();
-        let runtime = tokio::runtime::Runtime::new().unwrap();
         let app = App::new(
             config,
-            runtime.handle(),
+            runtime.handle().clone(),
             interpreter,
             blinker,
             &vec![input_rx],
@@ -311,7 +426,7 @@ mod test {
             input_tx.send(input).unwrap();
         }
         drop(input_tx);
-        app.run();
+        runtime.spawn(app.run());
         let produced_effects: Vec<Effects> = effects_rx.iter().collect();
 
         assert_eq!(produced_effects, effects_expected);
@@ -322,19 +437,19 @@ mod led {
     use std::cell::RefCell;
     use std::future::Future;
     use std::pin::Pin;
-    use std::sync::Arc;
+    use std::sync::{RwLock,Arc};
     use std::time::Duration;
 
     use failure::Fallible;
     use futures::future::AbortHandle;
     use rustberry::effects::Interpreter;
-    use slog_scope::info;
+    use slog_scope::{error,info};
 
     #[derive(Clone)]
     pub struct Blinker {
         interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
-        abort_handle: RefCell<Option<AbortHandle>>,
-        runtime: tokio::runtime::Handle,
+        abort_handle: Arc<RwLock<Option<AbortHandle>>>,
+        // runtime: tokio::runtime::Handle,
     }
 
     #[derive(Debug, Clone)]
@@ -348,14 +463,14 @@ mod led {
 
     impl Blinker {
         pub fn new(
-            runtime: tokio::runtime::Handle,
+            // runtime: tokio::runtime::Handle,
             interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
         ) -> Fallible<Self> {
-            let abort_handle = RefCell::new(None);
+            let abort_handle = Arc::new(RwLock::new(None));
             let blinker = Self {
                 interpreter,
                 abort_handle,
-                runtime,
+                // runtime,
             };
             Ok(blinker)
         }
@@ -365,6 +480,7 @@ mod led {
             cmd: Cmd,
         ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
             Box::pin(async move {
+                info!("Inside Blinker::run()");
                 match cmd {
                     Cmd::On(duration) => {
                         info!("Blinker switches on");
@@ -396,7 +512,7 @@ mod led {
         }
 
         pub fn stop(&self) {
-            let mut opt_abort_handle = self.abort_handle.borrow_mut();
+            let mut opt_abort_handle = self.abort_handle.write().unwrap();
             if let Some(ref abort_handle) = *opt_abort_handle {
                 info!("Terminating current blinking task");
                 abort_handle.abort();
@@ -404,19 +520,25 @@ mod led {
             }
         }
 
-        pub fn run_async(&self, spec: Cmd) {
+        pub async fn run_async(&self, spec: Cmd) {
             info!("Blinker run_async()");
-            if let Some(ref abort_handle) = *(self.abort_handle.borrow()) {
+            if let Some(ref abort_handle) = *(self.abort_handle.write().unwrap()) {
                 info!("Terminating current blinking task");
                 abort_handle.abort();
             }
             let interpreter = self.interpreter.clone();
-            // let spec = spec.clone();
+
             let (f, handle) =
                 futures::future::abortable(async move { Self::run(interpreter, spec).await });
-            let _join_handle = self.runtime.spawn(f);
+            
+            info!("run_async: Spawning future");
+            let _join_handle = tokio::spawn(f);
             info!("Created new blinking task");
-            *(self.abort_handle.borrow_mut()) = Some(handle);
+            // let _ = _join_handle.is_ready();
+
+            tokio::time::delay_for(std::time::Duration::from_secs(0)).await; // FIXME: why is this necessary??
+            *(self.abort_handle.write().unwrap()) = Some(handle);
+
         }
     }
 }

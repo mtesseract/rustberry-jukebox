@@ -80,6 +80,7 @@ pub struct Player {
     rx: Receiver<PlayerCommand>,
 }
 
+#[derive(Clone)]
 pub struct PlayerHandle {
     tx: Sender<PlayerCommand>,
 }
@@ -198,7 +199,7 @@ impl Player {
                         at,
                         prev_resource,
                     } => {
-                        if resource == prev_resource  {
+                        if resource == prev_resource {
                             // continue at position
                             let pause_state = PauseState { pos: at };
                             info!(
@@ -304,6 +305,7 @@ impl Player {
 
     async fn player_loop(mut player: Player) {
         loop {
+            info!("player loop");
             let command = player.rx.recv().unwrap();
             match command {
                 PlayerCommand {
@@ -329,8 +331,8 @@ impl Player {
         }
     }
 
-    pub fn new(
-        runtime: runtime::Handle,
+    pub async fn new(
+        // runtime: runtime::Handle,
         interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
     ) -> Fallible<PlayerHandle> {
         let (tx, rx) = crossbeam_channel::bounded(1);
@@ -341,7 +343,8 @@ impl Player {
             rx,
         };
 
-        runtime.spawn(Self::player_loop(player));
+        tokio::spawn(Self::player_loop(player));
+        // tokio::time::delay_for(std::time::Duration::from_secs(0)).await; // FIXME: why is this necessary??
 
         let player_handle = PlayerHandle { tx };
 
@@ -391,8 +394,8 @@ mod test {
     use failure::Fallible;
     use tokio::runtime::Runtime;
 
-    use crate::effects::{test::TestInterpreter, Effects};
     use super::*;
+    use crate::effects::{test::TestInterpreter, Effects};
 
     #[test]
     fn player_plays_resource_on_playback_request() -> Fallible<()> {
@@ -400,13 +403,16 @@ mod test {
         let (interpreter, effects_rx) = TestInterpreter::new();
         let interpreter =
             Arc::new(Box::new(interpreter) as Box<dyn Interpreter + Send + Sync + 'static>);
-        let player_handle = Player::new(&runtime.handle(), interpreter).unwrap();
+        error!("A");
+        let player_handle = Player::new(runtime.handle().clone(), interpreter).unwrap();
+        error!("B");
         let playback_requests = vec![
             PlaybackRequest::Start(PlaybackResource::SpotifyUri(
                 "spotify:track:5j6ZZwA9BnxZi5Bk0Ng4jB".to_string(),
             )),
             PlaybackRequest::Stop,
         ];
+        error!("C");
         let effects_expected = vec![
             Effects::PlaySpotify {
                 spotify_uri: "spotify:track:5j6ZZwA9BnxZi5Bk0Ng4jB".to_string(),
@@ -416,7 +422,11 @@ mod test {
         for req in playback_requests.iter() {
             player_handle.playback(req.clone()).unwrap();
         }
+        dbg!("1");
+        panic!();
         let produced_effects: Vec<_> = effects_rx.iter().collect();
+        dbg!("2");
+        panic!();
 
         assert_eq!(produced_effects, effects_expected);
         Ok(())
