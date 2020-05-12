@@ -117,7 +117,7 @@ fn main_with_log() -> Fallible<()> {
 #[derive(Clone)]
 struct App {
     config: Config,
-    player: player::PlayerHandle,
+    // player: player::PlayerHandle,
     interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>>,
     inputs: Vec<Receiver<Input>>,
     blinker: Blinker,
@@ -289,12 +289,12 @@ impl App {
         blinker: Blinker,
         inputs: &[Receiver<Input>],
     ) -> Fallible<Self> {
-        let player = Player::new(interpreter.clone()).await?;
+        
         let app = Self {
             // runtime,
             config,
             inputs: inputs.to_vec(),
-            player,
+            // player,
             interpreter,
             blinker,
         };
@@ -303,8 +303,9 @@ impl App {
 
     pub async fn run(self) -> Fallible<()> {
         info!("Running Jukebox App");
+        let player = Player::new(self.interpreter.clone()).await?;
         self.blinker.run_async(led::Cmd::Repeat(
-            10,
+            1,
             Box::new(led::Cmd::Many(vec![
                 led::Cmd::On(Duration::from_secs(1)),
                 led::Cmd::Off(Duration::from_secs(0)),
@@ -317,6 +318,7 @@ impl App {
         }
 
         loop {
+            warn!("app loop");
             // Wait until a receive operation becomes ready and try executing it.
             let index = sel.ready();
             let res = self.inputs[index].try_recv();
@@ -366,7 +368,7 @@ impl App {
                             }
                         },
                         Input::Playback(request) => {
-                            if let Err(err) = self.player.playback(request.clone()) {
+                            if let Err(err) = player.playback(request.clone()).await {
                                 error!("Failed to execute playback request {:?}: {}", request, err);
                             }
                             match request {

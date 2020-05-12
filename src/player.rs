@@ -4,10 +4,12 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
-use crossbeam_channel::{Receiver, Sender};
+// use crossbeam_channel::{Receiver, Sender};
+use tokio::sync::mpsc::{Receiver, Sender, channel};
+// use futures_util::sink::SinkExt;
 use failure::Fallible;
 use serde::{Deserialize, Serialize};
-use slog_scope::{error, info};
+use slog_scope::{error, warn, info};
 use tokio::runtime;
 
 use crate::effects::Interpreter;
@@ -80,6 +82,18 @@ pub struct Player {
     rx: Receiver<PlayerCommand>,
 }
 
+impl Drop for Player {
+    fn drop(&mut self) {
+        warn!("Dropping Player")
+    }
+}
+
+impl Drop for PlayerHandle {
+    fn drop(&mut self) {
+        warn!("Dropping PlayerHandle")
+    }
+}
+
 #[derive(Clone)]
 pub struct PlayerHandle {
     tx: Sender<PlayerCommand>,
@@ -98,16 +112,15 @@ pub enum PlaybackResource {
 }
 
 impl PlayerHandle {
-    pub fn playback(&self, req: PlaybackRequest) -> Fallible<()> {
-        let (tx, rx) = crossbeam_channel::bounded(1);
-
-        self.tx
+    pub async fn playback(&self, req: PlaybackRequest) -> Fallible<()> {
+        let (mut tx, mut rx) = channel(1);
+        let mut xtx = self.tx.clone();
+        xtx
             .send(PlayerCommand {
                 result_transmitter: tx,
                 request: req,
-            })
-            .unwrap();
-        rx.recv().unwrap()
+            }).await            .unwrap();
+        rx.recv().await.unwrap()
     }
 }
 
@@ -306,12 +319,13 @@ impl Player {
     async fn player_loop(mut player: Player) {
         loop {
             info!("player loop");
-            let command = player.rx.recv().unwrap();
+            let command = player.rx.recv().await.unwrap();
             match command {
                 PlayerCommand {
                     result_transmitter,
                     request,
                 } => {
+                    let mut result_transmitter = result_transmitter;
                     let current_state = player.state.clone();
                     let (res, new_state) =
                         Self::state_machine(player.interpreter.clone(), request, current_state)
@@ -325,7 +339,7 @@ impl Player {
                         info!("Player State Transition: {} -> {}", player.state, new_state);
                     }
                     player.state = new_state;
-                    result_transmitter.send(res).unwrap();
+                    result_transmitter.send(res).await.unwrap();
                 }
             }
         }
@@ -335,7 +349,7 @@ impl Player {
         // runtime: runtime::Handle,
         interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
     ) -> Fallible<PlayerHandle> {
-        let (tx, rx) = crossbeam_channel::bounded(1);
+        let (tx, rx) = channel(1);
 
         let player = Player {
             interpreter,
@@ -381,11 +395,16 @@ pub mod err {
         }
     }
 
-    impl<T> From<crossbeam_channel::SendError<T>> for Error {
-        fn from(err: crossbeam_channel::SendError<T>) -> Self {
-            Error::SendError(err.to_string())
-        }
-    }
+    // impl<T> From<crossbeam_channel::SendError<T>> for Error {
+    //     fn from(err: crossbeam_channel::SendError<T>) -> Self {
+    //         Error::SendError(err.to_string())
+    //     }
+    // }
+    // impl From<tokio::channel::mpsc::SendError> for Error {
+    //     fn from(err: tokio::channel::mpsc::SendError) -> Self {
+    //         Error::SendError(err.to_string())
+    //     }
+    // }
     impl std::error::Error for Error {}
 }
 
