@@ -1,7 +1,10 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use crossbeam_channel::{self, Receiver, Select};
+use tokio::sync::mpsc::{channel, Receiver};
+use tokio::stream::StreamExt;
+
+// use crossbeam_channel::{self, Receiver, Select};
 use failure::Fallible;
 use slog::{self, o, Drain};
 use slog_async;
@@ -28,7 +31,7 @@ fn main() -> Fallible<()> {
 
 async fn create_mock_meta_app(config: Config) -> Fallible<MetaApp> {
     warn!("Creating Mock Application");
-    let (inputs_tx, inputs_rx) = crossbeam_channel::bounded(1);
+    let (inputs_tx, inputs_rx) = channel(1);
     let (interpreter, interpreted_effects) = TestInterpreter::new();
     let interpreter =
         Arc::new(Box::new(interpreter) as Box<dyn Interpreter + Sync + Send + 'static>);
@@ -42,7 +45,8 @@ async fn create_mock_meta_app(config: Config) -> Fallible<MetaApp> {
     })
     .unwrap();
     
-    let application = MetaApp::new(config, interpreter, blinker, &vec![inputs_rx]).await.unwrap();
+    let (fixme_tx, fixme_rx) = channel(1);
+    let application = MetaApp::new(config, interpreter, blinker, [inputs_rx, fixme_rx]).await.unwrap();
     std::mem::forget(inputs_tx);
     Ok(application)
 }
@@ -75,7 +79,7 @@ async fn create_production_meta_app(config: Config) -> Fallible<MetaApp> {
         config,
         interpreter,
         blinker,
-        &vec![
+        [
             button_controller_handle.channel(),
             playback_controller_handle.channel(),
         ],
@@ -119,7 +123,7 @@ struct App {
     config: Config,
     // player: player::PlayerHandle,
     interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>>,
-    inputs: Vec<Receiver<Input>>,
+    inputs: Arc<[Receiver<Input>; 2]>,
     blinker: Blinker,
     // runtime: tokio::runtime::Handle,
 }
@@ -171,7 +175,7 @@ impl MetaApp {
         config: Config,
         interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>>,
         blinker: Blinker,
-        inputs: &[Receiver<Input>],
+        inputs: [Receiver<Input>;2],
     ) -> Fallible<Self> {
         let (control_tx, control_rx) = tokio::sync::mpsc::channel(1);
 
@@ -287,13 +291,13 @@ impl App {
         // runtime: tokio::runtime::Handle,
         interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>>,
         blinker: Blinker,
-        inputs: &[Receiver<Input>],
+        inputs: [Receiver<Input>;2],
     ) -> Fallible<Self> {
         
         let app = Self {
             // runtime,
             config,
-            inputs: inputs.to_vec(),
+            inputs: Arc::new(inputs),
             // player,
             interpreter,
             blinker,
@@ -311,26 +315,31 @@ impl App {
                 led::Cmd::Off(Duration::from_secs(0)),
             ])),
         )).await;
-        dbg!("here");
-        let mut sel = Select::new();
-        for r in &self.inputs {
-            sel.recv(r);
-        }
+        // let mut sel = Select::new();
+        // for r in &self.inputs {
+        //     sel.recv(r);
+        // }
 
         loop {
             warn!("app loop");
             // Wait until a receive operation becomes ready and try executing it.
-            let index = sel.ready();
-            let res = self.inputs[index].try_recv();
+            let x = tokio::select! {
+                x = self.inputs[0].next() => x,
+                x = self.inputs[1].next() => x,
+            };
+            // let index = sel.ready();
+            // let res = self.inputs[index].try_recv();
 
-            match res {
+            let x: Result<Input, ()> = Ok(x.unwrap());
+            match x {
                 Err(err) => {
-                    if err.is_empty() {
-                        // If the operation turns out not to be ready, retry.
-                        continue;
-                    } else {
-                        error!("Failed to receive input event: {}", err);
-                    }
+                    // if err.is_empty() {
+                    //     // If the operation turns out not to be ready, retry.
+                    //     continue;
+                    // } else {
+                    //     error!("Failed to receive input event: {}", err);
+                    // }
+                    panic!()
                 }
                 Ok(input) => {
                     self.blinker.stop();
@@ -415,7 +424,7 @@ mod test {
         let blinker = Blinker::new(runtime.handle().clone(), interpreter.clone()).unwrap();
         let inputs = vec![Input::Button(button::Command::Shutdown)];
         let effects_expected = vec![Effects::GenericCommand("sudo shutdown -h now".to_string())];
-        let (input_tx, input_rx) = crossbeam_channel::unbounded();
+        let (input_tx, input_rx) = channel(100); // FIXME
         let app = App::new(
             config,
             runtime.handle().clone(),

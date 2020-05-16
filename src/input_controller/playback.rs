@@ -1,6 +1,7 @@
-use crossbeam_channel::{self, Receiver, Sender};
+// use crossbeam_channel::{self, Receiver, Sender};
 use failure::Fallible;
 use slog_scope::{error, info, warn};
+use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 use crate::player::{PlaybackRequest, PlaybackResource};
 
@@ -17,12 +18,11 @@ mod test {
 
 pub struct Handle<T> {
     channel: Receiver<T>,
-    // thread: Arc<JoinHandle<()>>,
 }
 
 impl<T> Handle<T> {
-    pub fn channel(&self) -> Receiver<T> {
-        self.channel.clone()
+    pub fn channel(self) -> Receiver<T> {
+        self.channel
     }
 }
 
@@ -41,7 +41,7 @@ pub mod rfid {
         where
             F: Fn(PlaybackRequest) -> Option<T> + 'static + Send + Sync,
         {
-            let (tx, rx) = crossbeam_channel::bounded(1);
+            let (tx, rx) = channel(1);
             let picc = RfidController::new()?;
             let transmitter = Self { picc, tx };
             std::thread::Builder::new()
@@ -68,7 +68,10 @@ pub mod rfid {
                             info!("RFID Tag gone");
                             last_uid = None;
                             if let Some(msg_transformed) = msg_transformer(PlaybackRequest::Stop) {
-                                if let Err(err) = self.tx.send(msg_transformed) {
+                                let mut tx = self.tx.clone();
+                                if let Err(err) =
+                                    futures::executor::block_on(tx.send(msg_transformed))
+                                {
                                     error!("Failed to transmit User Request: {}", err);
                                 }
                             }
@@ -79,7 +82,9 @@ pub mod rfid {
                         let current_uid = format!("{:?}", tag.uid);
                         if last_uid != Some(current_uid.clone()) {
                             // new tag!
-                            if let Err(err) = Self::handle_tag(&tag, &msg_transformer, &self.tx) {
+                            if let Err(err) =
+                                Self::handle_tag(&tag, &msg_transformer, &mut self.tx.clone())
+                            {
                                 error!("Failed to handle tag: {}", err);
                                 std::thread::sleep(std::time::Duration::from_millis(80));
                                 continue;
@@ -102,7 +107,7 @@ pub mod rfid {
             }
         }
 
-        fn handle_tag<F>(tag: &Tag, msg_transformer: &F, tx: &Sender<T>) -> Fallible<()>
+        fn handle_tag<F>(tag: &Tag, msg_transformer: &F, tx: &mut Sender<T>) -> Fallible<()>
         where
             F: Fn(PlaybackRequest) -> Option<T> + 'static + Send,
         {
@@ -122,7 +127,7 @@ pub mod rfid {
             if let Some(req_transformed) =
                 msg_transformer(PlaybackRequest::Start(request_deserialized.clone()))
             {
-                tx.send(req_transformed)?;
+                futures::executor::block_on(tx.send(req_transformed))?;
             } else {
                 info!("Dropping playback request '{:?}'", &request_deserialized);
             }

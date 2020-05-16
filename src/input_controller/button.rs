@@ -1,7 +1,7 @@
 use std::time::{Duration, Instant};
 
-use crossbeam_channel::{self, Receiver, Sender};
 use failure::Fallible;
+use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
@@ -23,8 +23,8 @@ pub struct Handle<T> {
 }
 
 impl<T> Handle<T> {
-    pub fn channel(&self) -> Receiver<T> {
-        self.channel.clone()
+    pub fn channel(self) -> Receiver<T> {
+        self.channel // fixme, cloning?
     }
 }
 
@@ -92,7 +92,7 @@ pub mod cdev_gpio {
             }
             let chip = Chip::new("/dev/gpiochip0")
                 .map_err(|err| Error::IO(format!("Failed to open Chip: {:?}", err)))?;
-            let (tx, rx) = crossbeam_channel::bounded(1);
+            let (tx, rx) = channel(1);
             let mut gpio_cdev = Self {
                 map,
                 chip: Arc::new(RwLock::new(chip)),
@@ -149,7 +149,8 @@ pub mod cdev_gpio {
                 }
 
                 if let Some(cmd) = msg_transformer(cmd.clone()) {
-                    if let Err(err) = self.tx.send(cmd) {
+                    let mut tx = self.tx.clone();
+                    if let Err(err) = futures::executor::block_on(tx.send(cmd)) {
                         error!("Failed to transmit GPIO event: {}", err);
                     }
                 } else {
