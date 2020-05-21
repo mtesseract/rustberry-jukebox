@@ -12,10 +12,11 @@ use std::thread::{Builder, JoinHandle};
 use async_trait::async_trait;
 use crossbeam_channel::{self, Receiver, Sender};
 use tokio::runtime::Runtime;
+use tokio::task::spawn_blocking;
 
 pub use err::*;
 
-use crate::components::stream::FiniteStream;
+use crate::components::finite_stream::FiniteStream;
 use crate::player::{PauseState, PlaybackHandle};
 
 pub struct HttpPlayer {
@@ -39,9 +40,11 @@ impl HttpPlaybackHandle {
             builder = builder.basic_auth(username, Some(password));
         }
         let response = builder.send().await.unwrap();
-        let stream = FiniteStream::from_response(response).unwrap();
-        let source = rodio::Decoder::new(BufReader::new(stream)).unwrap();
+        let stream = spawn_blocking(move || FiniteStream::from_response(response).unwrap()).await?;
+        let source =
+            spawn_blocking(move || rodio::Decoder::new(BufReader::new(stream)).unwrap()).await?;
         self.sink.append(source);
+
         Ok(())
     }
 }
@@ -55,7 +58,6 @@ impl PlaybackHandle for HttpPlaybackHandle {
         Ok(())
     }
     async fn is_complete(&self) -> Fallible<bool> {
-        warn!("is_complete() functionality deactivated, always start new track after pause");
         Ok(self.sink.empty())
     }
 
@@ -178,111 +180,3 @@ pub mod err {
 
     impl std::error::Error for Error {}
 }
-
-// pub mod external_command {
-//     use std::env;
-//     use std::fmt::{self, Display};
-//     use std::process::{Child, Command, Stdio};
-//     use std::sync::Arc;
-//     use std::thread::{self, JoinHandle};
-
-//     use failure::{Context, Fallible};
-
-//     use slog_scope::{error, info, warn};
-//     use std::convert::From;
-
-//     // use crossbeam_channel::{Receiver, RecvError, RecvTimeoutError, Select, Sender};
-
-//     use crate::config::Config;
-//     use crate::effects::led::{Led, LedController};
-
-//     pub use err::*;
-
-//     pub struct HttpPlayer {
-//         command: String,
-//         led_controller: Option<Arc<Box<dyn LedController + 'static + Send + Sync>>>,
-//         child: Option<Child>,
-//     }
-
-//     pub struct HttpPlayerHandle {}
-
-//     impl HttpPlayer {
-//         pub fn new(
-//             config: &Config,
-//             led_controller: Option<Arc<Box<dyn LedController + 'static + Send + Sync>>>,
-//         ) -> Fallible<Self> {
-//             info!("Creating new HttpPlayer...");
-//             let command = env::var("HTTP_PLAYER_COMMAND").map_err(Context::new)?;
-
-//             let player = HttpPlayer {
-//                 command,
-//                 led_controller,
-//                 child: None,
-//             };
-
-//             Ok(player)
-//         }
-
-//         pub fn start_playback(&mut self, url: &str) -> Result<(), Error> {
-//             let child = Command::new("omxplayer")
-//                 .arg("-o")
-//                 .arg("alsa")
-//                 .arg("--no-keys")
-//                 .arg(url)
-//                 .stdin(Stdio::null())
-//                 .spawn()?;
-//             self.child = Some(child);
-//             if let Some(ref led_controller) = self.led_controller {
-//                 led_controller.switch_on(Led::Playback);
-//             }
-//             Ok(())
-//         }
-
-//         pub fn stop_playback(&mut self) -> Result<(), Error> {
-//             if let Some(ref mut child) = self.child {
-//                 if let Err(err) = child.kill() {
-//                     warn!("HTTP Player failed to kill child: {}", err);
-//                 }
-//                 info!("Killed HTTP player child");
-//                 self.child = None;
-//             }
-//             if let Some(ref led_controller) = self.led_controller {
-//                 led_controller.switch_off(Led::Playback);
-//             }
-//             Ok(())
-//         }
-//     }
-
-//     pub mod err {
-//         use super::*;
-
-//         #[derive(Debug)]
-//         pub enum Error {
-//             IO(std::io::Error),
-//             Http(reqwest::Error),
-//         }
-
-//         impl Display for Error {
-//             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//                 match self {
-//                     Error::IO(err) => write!(f, "HTTP Player IO Error {}", err),
-//                     Error::Http(err) => write!(f, "HTTP Player HTTP Error {}", err),
-//                 }
-//             }
-//         }
-
-//         impl From<std::io::Error> for Error {
-//             fn from(err: std::io::Error) -> Self {
-//                 Error::IO(err)
-//             }
-//         }
-
-//         impl From<reqwest::Error> for Error {
-//             fn from(err: reqwest::Error) -> Self {
-//                 Error::Http(err)
-//             }
-//         }
-
-//         impl std::error::Error for Error {}
-//     }
-// }

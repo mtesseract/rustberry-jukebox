@@ -1,8 +1,8 @@
 use failure::{Fail, Fallible};
-use http::header::{self,AUTHORIZATION};
+use http::header::{self, AUTHORIZATION};
 use reqwest::blocking::Client;
 use serde::Deserialize;
-use slog_scope::{error};
+use slog_scope::error;
 
 use crate::components::access_token_provider::{AccessTokenProvider, AtpError};
 
@@ -135,8 +135,8 @@ pub async fn is_currently_playing(
             rsp
         })?
         .error_for_status()?
-    .json::<CurrentlyPlayingObject>()
-    .await?;
+        .json::<CurrentlyPlayingObject>()
+        .await?;
 
     Ok(device.is_active && currently_playing.is_playing)
 }
