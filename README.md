@@ -29,3 +29,15 @@ implemented via [Spotify](https://www.spotify.com) and controlled with RFID tags
 
 This is very much work in progress.
 But there exists already one happy user (my daughter).
+
+## Build Environment
+
+```
+$ docker run --rm -it -v $PWD:/tmp/src -w /tmp/src
+mtesseract/rustberry-builder-arm-unknown-linux-gnueabihf:latest /bin/bash
+```
+
+And then, for example:
+```
+$ cargo watch -x 'check --target=arm-unknown-linux-gnueabihf'
+```
