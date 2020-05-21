@@ -40,7 +40,7 @@ jobs:
       - name: Cache Cargo target
         uses: actions/cache@v1
         with:
-          path: /home/runner/work/rustberry/rustberry/target
+          path: /home/runner/work/rustberry-jukebox/rustberry-jukebox/target
           key: ${{ runner.os }}-${{ matrix.arch }}-target-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-${{ matrix.arch }}-target-
@@ -82,7 +82,7 @@ jobs:
         run: |
           sudo chown -R runner:docker /home/runner/work/_temp/_github_home/caches/registry
           sudo chown -R runner:docker /home/runner/work/_temp/_github_home/caches/git
-          sudo chown -R runner:docker /home/runner/work/rustberry/rustberry/target
+          sudo chown -R runner:docker /home/runner/work/rustberry-jukebox/rustberry-jukebox/target
       - name: Upload Artifact
         uses: actions/upload-artifact@v1
         with:
