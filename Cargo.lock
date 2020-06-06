@@ -1132,6 +1132,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "nix"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "50e4785f2c3b7589a0d0c1dd60285e1188adac4006e8abd6dd578e1567027363"
+dependencies = [
+ "bitflags",
+ "cc",
+ "cfg-if",
+ "libc",
+ "void",
+]
+
+[[package]]
 name = "nom"
 version = "5.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1669,6 +1682,7 @@ dependencies = [
  "gpio-cdev",
  "http",
  "mime 0.3.16",
+ "nix 0.17.0",
  "regex",
  "reqwest",
  "rfid-rs",

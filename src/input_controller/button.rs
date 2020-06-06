@@ -1,7 +1,7 @@
 use std::time::{Duration, Instant};
 
 use failure::Fallible;
-use tokio::sync::mpsc::{channel, Receiver, Sender};
+use tokio::sync::broadcast::{channel, Receiver, Sender};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
@@ -18,13 +18,14 @@ pub struct Config {
     pub start_time: Option<Instant>,
 }
 
+#[derive(Clone)]
 pub struct Handle<T> {
-    channel: Receiver<T>,
+    channel: Sender<T>,
 }
 
 impl<T> Handle<T> {
-    pub fn channel(self) -> Receiver<T> {
-        self.channel // fixme, cloning?
+    pub fn receiver(self) -> Receiver<T> {
+        self.channel.subscribe()
     }
 }
 
@@ -72,7 +73,7 @@ pub mod cdev_gpio {
         }
     }
 
-    impl<T: Clone + Send + 'static> CdevGpio<T> {
+    impl<T: core::fmt::Debug + Clone + Send + 'static> CdevGpio<T> {
         pub fn new_from_env<F>(msg_transformer: F) -> Fallible<Handle<T>>
         where
             F: Fn(Command) -> Option<T> + 'static + Send + Sync,
@@ -92,16 +93,16 @@ pub mod cdev_gpio {
             }
             let chip = Chip::new("/dev/gpiochip0")
                 .map_err(|err| Error::IO(format!("Failed to open Chip: {:?}", err)))?;
-            let (tx, rx) = channel(1);
+            let (tx, _rx) = channel(1);
             let mut gpio_cdev = Self {
                 map,
                 chip: Arc::new(RwLock::new(chip)),
                 config,
-                tx,
+                tx: tx.clone(),
             };
 
             gpio_cdev.run(msg_transformer)?;
-            Ok(Handle { channel: rx })
+            Ok(Handle { channel: tx })
         }
 
         fn run_single_event_listener<F>(
@@ -150,8 +151,8 @@ pub mod cdev_gpio {
 
                 if let Some(cmd) = msg_transformer(cmd.clone()) {
                     let mut tx = self.tx.clone();
-                    if let Err(err) = futures::executor::block_on(tx.send(cmd)) {
-                        error!("Failed to transmit GPIO event: {}", err);
+                    if let Err(err) = tx.send(cmd) {
+                        error!("Failed to transmit GPIO event: {:?}", err);
                     }
                 } else {
                     info!("Dropped button command message: {:?}", cmd);
@@ -205,4 +206,6 @@ impl std::fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
+// This is just a safety measure, preventing immediate shutdowns if the button
+// controller is (for whatever reason) transmitting immediate shutdown events.
 const DELAY_BEFORE_ACCEPTING_SHUTDOWN_COMMANDS: Duration = Duration::from_secs(10);

@@ -5,11 +5,11 @@ use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 // use crossbeam_channel::{Receiver, Sender};
-use tokio::sync::mpsc::{Receiver, Sender, channel};
+use tokio::sync::mpsc::{channel, Receiver, Sender};
 // use futures_util::sink::SinkExt;
 use failure::Fallible;
 use serde::{Deserialize, Serialize};
-use slog_scope::{error, warn, info};
+use slog_scope::{error, info, warn};
 use tokio::runtime;
 
 use crate::effects::Interpreter;
@@ -115,11 +115,12 @@ impl PlayerHandle {
     pub async fn playback(&self, req: PlaybackRequest) -> Fallible<()> {
         let (mut tx, mut rx) = channel(1);
         let mut xtx = self.tx.clone();
-        xtx
-            .send(PlayerCommand {
-                result_transmitter: tx,
-                request: req,
-            }).await            .unwrap();
+        xtx.send(PlayerCommand {
+            result_transmitter: tx,
+            request: req,
+        })
+        .await
+        .unwrap();
         rx.recv().await.unwrap()
     }
 }
