@@ -94,7 +94,7 @@ impl InputSourceFactory for ProdInputSourceFactory {
             None
         };
 
-        let playback_transmitter = if let Some(mk_playback) = &self.playback{
+        let playback_transmitter = if let Some(mk_playback) = &self.playback {
             let playback_controller = mk_playback();
             let mut rx = playback_controller.channel();
             let tx = tx.clone();
@@ -106,7 +106,9 @@ impl InputSourceFactory for ProdInputSourceFactory {
             });
             tokio::spawn(f);
             Some(abortable)
-        } else { None };
+        } else {
+            None
+        };
 
         let input_source = ProdInputSource {
             sender: tx,

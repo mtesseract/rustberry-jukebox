@@ -320,30 +320,35 @@ impl Player {
     async fn player_loop(mut player: Player) {
         loop {
             info!("player loop");
-            let command = player.rx.recv().await.unwrap();
-            match command {
-                PlayerCommand {
-                    result_transmitter,
-                    request,
-                } => {
-                    let mut result_transmitter = result_transmitter;
-                    let current_state = player.state.clone();
-                    let (res, new_state) =
-                        Self::state_machine(player.interpreter.clone(), request, current_state)
-                            .await;
-                    if let Err(ref err) = res {
-                        error!(
-                            "Player State Transition Failure: {}, staying in State {}",
-                            err, &player.state
-                        );
-                    } else {
-                        info!("Player State Transition: {} -> {}", player.state, new_state);
-                    }
-                    player.state = new_state;
-                    result_transmitter.send(res).await.unwrap();
+            match player.rx.recv().await {
+                None => {
+                    break;
                 }
+                Some(command) => match command {
+                    PlayerCommand {
+                        result_transmitter,
+                        request,
+                    } => {
+                        let mut result_transmitter = result_transmitter;
+                        let current_state = player.state.clone();
+                        let (res, new_state) =
+                            Self::state_machine(player.interpreter.clone(), request, current_state)
+                                .await;
+                        if let Err(ref err) = res {
+                            error!(
+                                "Player State Transition Failure: {}, staying in State {}",
+                                err, &player.state
+                            );
+                        } else {
+                            info!("Player State Transition: {} -> {}", player.state, new_state);
+                        }
+                        player.state = new_state;
+                        result_transmitter.send(res).await.unwrap();
+                    }
+                },
             }
         }
+        warn!("Terminating Player Loop")
     }
 
     pub async fn new(

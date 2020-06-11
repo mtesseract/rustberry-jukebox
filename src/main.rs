@@ -92,6 +92,9 @@ async fn create_production_meta_app(config: Config) -> Fallible<MetaApp> {
     isf.with_buttons(Box::new(|| {
         button::cdev_gpio::CdevGpio::new_from_env(|cmd| Some(cmd)).unwrap()
     }));
+    isf.with_playback(Box::new(|| {
+        playback::rfid::PlaybackRequestTransmitterRfid::new(|cmd| Some(cmd)).unwrap()
+    }));
 
     let mut application = MetaApp::new(config, interpreter, blinker, Box::new(isf)).await?;
 
@@ -269,10 +272,11 @@ impl MetaApp {
         let isf2 = self.input_factory.clone();
         let blinker = self.blinker.clone();
         let interpreter = self.interpreter.clone();
+        let config = self.config.clone();
 
         let (f, abortable_handle) = futures::future::abortable(async move {
             let input_source = isf2.consume().unwrap();
-            Self::run_jukebox(input_source, blinker, interpreter).await
+            Self::run_jukebox(config, input_source, blinker, interpreter).await
         });
 
         tokio::spawn(f);
@@ -292,21 +296,10 @@ impl MetaApp {
                 }
             }
         }
-
-        // let current_task = self.runtime.block_on(f);
-
-        // loop {
-        //     // read from control_rx
-        //     let cmd = unimplemented();
-        //     match cmd {
-
-        //     }
-        // }
-        //
-        // Ok(())
     }
 
     pub async fn run_jukebox(
+        config: Config,
         input_source: Box<dyn InputSource + Sync + Send + 'static>,
         blinker: Blinker,
         interpreter: DynInterpreter,
@@ -322,84 +315,73 @@ impl MetaApp {
                 ])),
             ))
             .await;
-        // let mut sel = Select::new();
-        // for r in &self.inputs {
-        //     sel.recv(r);
-        // }
 
-        // loop {
-        //     warn!("app loop");
-        //     // Wait until a receive operation becomes ready and try executing it.
-        //     let x = tokio::select! {
-        //         x = self.inputs[0].next() => x,
-        //         x = self.inputs[1].next() => x,
-        //     };
-        //     // let index = sel.ready();
-        //     // let res = self.inputs[index].try_recv();
-
-        //     let x: Result<Input, ()> = Ok(x.unwrap());
-        //     match x {
-        //         Err(err) => {
-        //             // if err.is_empty() {
-        //             //     // If the operation turns out not to be ready, retry.
-        //             //     continue;
-        //             // } else {
-        //             //     error!("Failed to receive input event: {}", err);
-        //             // }
-        //             panic!()
-        //         }
-        //         Ok(input) => {
-        //             self.blinker.stop();
-        //             match input {
-        //                 Input::Button(cmd) => match cmd {
-        //                     button::Command::Shutdown => {
-        //                         if let Err(err) = self.interpreter.generic_command(
-        //                             self.config
-        //                                 .shutdown_command
-        //                                 .clone()
-        //                                 .unwrap_or("sudo shutdown -h now".to_string()),
-        //                         ) {
-        //                             error!("Failed to execute shutdown command: {}", err);
-        //                         }
-        //                     }
-        //                     button::Command::VolumeUp => {
-        //                         if let Err(err) = self.interpreter.generic_command(
-        //                             self.config
-        //                                 .volume_up_command
-        //                                 .clone()
-        //                                 .unwrap_or("amixer -q -M set PCM 10%+".to_string()),
-        //                         ) {
-        //                             error!("Failed to increase volume: {}", err);
-        //                         }
-        //                     }
-        //                     button::Command::VolumeDown => {
-        //                         if let Err(err) = self.interpreter.generic_command(
-        //                             self.config
-        //                                 .volume_down_command
-        //                                 .clone()
-        //                                 .unwrap_or("amixer -q -M set PCM 10%-".to_string()),
-        //                         ) {
-        //                             error!("Failed to decrease volume: {}", err);
-        //                         }
-        //                     }
-        //                 },
-        //                 Input::Playback(request) => {
-        //                     if let Err(err) = player.playback(request.clone()).await {
-        //                         error!("Failed to execute playback request {:?}: {}", request, err);
-        //                     }
-        //                     match request {
-        //                         PlaybackRequest::Start(_) => {
-        //                             let _ = self.interpreter.led_on();
-        //                         }
-        //                         PlaybackRequest::Stop => {
-        //                             let _ = self.interpreter.led_off();
-        //                         }
-        //                     }
-        //                 }
-        //             }
-        //         }
-        //     };
-        // }
+        loop {
+            warn!("app loop");
+            let mut rx = input_source.receiver();
+            let el = rx.recv().await;
+            match el {
+                Err(err) => {
+                    // if err.is_empty() {
+                    //     // If the operation turns out not to be ready, retry.
+                    //     continue;
+                    // } else {
+                    //     error!("Failed to receive input event: {}", err);
+                    // }
+                    panic!()
+                }
+                Ok(input) => {
+                    blinker.stop();
+                    match input {
+                        Input::Button(cmd) => match cmd {
+                            button::Command::Shutdown => {
+                                if let Err(err) = interpreter.generic_command(
+                                    config
+                                        .shutdown_command
+                                        .clone()
+                                        .unwrap_or("sudo shutdown -h now".to_string()),
+                                ) {
+                                    error!("Failed to execute shutdown command: {}", err);
+                                }
+                            }
+                            button::Command::VolumeUp => {
+                                if let Err(err) = interpreter.generic_command(
+                                    config
+                                        .volume_up_command
+                                        .clone()
+                                        .unwrap_or("amixer -q -M set PCM 10%+".to_string()),
+                                ) {
+                                    error!("Failed to increase volume: {}", err);
+                                }
+                            }
+                            button::Command::VolumeDown => {
+                                if let Err(err) = interpreter.generic_command(
+                                    config
+                                        .volume_down_command
+                                        .clone()
+                                        .unwrap_or("amixer -q -M set PCM 10%-".to_string()),
+                                ) {
+                                    error!("Failed to decrease volume: {}", err);
+                                }
+                            }
+                        },
+                        Input::Playback(request) => {
+                            if let Err(err) = player.playback(request.clone()).await {
+                                error!("Failed to execute playback request {:?}: {}", request, err);
+                            }
+                            match request {
+                                PlaybackRequest::Start(_) => {
+                                    let _ = interpreter.led_on();
+                                }
+                                PlaybackRequest::Stop => {
+                                    let _ = interpreter.led_off();
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+        }
         Ok(())
     }
 }
