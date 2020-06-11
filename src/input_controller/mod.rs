@@ -29,11 +29,14 @@ pub trait InputSource {
 
 pub struct ProdInputSourceFactory {
     buttons: Option<Box<dyn Sync + Send + Fn() -> button::Handle<button::Command>>>, // This spawn a separate thread implementing the blocking event retrieval.
+    playback: Option<Box<dyn Sync + Send + Fn() -> playback::Handle<PlaybackRequest>>>,
     button_controller: Arc<RwLock<Option<button::Handle<button::Command>>>>,
+    playback_controller: Arc<RwLock<Option<playback::Handle<PlaybackRequest>>>>,
 }
 
 pub struct ProdInputSource {
     buttons_transmitter: Option<AbortHandle>,
+    playback_transmitter: Option<AbortHandle>,
     sender: Sender<Input>,
 }
 
@@ -55,7 +58,7 @@ impl InputSource for ProdInputSource {
 }
 
 impl InputSourceFactory for ProdInputSourceFactory {
-     fn consume(&self) -> Fallible<Box<dyn InputSource + Sync + Send + 'static>> {
+    fn consume(&self) -> Fallible<Box<dyn InputSource + Sync + Send + 'static>> {
         let (tx, _rx) = channel(2);
 
         let opt_buttons_handle =
@@ -91,9 +94,24 @@ impl InputSourceFactory for ProdInputSourceFactory {
             None
         };
 
+        let playback_transmitter = if let Some(mk_playback) = &self.playback{
+            let playback_controller = mk_playback();
+            let mut rx = playback_controller.channel();
+            let tx = tx.clone();
+            let (f, abortable) = futures::future::abortable(async move {
+                loop {
+                    let el = Input::Playback(rx.recv().await.unwrap());
+                    tx.send(el);
+                }
+            });
+            tokio::spawn(f);
+            Some(abortable)
+        } else { None };
+
         let input_source = ProdInputSource {
             sender: tx,
             buttons_transmitter,
+            playback_transmitter,
         };
         Ok(Box::new(input_source))
     }
@@ -103,24 +121,34 @@ impl ProdInputSourceFactory {
     pub fn new() -> Fallible<Self> {
         let input_source = ProdInputSourceFactory {
             buttons: None,
+            playback: None,
+            playback_controller: Arc::new(RwLock::new(None)),
             button_controller: Arc::new(RwLock::new(None)),
         };
         Ok(input_source)
     }
-    pub fn with_buttons(&mut self, input_controller: Box<dyn Fn() -> button::Handle<button::Command> + Send + Sync + 'static>)
-    {
+    pub fn with_buttons(
+        &mut self,
+        input_controller: Box<dyn Fn() -> button::Handle<button::Command> + Send + Sync + 'static>,
+    ) {
         self.buttons = Some(input_controller);
+    }
+    pub fn with_playback(
+        &mut self,
+        input_controller: Box<
+            dyn Fn() -> playback::Handle<PlaybackRequest> + Send + Sync + 'static,
+        >,
+    ) {
+        self.playback = Some(input_controller);
     }
 }
 
 pub mod mock {
+    use super::{button, playback, InputSource, InputSourceFactory, PlaybackRequest};
     use failure::Fallible;
-    use super::{playback,button, InputSource, InputSourceFactory};
 
     use super::Input;
-    use tokio::{
-        sync::broadcast::{channel, Receiver, Sender},
-    };
+    use tokio::sync::broadcast::{channel, Receiver, Sender};
 
     pub struct MockInputSourceFactory;
     pub struct MockInputSource {
@@ -128,24 +156,36 @@ pub mod mock {
     }
 
     impl InputSourceFactory for MockInputSourceFactory {
-         fn consume(&self) -> Fallible<Box<dyn InputSource + Sync + Send + 'static>> {
+        fn consume(&self) -> Fallible<Box<dyn InputSource + Sync + Send + 'static>> {
             let (tx, _rx) = channel(2);
             Ok(Box::new(MockInputSource { sender: tx }))
         }
-
     }
 
     impl MockInputSourceFactory {
         pub fn new() -> Fallible<MockInputSourceFactory> {
             Ok(MockInputSourceFactory)
         }
-        pub fn with_buttons(&mut self, input_controller: Box<dyn Fn() -> button::Handle<button::Command> + Send + Sync + 'static>) {
+        pub fn with_buttons(
+            &mut self,
+            input_controller: Box<
+                dyn Fn() -> button::Handle<button::Command> + Send + Sync + 'static,
+            >,
+        ) {
             unimplemented!()
-       }
-   }
+        }
+        pub fn with_playback(
+            &mut self,
+            input_controller: Box<
+                dyn Fn() -> playback::Handle<PlaybackRequest> + Send + Sync + 'static,
+            >,
+        ) {
+            unimplemented!()
+        }
+    }
 
     impl InputSource for MockInputSource {
-         fn receiver(&self) -> Receiver<Input> {
+        fn receiver(&self) -> Receiver<Input> {
             self.sender.subscribe()
         }
     }

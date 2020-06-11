@@ -14,7 +14,10 @@ use slog_term;
 use futures_util::TryFutureExt;
 use rustberry::config::Config;
 use rustberry::effects::{test::TestInterpreter, Interpreter, ProdInterpreter};
-use rustberry::input_controller::{mock, button, playback, Input, InputSource, InputSourceFactory, ProdInputSourceFactory, ProdInputSource};
+use rustberry::input_controller::{
+    button, mock, playback, Input, InputSource, InputSourceFactory, ProdInputSource,
+    ProdInputSourceFactory,
+};
 use rustberry::player::{self, PlaybackRequest, Player};
 
 use led::Blinker;
@@ -34,8 +37,9 @@ fn main() -> Fallible<()> {
 async fn create_mock_meta_app(config: Config) -> Fallible<MetaApp> {
     warn!("Creating Mock Application");
 
-    let isf = Box::new(mock::MockInputSourceFactory::new()?) as Box<dyn InputSourceFactory + Sync + Send + 'static>;
-    
+    let isf = Box::new(mock::MockInputSourceFactory::new()?)
+        as Box<dyn InputSourceFactory + Sync + Send + 'static>;
+
     let (interpreter, interpreted_effects) = TestInterpreter::new();
     let interpreter =
         Arc::new(Box::new(interpreter) as Box<dyn Interpreter + Sync + Send + 'static>);
@@ -55,7 +59,7 @@ async fn create_mock_meta_app(config: Config) -> Fallible<MetaApp> {
         .await
         .unwrap();
 
-        Ok(application)
+    Ok(application)
 }
 
 async fn create_production_meta_app(config: Config) -> Fallible<MetaApp> {
@@ -85,7 +89,9 @@ async fn create_production_meta_app(config: Config) -> Fallible<MetaApp> {
         playback::rfid::PlaybackRequestTransmitterRfid::new(|req| Some(Input::Playback(req)))?;
 
     let mut isf = ProdInputSourceFactory::new()?;
-        isf.with_buttons(Box::new(|| button::cdev_gpio::CdevGpio::new_from_env(|cmd| Some(cmd)).unwrap()));
+    isf.with_buttons(Box::new(|| {
+        button::cdev_gpio::CdevGpio::new_from_env(|cmd| Some(cmd)).unwrap()
+    }));
 
     let mut application = MetaApp::new(config, interpreter, blinker, Box::new(isf)).await?;
 
@@ -174,7 +180,6 @@ impl MetaAppHandle {
         let mut control_tx = self.control_tx.clone();
         control_tx.try_send(AppControl::SetMode(AppMode::Admin));
     }
-
 }
 
 impl MetaApp {
