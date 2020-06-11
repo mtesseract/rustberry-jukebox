@@ -16,14 +16,25 @@ mod test {
     }
 }
 
+use tokio::sync::oneshot;
+
 pub struct Handle<T> {
     channel: Receiver<T>,
+    _abort: oneshot::Sender<()>,
 }
 
 impl<T> Handle<T> {
     pub fn channel(self) -> Receiver<T> {
         self.channel
     }
+
+    // pub fn abort(self) {
+    //     if let Err(err) = self.abort.send(()) {
+    //         error!("Failed to terminate playback controller: {:?}", err);
+    //     } else {
+    //         info!("Terminated playback controller");
+    //     }
+    // }
 }
 
 pub mod rfid {
@@ -42,21 +53,30 @@ pub mod rfid {
             F: Fn(PlaybackRequest) -> Option<T> + 'static + Send + Sync,
         {
             let (tx, rx) = channel(1);
+            let (os_tx, mut os_rx) = oneshot::channel();
             let picc = RfidController::new()?;
             let transmitter = Self { picc, tx };
             std::thread::Builder::new()
                 .name("playback-transmitter".to_string())
-                .spawn(move || transmitter.run(msg_transformer).unwrap())?;
-            Ok(Handle { channel: rx })
+                .spawn(move || transmitter.run(msg_transformer, os_rx).unwrap())?;
+            Ok(Handle {
+                channel: rx,
+                _abort: os_tx,
+            })
         }
 
-        fn run<F>(mut self, msg_transformer: F) -> Fallible<()>
+        fn run<F>(mut self, msg_transformer: F, mut os_rx: oneshot::Receiver<()>) -> Fallible<()>
         where
             F: Fn(PlaybackRequest) -> Option<T> + 'static + Send,
         {
             let mut last_uid: Option<String> = None;
 
             loop {
+                if let Err(tokio::sync::oneshot::error::TryRecvError::Closed) = os_rx.try_recv() {
+                    info!("Terminating Playback Controller due to closed channel");
+                    return Ok(());
+                }
+
                 match self.picc.open_tag() {
                     Err(err) => {
                         // Do not change playback state in this case.

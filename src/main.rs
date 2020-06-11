@@ -14,7 +14,7 @@ use slog_term;
 use futures_util::TryFutureExt;
 use rustberry::config::Config;
 use rustberry::effects::{test::TestInterpreter, Interpreter, ProdInterpreter};
-use rustberry::input_controller::{button, playback, Input, InputSource, InputSourceFactory};
+use rustberry::input_controller::{mock, button, playback, Input, InputSource, InputSourceFactory, ProdInputSourceFactory, ProdInputSource};
 use rustberry::player::{self, PlaybackRequest, Player};
 
 use led::Blinker;
@@ -33,31 +33,29 @@ fn main() -> Fallible<()> {
 
 async fn create_mock_meta_app(config: Config) -> Fallible<MetaApp> {
     warn!("Creating Mock Application");
-    unimplemented!()
 
-    // let (inputs_tx, inputs_rx) = channel(1);
-    // let (interpreter, interpreted_effects) = TestInterpreter::new();
-    // let interpreter =
-    //     Arc::new(Box::new(interpreter) as Box<dyn Interpreter + Sync + Send + 'static>);
+    let isf = Box::new(mock::MockInputSourceFactory::new()?) as Box<dyn InputSourceFactory + Sync + Send + 'static>;
+    
+    let (interpreter, interpreted_effects) = TestInterpreter::new();
+    let interpreter =
+        Arc::new(Box::new(interpreter) as Box<dyn Interpreter + Sync + Send + 'static>);
 
-    // let blinker = Blinker::new(interpreter.clone()).unwrap();
+    let blinker = Blinker::new(interpreter.clone()).unwrap();
 
-    // let _handle = std::thread::Builder::new()
-    //     .name("mock-effect-interpreter".to_string())
-    //     .spawn(move || {
-    //         for eff in interpreted_effects.iter() {
-    //             info!("Mock interpreter received effect: {:?}", eff);
-    //         }
-    //     })
-    //     .unwrap();
+    let _handle = std::thread::Builder::new()
+        .name("mock-effect-interpreter".to_string())
+        .spawn(move || {
+            for eff in interpreted_effects.iter() {
+                info!("Mock interpreter received effect: {:?}", eff);
+            }
+        })
+        .unwrap();
 
-    // FIXME
-    // let (fixme_tx, fixme_rx) = channel(1);
-    // let application = MetaApp::new(config, interpreter, blinker, [inputs_rx, fixme_rx])
-    //     .await
-    //     .unwrap();
-    // std::mem::forget(inputs_tx);
-    // Ok(application)
+    let application = MetaApp::new(config, interpreter, blinker, isf)
+        .await
+        .unwrap();
+
+        Ok(application)
 }
 
 async fn create_production_meta_app(config: Config) -> Fallible<MetaApp> {
@@ -86,10 +84,10 @@ async fn create_production_meta_app(config: Config) -> Fallible<MetaApp> {
     let playback_controller_handle =
         playback::rfid::PlaybackRequestTransmitterRfid::new(|req| Some(Input::Playback(req)))?;
 
-    let isf = InputSourceFactory::new()?
-        .with_buttons(|| button::cdev_gpio::CdevGpio::new_from_env(|cmd| Some(cmd)).unwrap());
+    let mut isf = ProdInputSourceFactory::new()?;
+        isf.with_buttons(Box::new(|| button::cdev_gpio::CdevGpio::new_from_env(|cmd| Some(cmd)).unwrap()));
 
-    let mut application = MetaApp::new(config, interpreter, blinker, isf).await?;
+    let mut application = MetaApp::new(config, interpreter, blinker, Box::new(isf)).await?;
 
     Ok(application)
 }
@@ -130,15 +128,15 @@ fn main_with_log() -> Fallible<()> {
     Ok(())
 }
 
-// #[derive(Clone)]
-// struct App {
-//     config: Config,
-//     // player: player::PlayerHandle,
-//     interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>>,
-//     inputs: Arc<[Receiver<Input>; 2]>,
-//     blinker: Blinker,
-//     // runtime: tokio::runtime::Handle,
-// }
+#[derive(Clone)]
+struct App {
+    config: Config,
+    // player: player::PlayerHandle,
+    interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>>,
+    input_source_factory: Arc<Box<dyn InputSourceFactory + Sync + Send + 'static>>,
+    blinker: Blinker,
+    // runtime: tokio::runtime::Handle,
+}
 
 // #[derive(Clone)]
 struct MetaApp {
@@ -148,9 +146,9 @@ struct MetaApp {
     control_tx: tokio::sync::mpsc::Sender<AppControl>,
     interpreter: DynInterpreter,
     // inputs: Vec<Receiver<Input>>,
-    // app: App,
+    jukebox_app: App,
     blinker: Blinker,
-    input_factory: Arc<InputSourceFactory>,
+    input_factory: Arc<Box<dyn InputSourceFactory + Sync + Send + 'static>>,
 }
 
 use std::convert::Infallible;
@@ -176,6 +174,7 @@ impl MetaAppHandle {
         let mut control_tx = self.control_tx.clone();
         control_tx.try_send(AppControl::SetMode(AppMode::Admin));
     }
+
 }
 
 impl MetaApp {
@@ -189,9 +188,18 @@ impl MetaApp {
         config: Config,
         interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>>,
         blinker: Blinker,
-        input_factory: InputSourceFactory,
+        input_factory: Box<dyn InputSourceFactory + Sync + Send + 'static>,
     ) -> Fallible<Self> {
         let (control_tx, control_rx) = tokio::sync::mpsc::channel(1);
+        let input_source_factory = Arc::new(input_factory);
+
+        let jukebox_app = App::new(
+            config.clone(),
+            interpreter.clone(),
+            blinker.clone(),
+            input_source_factory.clone(),
+        )
+        .unwrap();
 
         let meta_app = MetaApp {
             control_rx,
@@ -200,7 +208,8 @@ impl MetaApp {
             // app,
             blinker,
             interpreter,
-            input_factory: Arc::new(input_factory),
+            input_factory: input_source_factory,
+            jukebox_app,
         };
         Ok(meta_app)
     }
@@ -293,7 +302,7 @@ impl MetaApp {
     }
 
     pub async fn run_jukebox(
-        input_source: InputSource,
+        input_source: Box<dyn InputSource + Sync + Send + 'static>,
         blinker: Blinker,
         interpreter: DynInterpreter,
     ) -> Fallible<()> {
@@ -403,27 +412,30 @@ enum AppControl {
     RequestCurrentMode(tokio::sync::oneshot::Sender<AppMode>),
 }
 
-// impl App {
-//     pub async fn new(
-//         config: Config,
-//         // runtime: tokio::runtime::Handle,
-//         interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>>,
-//         blinker: Blinker,
-//         inputs: [Receiver<Input>;2],
-//     ) -> Fallible<Self> {
+impl App {
+    pub fn new(
+        config: Config,
+        // runtime: tokio::runtime::Handle,
+        interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>>,
+        blinker: Blinker,
+        input_source_factory: Arc<Box<dyn InputSourceFactory + Sync + Send + 'static>>,
+    ) -> Fallible<Self> {
+        let app = Self {
+            // runtime,
+            config,
+            // player,
+            interpreter,
+            input_source_factory,
+            blinker,
+        };
+        Ok(app)
+    }
 
-//         let app = Self {
-//             // runtime,
-//             config,
-//             inputs: Arc::new(inputs),
-//             // player,
-//             interpreter,
-//             blinker,
-//         };
-//         Ok(app)
-//     }
+    // pub async fn run(&self)-> Fallible<AbortHandle> {
+    //     let isf2 = self.input_source_factory.clone();
 
-// }
+    // }
+}
 
 #[cfg(test)]
 mod test {
