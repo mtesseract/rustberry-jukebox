@@ -21,7 +21,6 @@ pub enum Input {
 pub trait InputSourceFactory {
     fn consume(&self) -> Fallible<Box<dyn InputSource + Sync + Send + 'static>>;
     // fn new() -> Fallible<Box<dyn InputSourceFactory + 'static>>;
-    fn with_buttons(&mut self, input_controller: Box<dyn Fn() -> button::Handle<button::Command> + Send + Sync + 'static>);
 }
 
 pub trait InputSource {
@@ -98,11 +97,6 @@ impl InputSourceFactory for ProdInputSourceFactory {
         };
         Ok(Box::new(input_source))
     }
-
-    fn with_buttons(&mut self, input_controller: Box<dyn Fn() -> button::Handle<button::Command> + Send + Sync + 'static>)
-    {
-        self.buttons = Some(input_controller);
-    }
 }
 
 impl ProdInputSourceFactory {
@@ -112,6 +106,10 @@ impl ProdInputSourceFactory {
             button_controller: Arc::new(RwLock::new(None)),
         };
         Ok(input_source)
+    }
+    pub fn with_buttons(&mut self, input_controller: Box<dyn Fn() -> button::Handle<button::Command> + Send + Sync + 'static>)
+    {
+        self.buttons = Some(input_controller);
     }
 }
 
@@ -135,16 +133,16 @@ pub mod mock {
             Ok(Box::new(MockInputSource { sender: tx }))
         }
 
-         fn with_buttons(&mut self, input_controller: Box<dyn Fn() -> button::Handle<button::Command> + Send + Sync + 'static>) {
-             unimplemented!()
-        }
     }
 
     impl MockInputSourceFactory {
         pub fn new() -> Fallible<MockInputSourceFactory> {
             Ok(MockInputSourceFactory)
         }
-    }
+        pub fn with_buttons(&mut self, input_controller: Box<dyn Fn() -> button::Handle<button::Command> + Send + Sync + 'static>) {
+            unimplemented!()
+       }
+   }
 
     impl InputSource for MockInputSource {
          fn receiver(&self) -> Receiver<Input> {
