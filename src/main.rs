@@ -11,6 +11,7 @@ use slog_async;
 use slog_scope::{error, info, warn};
 use slog_term;
 
+use futures::future::AbortHandle;
 use futures_util::TryFutureExt;
 use rustberry::config::Config;
 use rustberry::effects::{test::TestInterpreter, Interpreter, ProdInterpreter};
@@ -181,7 +182,7 @@ impl MetaAppHandle {
 
     async fn set_mode(&self, mode: AppMode) {
         let mut control_tx = self.control_tx.clone();
-        control_tx.try_send(AppControl::SetMode(AppMode::Admin));
+        control_tx.try_send(AppControl::SetMode(mode));
     }
 }
 
@@ -248,38 +249,70 @@ impl MetaApp {
         Ok(StatusCode::OK)
     }
 
-    pub async fn run(mut self) -> Fallible<()> {
-        let meta_app_handle = self.handle();
-        let hello = warp::path!("hello" / String).map(|name| format!("Hello, {}!", name));
-        let ep_mode = {
-            let meta_app_handle = meta_app_handle.clone();
-            warp::path!("mode")
-                .and(Self::with_db(meta_app_handle))
-                .and_then(Self::get_current_mode)
-        };
-        let ep_mode_admin = {
-            let meta_app_handle = meta_app_handle.clone();
-            warp::path!("mode-admin")
-                .and(Self::with_db(meta_app_handle))
-                .and_then(Self::set_mode_admin)
-        };
+    async fn set_mode_jukebox(
+        meta_app_handle: MetaAppHandle,
+    ) -> Result<impl warp::Reply, Infallible> {
+        info!("set_mode_jukebox()");
 
-        let routes = warp::get().and(hello.or(ep_mode).or(ep_mode_admin));
+        meta_app_handle.set_mode(AppMode::Jukebox).await;
+        Ok(StatusCode::OK)
+    }
+
+    async fn put_rfid_tag(meta_app_handle: MetaAppHandle) -> Result<impl warp::Reply, Infallible> {
+        Ok(StatusCode::OK)
+    }
+
+    async fn get_rfid_tag(meta_app_handle: MetaAppHandle) -> Result<impl warp::Reply, Infallible> {
+        use rustberry::components::rfid::RfidController;
+        let mut rc = RfidController::new().unwrap();
+        let tag = rc.open_tag().unwrap().unwrap();
+        println!("{:?}", tag.uid);
+        let mut tag_reader = tag.new_reader();
+        let s = tag_reader.read_string().expect("read_string");
+        let req: PlaybackRequest = serde_json::from_str(&s).expect("PlaybackRequest Deserialization");
+        dbg!(&req);
+        Ok(StatusCode::OK)
+    }
+
+    pub async fn run(mut self) -> Fallible<()> {
+        let routes = {
+            let meta_app_handle = self.handle();
+            let hello = warp::path!("hello" / String).map(|name| format!("Hello, {}!", name));
+            let ep_mode = {
+                let meta_app_handle = meta_app_handle.clone();
+                warp::path!("mode")
+                    .and(Self::with_db(meta_app_handle))
+                    .and_then(Self::get_current_mode)
+            };
+            let ep_mode_admin = {
+                let meta_app_handle = meta_app_handle.clone();
+                warp::path!("mode-admin")
+                    .and(Self::with_db(meta_app_handle))
+                    .and_then(Self::set_mode_admin)
+            };
+            let eps_admin = {
+                warp::path!("rfid-tag").and(
+                    (warp::put()
+                        .and(Self::with_db(meta_app_handle.clone()))
+                        .and_then(Self::put_rfid_tag))
+                    .or(warp::get()
+                        .and(Self::with_db(meta_app_handle.clone()).and_then(Self::get_rfid_tag))),
+                )
+            };
+            let ep_mode_jukebox = {
+                let meta_app_handle = meta_app_handle.clone();
+                warp::path!("mode-jukebox")
+                    .and(Self::with_db(meta_app_handle))
+                    .and_then(Self::set_mode_jukebox)
+            };
+            (warp::get().and(hello.or(ep_mode).or(ep_mode_admin).or(ep_mode_jukebox)))
+                .or(warp::path!("admin").and(eps_admin))
+        };
 
         tokio::spawn(warp::serve(routes).run(([0, 0, 0, 0], 3030)));
 
-        let current_mode = AppMode::Jukebox;
-        let isf2 = self.input_factory.clone();
-        let blinker = self.blinker.clone();
-        let interpreter = self.interpreter.clone();
-        let config = self.config.clone();
-
-        let (f, abortable_handle) = futures::future::abortable(async move {
-            let input_source = isf2.consume().unwrap();
-            Self::run_jukebox(config, input_source, blinker, interpreter).await
-        });
-
-        tokio::spawn(f);
+        let mut current_mode = AppMode::Starting;
+        let mut abortable = None;
 
         loop {
             let cmd = self.control_rx.recv().await.unwrap();
@@ -291,8 +324,27 @@ impl MetaApp {
 
                 AppControl::SetMode(mode) => {
                     // FIXME
-                    info!("Shutting down Jukebox App");
-                    abortable_handle.abort()
+                    info!("Shutting down mode {:?}", current_mode);
+                    abortable.map(|x: AbortHandle| x.abort());
+                    info!("Starting {:?} mode", mode);
+                    let abortable_handle = match mode {
+                        AppMode::Starting => None,
+                        AppMode::Jukebox => {
+                            let isf2 = self.input_factory.clone();
+                            let blinker = self.blinker.clone();
+                            let interpreter = self.interpreter.clone();
+                            let config = self.config.clone();
+                            let (f, abortable_handle) = futures::future::abortable(async move {
+                                let input_source = isf2.consume().unwrap();
+                                Self::run_jukebox(config, input_source, blinker, interpreter).await
+                            });
+                            tokio::spawn(f);
+                            Some(abortable_handle)
+                        }
+                        AppMode::Admin => None,
+                    };
+                    current_mode = mode;
+                    abortable = abortable_handle;
                 }
             }
         }
