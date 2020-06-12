@@ -28,8 +28,8 @@ pub trait InputSource {
 }
 
 pub struct ProdInputSourceFactory {
-    buttons: Option<Box<dyn Sync + Send + Fn() -> button::Handle<button::Command>>>, // This spawn a separate thread implementing the blocking event retrieval.
-    playback: Option<Box<dyn Sync + Send + Fn() -> playback::Handle<PlaybackRequest>>>,
+    buttons: Option<Box<dyn Sync + Send + Fn() -> Fallible<button::Handle<button::Command>>>>, // This spawn a separate thread implementing the blocking event retrieval.
+    playback: Option<Box<dyn Sync + Send + Fn() -> Fallible<playback::Handle<PlaybackRequest>>>>,
     button_controller: Arc<RwLock<Option<button::Handle<button::Command>>>>,
     playback_controller: Arc<RwLock<Option<playback::Handle<PlaybackRequest>>>>,
 }
@@ -67,7 +67,7 @@ impl InputSourceFactory for ProdInputSourceFactory {
                 Some(button_controller.clone())
             } else if let Some(mk_buttons) = &self.buttons {
                 // have a closure for creating a button controller, execute it.
-                let button_controller = mk_buttons(); // spawns thread.
+                let button_controller = mk_buttons()?; // spawns thread.
                 {
                     let mut writer = self.button_controller.write().unwrap();
                     *writer = Some(button_controller.clone());
@@ -95,7 +95,7 @@ impl InputSourceFactory for ProdInputSourceFactory {
         };
 
         let playback_transmitter = if let Some(mk_playback) = &self.playback {
-            let playback_controller = mk_playback();
+            let playback_controller = mk_playback()?;
             let mut rx = playback_controller.channel();
             let tx = tx.clone();
             let (f, abortable) = futures::future::abortable(async move {
@@ -131,14 +131,14 @@ impl ProdInputSourceFactory {
     }
     pub fn with_buttons(
         &mut self,
-        input_controller: Box<dyn Fn() -> button::Handle<button::Command> + Send + Sync + 'static>,
+        input_controller: Box<dyn Fn() -> Fallible<button::Handle<button::Command>> + Send + Sync + 'static>,
     ) {
         self.buttons = Some(input_controller);
     }
     pub fn with_playback(
         &mut self,
         input_controller: Box<
-            dyn Fn() -> playback::Handle<PlaybackRequest> + Send + Sync + 'static,
+            dyn Fn() -> Fallible<playback::Handle<PlaybackRequest>> + Send + Sync + 'static,
         >,
     ) {
         self.playback = Some(input_controller);
@@ -171,7 +171,7 @@ pub mod mock {
         pub fn with_buttons(
             &mut self,
             input_controller: Box<
-                dyn Fn() -> button::Handle<button::Command> + Send + Sync + 'static,
+                dyn Fn() -> Fallible<button::Handle<button::Command>> + Send + Sync + 'static,
             >,
         ) {
             unimplemented!()
@@ -179,7 +179,7 @@ pub mod mock {
         pub fn with_playback(
             &mut self,
             input_controller: Box<
-                dyn Fn() -> playback::Handle<PlaybackRequest> + Send + Sync + 'static,
+                dyn Fn() -> Fallible<playback::Handle<PlaybackRequest>> + Send + Sync + 'static,
             >,
         ) {
             unimplemented!()

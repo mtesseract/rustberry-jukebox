@@ -45,7 +45,7 @@ async fn create_mock_meta_app(config: Config) -> Fallible<MetaApp> {
     let interpreter =
         Arc::new(Box::new(interpreter) as Box<dyn Interpreter + Sync + Send + 'static>);
 
-    let blinker = Blinker::new(interpreter.clone()).unwrap();
+    let blinker = Blinker::new(interpreter.clone())?;
 
     let _handle = std::thread::Builder::new()
         .name("mock-effect-interpreter".to_string())
@@ -54,11 +54,11 @@ async fn create_mock_meta_app(config: Config) -> Fallible<MetaApp> {
                 info!("Mock interpreter received effect: {:?}", eff);
             }
         })
-        .unwrap();
+        ?;
 
     let application = MetaApp::new(config, interpreter, blinker, isf)
         .await
-        .unwrap();
+        ?;
 
     Ok(application)
 }
@@ -66,11 +66,11 @@ async fn create_mock_meta_app(config: Config) -> Fallible<MetaApp> {
 async fn create_production_meta_app(config: Config) -> Fallible<MetaApp> {
     info!("Creating Production Application");
     // Create Effects Channel and Interpreter.
-    let interpreter = ProdInterpreter::new(&config).unwrap();
+    let interpreter = ProdInterpreter::new(&config)?;
     let interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>> =
         Arc::new(Box::new(interpreter));
 
-    let blinker = Blinker::new(interpreter.clone()).unwrap();
+    let blinker = Blinker::new(interpreter.clone())?;
     blinker
         .run_async(led::Cmd::Loop(Box::new(led::Cmd::Many(vec![
             led::Cmd::On(Duration::from_millis(100)),
@@ -91,10 +91,10 @@ async fn create_production_meta_app(config: Config) -> Fallible<MetaApp> {
 
     let mut isf = ProdInputSourceFactory::new()?;
     isf.with_buttons(Box::new(|| {
-        button::cdev_gpio::CdevGpio::new_from_env(|cmd| Some(cmd)).unwrap()
+        button::cdev_gpio::CdevGpio::new_from_env(|cmd| Some(cmd))
     }));
     isf.with_playback(Box::new(|| {
-        playback::rfid::PlaybackRequestTransmitterRfid::new(|cmd| Some(cmd)).unwrap()
+        playback::rfid::PlaybackRequestTransmitterRfid::new(|cmd| Some(cmd))
     }));
 
     let mut application = MetaApp::new(config, interpreter, blinker, Box::new(isf)).await?;
