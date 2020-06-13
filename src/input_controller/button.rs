@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 use failure::Fallible;
 use tokio::sync::broadcast::{channel, Receiver, Sender};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Command {
     Shutdown,
     VolumeUp,
@@ -19,12 +19,12 @@ pub struct Config {
 }
 
 #[derive(Clone)]
-pub struct Handle<T> {
-    channel: Sender<T>,
+pub struct Handle {
+    channel: Sender<Command>,
 }
 
-impl<T> Handle<T> {
-    pub fn receiver(self) -> Receiver<T> {
+impl Handle {
+    pub fn receiver(self) -> Receiver<Command> {
         self.channel.subscribe()
     }
 }
@@ -41,11 +41,11 @@ pub mod cdev_gpio {
     use super::*;
 
     #[derive(Debug, Clone)]
-    pub struct CdevGpio<T: Clone> {
+    pub struct CdevGpio {
         map: HashMap<u32, Command>,
         chip: Arc<RwLock<Chip>>,
         config: Config,
-        tx: Sender<T>,
+        tx: Sender<Command>,
     }
 
     #[derive(Deserialize, Debug, Clone)]
@@ -73,11 +73,8 @@ pub mod cdev_gpio {
         }
     }
 
-    impl<T: core::fmt::Debug + Clone + Send + 'static> CdevGpio<T> {
-        pub fn new_from_env<F>(msg_transformer: F) -> Fallible<Handle<T>>
-        where
-            F: Fn(Command) -> Option<T> + 'static + Send + Sync,
-        {
+    impl CdevGpio {
+        pub fn new_from_env() -> Fallible<Handle> {
             info!("Using CdevGpio based in Button Controller");
             let env_config = EnvConfig::new_from_env()?;
             let config: Config = env_config.into();
@@ -101,18 +98,14 @@ pub mod cdev_gpio {
                 tx: tx.clone(),
             };
 
-            gpio_cdev.run(msg_transformer)?;
+            gpio_cdev.run()?;
             Ok(Handle { channel: tx })
         }
 
-        fn run_single_event_listener<F>(
+        fn run_single_event_listener(
             self,
             (line, line_id, cmd): (Line, u32, Command),
-            msg_transformer: Arc<F>,
-        ) -> Fallible<()>
-        where
-            F: Fn(Command) -> Option<T> + 'static + Send,
-        {
+        ) -> Fallible<()> {
             let mut n_received_during_shutdown_delay = 0;
             info!("Listening for GPIO events on line {}", line_id);
             for event in line
@@ -149,24 +142,16 @@ pub mod cdev_gpio {
                     }
                 }
 
-                if let Some(cmd) = msg_transformer(cmd.clone()) {
-                    let mut tx = self.tx.clone();
-                    if let Err(err) = tx.send(cmd) {
-                        error!("Failed to transmit GPIO event: {:?}", err);
-                    }
-                } else {
-                    info!("Dropped button command message: {:?}", cmd);
+                let mut tx = self.tx.clone();
+                if let Err(err) = tx.send(cmd) {
+                    error!("Failed to transmit GPIO event: {:?}", err);
                 }
             }
             Ok(())
         }
 
-        fn run<F>(&mut self, msg_transformer: F) -> Fallible<()>
-        where
-            F: Fn(Command) -> Option<T> + 'static + Send + Sync,
-        {
+        fn run(&mut self) -> Fallible<()> {
             let chip = &mut *(self.chip.write().unwrap());
-            let msg_transformer = Arc::new(msg_transformer);
             // Spawn threads for requested GPIO lines.
             for (line_id, cmd) in self.map.iter() {
                 info!("Listening for {:?} on GPIO line {}", cmd, line_id);
@@ -176,12 +161,10 @@ pub mod cdev_gpio {
                     .map_err(|err| Error::IO(format!("Failed to get GPIO line: {:?}", err)))?;
                 let cmd = (*cmd).clone();
                 let clone = self.clone();
-                let msg_transformer = Arc::clone(&msg_transformer);
                 let _handle = std::thread::Builder::new()
                     .name(format!("button-controller-{}", line_id))
                     .spawn(move || {
-                        let res =
-                            clone.run_single_event_listener((line, line_id, cmd), msg_transformer);
+                        let res = clone.run_single_event_listener((line, line_id, cmd));
                         error!("GPIO Listener loop terminated unexpectedly: {:?}", res);
                     })
                     .unwrap();

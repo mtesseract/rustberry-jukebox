@@ -91,7 +91,7 @@ async fn create_production_meta_app(config: Config) -> Fallible<MetaApp> {
 
     let mut isf = ProdInputSourceFactory::new()?;
     isf.with_buttons(Box::new(|| {
-        button::cdev_gpio::CdevGpio::new_from_env(|cmd| Some(cmd))
+        button::cdev_gpio::CdevGpio::new_from_env()
     }));
     isf.with_playback(Box::new(|| {
         playback::rfid::PlaybackRequestTransmitterRfid::new(|cmd| Some(cmd))
