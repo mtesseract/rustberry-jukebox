@@ -18,13 +18,13 @@ mod test {
 
 use tokio::sync::oneshot;
 
-pub struct Handle<T> {
-    channel: Receiver<T>,
+pub struct Handle {
+    channel: Receiver<PlaybackRequest>,
     _abort: oneshot::Sender<()>,
 }
 
-impl<T> Handle<T> {
-    pub fn channel(self) -> Receiver<T> {
+impl Handle {
+    pub fn channel(self) -> Receiver<PlaybackRequest> {
         self.channel
     }
 
@@ -42,33 +42,27 @@ pub mod rfid {
 
     use super::*;
 
-    pub struct PlaybackRequestTransmitterRfid<T> {
+    pub struct PlaybackRequestTransmitterRfid {
         picc: RfidController,
-        tx: Sender<T>,
+        tx: Sender<PlaybackRequest>,
     }
 
-    impl<T: 'static + Send + Sync + Clone + std::fmt::Debug> PlaybackRequestTransmitterRfid<T> {
-        pub fn new<F>(msg_transformer: F) -> Fallible<Handle<T>>
-        where
-            F: Fn(PlaybackRequest) -> Option<T> + 'static + Send + Sync,
-        {
+    impl PlaybackRequestTransmitterRfid {
+        pub fn new() -> Fallible<Handle> {
             let (tx, rx) = channel(1);
             let (os_tx, mut os_rx) = oneshot::channel();
             let picc = RfidController::new()?;
             let transmitter = Self { picc, tx };
             std::thread::Builder::new()
                 .name("playback-transmitter".to_string())
-                .spawn(move || transmitter.run(msg_transformer, os_rx).unwrap())?;
+                .spawn(move || transmitter.run(os_rx).unwrap())?;
             Ok(Handle {
                 channel: rx,
                 _abort: os_tx,
             })
         }
 
-        fn run<F>(mut self, msg_transformer: F, mut os_rx: oneshot::Receiver<()>) -> Fallible<()>
-        where
-            F: Fn(PlaybackRequest) -> Option<T> + 'static + Send,
-        {
+        fn run(mut self, mut os_rx: oneshot::Receiver<()>) -> Fallible<()> {
             let mut last_uid: Option<String> = None;
 
             loop {
@@ -87,14 +81,8 @@ pub mod rfid {
                         if last_uid.is_some() {
                             info!("RFID Tag gone");
                             last_uid = None;
-                            if let Some(msg_transformed) = msg_transformer(PlaybackRequest::Stop) {
-                                let mut tx = self.tx.clone();
-                                if let Err(err) =
-                                    futures::executor::block_on(tx.send(msg_transformed))
-                                {
-                                    error!("Failed to transmit User Request: {}", err);
-                                }
-                            }
+                            let mut tx = self.tx.clone();
+                            futures::executor::block_on(tx.send(PlaybackRequest::Stop));
                             std::thread::sleep(std::time::Duration::from_millis(80));
                         }
                     }
@@ -102,9 +90,7 @@ pub mod rfid {
                         let current_uid = format!("{:?}", tag.uid);
                         if last_uid != Some(current_uid.clone()) {
                             // new tag!
-                            if let Err(err) =
-                                Self::handle_tag(&tag, &msg_transformer, &mut self.tx.clone())
-                            {
+                            if let Err(err) = Self::handle_tag(&tag, &mut self.tx.clone()) {
                                 error!("Failed to handle tag: {}", err);
                                 std::thread::sleep(std::time::Duration::from_millis(80));
                                 continue;
@@ -127,10 +113,7 @@ pub mod rfid {
             }
         }
 
-        fn handle_tag<F>(tag: &Tag, msg_transformer: &F, tx: &mut Sender<T>) -> Fallible<()>
-        where
-            F: Fn(PlaybackRequest) -> Option<T> + 'static + Send,
-        {
+        fn handle_tag(tag: &Tag, tx: &mut Sender<PlaybackRequest>) -> Fallible<()> {
             let mut tag_reader = tag.new_reader();
             let request_string = tag_reader.read_string()?;
             let request_deserialized: PlaybackResource = match serde_json::from_str(&request_string)
@@ -144,13 +127,7 @@ pub mod rfid {
                     return Err(err.into());
                 }
             };
-            if let Some(req_transformed) =
-                msg_transformer(PlaybackRequest::Start(request_deserialized.clone()))
-            {
-                futures::executor::block_on(tx.send(req_transformed))?;
-            } else {
-                info!("Dropping playback request '{:?}'", &request_deserialized);
-            }
+            futures::executor::block_on(tx.send(PlaybackRequest::Start(request_deserialized)))?;
             Ok(())
         }
     }

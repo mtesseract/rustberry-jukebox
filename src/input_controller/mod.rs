@@ -29,9 +29,9 @@ pub trait InputSource {
 
 pub struct ProdInputSourceFactory {
     buttons: Option<Box<dyn Sync + Send + Fn() -> Fallible<button::Handle>>>, // This spawn a separate thread implementing the blocking event retrieval.
-    playback: Option<Box<dyn Sync + Send + Fn() -> Fallible<playback::Handle<PlaybackRequest>>>>,
+    playback: Option<Box<dyn Sync + Send + Fn() -> Fallible<playback::Handle>>>,
     button_controller: Arc<RwLock<Option<button::Handle>>>,
-    playback_controller: Arc<RwLock<Option<playback::Handle<PlaybackRequest>>>>,
+    playback_controller: Arc<RwLock<Option<playback::Handle>>>,
 }
 
 pub struct ProdInputSource {
@@ -137,9 +137,7 @@ impl ProdInputSourceFactory {
     }
     pub fn with_playback(
         &mut self,
-        input_controller: Box<
-            dyn Fn() -> Fallible<playback::Handle<PlaybackRequest>> + Send + Sync + 'static,
-        >,
+        input_controller: Box<dyn Fn() -> Fallible<playback::Handle> + Send + Sync + 'static>,
     ) {
         self.playback = Some(input_controller);
     }
@@ -170,17 +168,13 @@ pub mod mock {
         }
         pub fn with_buttons(
             &mut self,
-            input_controller: Box<
-                dyn Fn() -> Fallible<button::Handle> + Send + Sync + 'static,
-            >,
+            input_controller: Box<dyn Fn() -> Fallible<button::Handle> + Send + Sync + 'static>,
         ) {
             unimplemented!()
         }
         pub fn with_playback(
             &mut self,
-            input_controller: Box<
-                dyn Fn() -> Fallible<playback::Handle<PlaybackRequest>> + Send + Sync + 'static,
-            >,
+            input_controller: Box<dyn Fn() -> Fallible<playback::Handle> + Send + Sync + 'static>,
         ) {
             unimplemented!()
         }

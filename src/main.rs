@@ -1,8 +1,11 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use async_std::sync::RwLock;
+
 use tokio::stream::StreamExt;
 use tokio::sync::mpsc::{channel, Receiver};
+use tokio::sync::oneshot;
 
 // use crossbeam_channel::{self, Receiver, Select};
 use failure::Fallible;
@@ -53,12 +56,9 @@ async fn create_mock_meta_app(config: Config) -> Fallible<MetaApp> {
             for eff in interpreted_effects.iter() {
                 info!("Mock interpreter received effect: {:?}", eff);
             }
-        })
-        ?;
+        })?;
 
-    let application = MetaApp::new(config, interpreter, blinker, isf)
-        .await
-        ?;
+    let application = MetaApp::new(config, interpreter, blinker, isf).await?;
 
     Ok(application)
 }
@@ -83,18 +83,10 @@ async fn create_production_meta_app(config: Config) -> Fallible<MetaApp> {
         err
     })?;
 
-    // Prepare individual input channels.
-    // let button_controller_handle =
-    //     button::cdev_gpio::CdevGpio::new_from_env(|cmd| Some(Input::Button(cmd)))?;
-    let playback_controller_handle =
-        playback::rfid::PlaybackRequestTransmitterRfid::new(|req| Some(Input::Playback(req)))?;
-
     let mut isf = ProdInputSourceFactory::new()?;
-    isf.with_buttons(Box::new(|| {
-        button::cdev_gpio::CdevGpio::new_from_env()
-    }));
+    isf.with_buttons(Box::new(|| button::cdev_gpio::CdevGpio::new_from_env()));
     isf.with_playback(Box::new(|| {
-        playback::rfid::PlaybackRequestTransmitterRfid::new(|cmd| Some(cmd))
+        playback::rfid::PlaybackRequestTransmitterRfid::new()
     }));
 
     let mut application = MetaApp::new(config, interpreter, blinker, Box::new(isf)).await?;
@@ -106,13 +98,10 @@ fn main_with_log() -> Fallible<()> {
     let config = envy::from_env::<Config>()?;
     info!("Configuration"; o!("device_name" => &config.device_name));
 
-    // let mut runtime = tokio::runtime::Runtime::new().unwrap();
     let mut runtime = tokio::runtime::Builder::new()
         .threaded_scheduler()
         .enable_all()
         .build()?;
-
-    // let mut application = create_production_meta_app(config, runtime.handle())?;
 
     runtime.block_on(async move {
         let application = if std::env::var("MOCK_MODE")
@@ -124,17 +113,23 @@ fn main_with_log() -> Fallible<()> {
             create_production_meta_app(config).await?
         };
 
+        {
+            application.is_ready();
+            let h = application.handle();
+            h.set_mode(AppMode::Jukebox).await;
+        }
+
         dbg!("about to block on application");
         application
             .run()
             .map_err(|err| {
-                warn!("Jukebox loop terminated, terminating application: {}", err);
+                warn!("Meta App loop terminated, terminating application: {}", err);
                 err
             })
             .await
     });
 
-    dbg!("application temrinated");
+    dbg!("application terminated");
     Ok(())
 }
 
@@ -159,6 +154,7 @@ struct MetaApp {
     jukebox_app: App,
     blinker: Blinker,
     input_factory: Arc<Box<dyn InputSourceFactory + Sync + Send + 'static>>,
+    initialized: Arc<RwLock<bool>>,
 }
 
 use std::convert::Infallible;
@@ -187,6 +183,16 @@ impl MetaAppHandle {
 }
 
 impl MetaApp {
+    pub async fn is_ready(&self) -> bool {
+        loop {
+            let ready = {
+                let r = self.initialized.read().await;
+               *r
+            };
+            tokio::time::delay_for(std::time::Duration::from_millis(50)).await;
+        }
+    }
+
     pub fn handle(&self) -> MetaAppHandle {
         let control_tx = self.control_tx.clone();
         let meta_app_handle = MetaAppHandle { control_tx };
@@ -219,6 +225,7 @@ impl MetaApp {
             interpreter,
             input_factory: input_source_factory,
             jukebox_app,
+            initialized: Arc::new(RwLock::new(false)),
         };
         Ok(meta_app)
     }
@@ -269,7 +276,8 @@ impl MetaApp {
         println!("{:?}", tag.uid);
         let mut tag_reader = tag.new_reader();
         let s = tag_reader.read_string().expect("read_string");
-        let req: PlaybackRequest = serde_json::from_str(&s).expect("PlaybackRequest Deserialization");
+        let req: PlaybackRequest =
+            serde_json::from_str(&s).expect("PlaybackRequest Deserialization");
         dbg!(&req);
         Ok(StatusCode::OK)
     }
@@ -313,6 +321,12 @@ impl MetaApp {
 
         let mut current_mode = AppMode::Starting;
         let mut abortable = None;
+
+        {
+            info!("MetaApp is ready");
+            let mut w = self.initialized.write().await;
+            *w = true;
+        }
 
         loop {
             let cmd = self.control_rx.recv().await.unwrap();
