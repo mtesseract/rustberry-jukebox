@@ -22,7 +22,7 @@ use rustberry::input_controller::{
     button, mock, playback, Input, InputSource, InputSourceFactory, ProdInputSource,
     ProdInputSourceFactory,
 };
-use rustberry::player::{self, PlaybackRequest, Player};
+use rustberry::player::{self, PlaybackRequest, PlaybackResource, Player};
 
 use led::Blinker;
 
@@ -265,7 +265,13 @@ impl MetaApp {
         Ok(StatusCode::OK)
     }
 
-    async fn put_rfid_tag(meta_app_handle: MetaAppHandle) -> Result<impl warp::Reply, Infallible> {
+    async fn put_rfid_tag(meta_app_handle: MetaAppHandle, resource: PlaybackResource) -> Result<impl warp::Reply, Infallible> {
+        use rustberry::components::rfid::RfidController;
+        let resource_deserialized = serde_json::to_string(&resource).expect("Resource Deserialization");
+        let mut rc = RfidController::new().unwrap();
+        let tag = rc.open_tag().expect("Failed to open RFID tag").unwrap();
+        let mut tag_writer = tag.new_writer();
+        tag_writer.write_string(&resource_deserialized).unwrap();
         Ok(StatusCode::OK)
     }
 
@@ -302,6 +308,7 @@ impl MetaApp {
                 warp::path!("rfid-tag").and(
                     (warp::put()
                         .and(Self::with_db(meta_app_handle.clone()))
+                        .and(warp::body::json::<PlaybackResource>())
                         .and_then(Self::put_rfid_tag))
                     .or(warp::get()
                         .and(Self::with_db(meta_app_handle.clone()).and_then(Self::get_rfid_tag))),
@@ -314,7 +321,7 @@ impl MetaApp {
                     .and_then(Self::set_mode_jukebox)
             };
             (warp::get().and(hello.or(ep_mode).or(ep_mode_admin).or(ep_mode_jukebox)))
-                .or(warp::path!("admin").and(eps_admin))
+                .or(warp::path!("admin" / ..).and(eps_admin))
         };
 
         tokio::spawn(warp::serve(routes).run(([0, 0, 0, 0], 3030)));
