@@ -20,7 +20,26 @@ pub enum Input {
 
 pub trait InputSourceFactory {
     fn consume(&self) -> Fallible<Box<dyn InputSource + Sync + Send + 'static>>;
-    // fn new() -> Fallible<Box<dyn InputSourceFactory + 'static>>;
+}
+
+pub mod test {
+    use super::*;
+
+    impl InputSourceFactory for Vec<Input> {
+        fn consume(&self) -> Fallible<Box<dyn InputSource + Sync + Send + 'static>> {
+            Ok(Box::new(self.clone()))
+        }
+    }
+
+    impl InputSource for Vec<Input> {
+        fn receiver(&self) -> Receiver<Input> {
+            let (tx, rx) = channel(self.len());
+            for i in self.iter() {
+                tx.send(i.clone()).unwrap();
+            }
+            rx
+        }
+    }
 }
 
 pub trait InputSource {

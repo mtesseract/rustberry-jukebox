@@ -1,18 +1,15 @@
-// use std::cell::RefCell;
 use std::fmt;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
-// use crossbeam_channel::{Receiver, Sender};
-use tokio::sync::mpsc::{channel, Receiver, Sender};
-// use futures_util::sink::SinkExt;
 use failure::Fallible;
 use serde::{Deserialize, Serialize};
 use slog_scope::{error, info, warn};
 use tokio::runtime;
+use tokio::sync::mpsc::{channel, Receiver, Sender};
 
-use crate::effects::Interpreter;
+use crate::effects::{DynInterpreter, Interpreter};
 
 pub use err::*;
 
@@ -35,7 +32,6 @@ pub struct PlayerCommand {
     request: PlaybackRequest,
 }
 
-// type StopPlayEffect = Box<dyn Fn() -> Result<(), failure::Error>>;
 pub type DynPlaybackHandle = Box<dyn PlaybackHandle + Send + Sync + 'static>;
 
 impl fmt::Display for PlayerState {
@@ -68,7 +64,6 @@ enum PlayerState {
         playing_since: std::time::Instant,
         offset: Duration,
         handle: Arc<DynPlaybackHandle>,
-        // stop_eff: StopPlayEffect,
     },
     Paused {
         handle: Arc<DynPlaybackHandle>,
@@ -77,7 +72,7 @@ enum PlayerState {
     },
 }
 pub struct Player {
-    interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
+    interpreter: DynInterpreter,
     state: PlayerState,
     rx: Receiver<PlayerCommand>,
 }
@@ -352,7 +347,6 @@ impl Player {
     }
 
     pub async fn new(
-        // runtime: runtime::Handle,
         interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
     ) -> Fallible<PlayerHandle> {
         let (tx, rx) = channel(1);
@@ -422,22 +416,19 @@ mod test {
     use super::*;
     use crate::effects::{test::TestInterpreter, Effects};
 
-    #[test]
-    fn player_plays_resource_on_playback_request() -> Fallible<()> {
+    #[tokio::test]
+    async fn player_plays_resource_on_playback_request() -> Fallible<()> {
         let runtime = Runtime::new().unwrap();
         let (interpreter, effects_rx) = TestInterpreter::new();
         let interpreter =
             Arc::new(Box::new(interpreter) as Box<dyn Interpreter + Send + Sync + 'static>);
-        error!("A");
-        let player_handle = Player::new(runtime.handle().clone(), interpreter).unwrap();
-        error!("B");
+        let player_handle = Player::new(interpreter).await?;
         let playback_requests = vec![
             PlaybackRequest::Start(PlaybackResource::SpotifyUri(
                 "spotify:track:5j6ZZwA9BnxZi5Bk0Ng4jB".to_string(),
             )),
             PlaybackRequest::Stop,
         ];
-        error!("C");
         let effects_expected = vec![
             Effects::PlaySpotify {
                 spotify_uri: "spotify:track:5j6ZZwA9BnxZi5Bk0Ng4jB".to_string(),
@@ -445,13 +436,9 @@ mod test {
             Effects::StopSpotify,
         ];
         for req in playback_requests.iter() {
-            player_handle.playback(req.clone()).unwrap();
+            player_handle.playback(req.clone()).await?;
         }
-        dbg!("1");
-        panic!();
         let produced_effects: Vec<_> = effects_rx.iter().collect();
-        dbg!("2");
-        panic!();
 
         assert_eq!(produced_effects, effects_expected);
         Ok(())

@@ -28,6 +28,8 @@ use std::process::Command;
 
 use crate::player::{DynPlaybackHandle, PauseState, PlaybackHandle, PlaybackResource};
 
+pub type DynInterpreter = Arc<Box<dyn Interpreter + Sync + Send + 'static>>;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Effects {
     PlayHttp { url: String },
@@ -47,7 +49,6 @@ pub struct ProdInterpreter {
 }
 
 #[async_trait]
-
 pub trait Interpreter {
     fn wait_until_ready(&self) -> Fallible<()>;
     async fn play(
@@ -55,7 +56,6 @@ pub trait Interpreter {
         res: PlaybackResource,
         pause_state: Option<PauseState>,
     ) -> Fallible<DynPlaybackHandle>;
-    // fn stop(&self, handle: DynPlaybackHandle) -> Fallible<()>;
     fn led_on(&self) -> Fallible<()>;
     fn led_off(&self) -> Fallible<()>;
     fn generic_command(&self, cmd: String) -> Fallible<()>;
@@ -90,17 +90,16 @@ impl Interpreter for ProdInterpreter {
         }
     }
 
-    // fn stop(&self, handle: DynPlaybackHandle) -> Fallible<()> {
-    // }
-
     fn led_on(&self) -> Fallible<()> {
         info!("Switching LED on");
         self.led_controller.switch_on(Led::Playback)
     }
+
     fn led_off(&self) -> Fallible<()> {
         info!("Switching LED off");
         self.led_controller.switch_off(Led::Playback)
     }
+
     fn generic_command(&self, cmd: String) -> Fallible<()> {
         info!("Executing command '{}'", &cmd);
         let res = Command::new("/bin/sh").arg("-c").arg(&cmd).status();
