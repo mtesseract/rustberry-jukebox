@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 // use crossbeam_channel::{self, Receiver, Sender};
 use failure::Fallible;
 use slog_scope::{error, info, warn};
@@ -92,7 +94,7 @@ pub mod rfid {
                             // new tag!
                             if let Err(err) = Self::handle_tag(&tag, &mut self.tx.clone()) {
                                 error!("Failed to handle tag: {}", err);
-                                std::thread::sleep(std::time::Duration::from_millis(80));
+                                std::thread::sleep(Duration::from_millis(80));
                                 continue;
                             }
                             last_uid = Some(current_uid);

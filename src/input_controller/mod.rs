@@ -4,8 +4,8 @@ pub mod playback;
 use std::sync::{Arc, RwLock};
 
 use failure::Fallible;
-use futures::future::{abortable, AbortHandle, Abortable};
-use slog_scope::error;
+use futures::future::{AbortHandle};
+use slog_scope::{info,error};
 use tokio::{
     sync::broadcast::{channel, Receiver, Sender},
 };
@@ -64,8 +64,13 @@ impl Drop for ProdInputSource {
         eprintln!("Dropping InputSource");
 
         if let Some(buttons_transmitter) = &self.buttons_transmitter {
-            eprintln!("Aborting button input controller");
+            info!("Aborting button input controller");
             buttons_transmitter.abort();
+        }
+
+        if let Some(playback_transmitter) = &self.playback_transmitter {
+            info!("Aborting playback input controller");
+            playback_transmitter.abort();
         }
     }
 }

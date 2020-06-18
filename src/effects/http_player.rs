@@ -10,7 +10,7 @@ use std::sync::Arc;
 use std::thread::{Builder, JoinHandle};
 
 use async_trait::async_trait;
-use crossbeam_channel::{self, Receiver, Sender};
+use crossbeam_channel::{self, Sender};
 use tokio::runtime::Runtime;
 use tokio::task::spawn_blocking;
 

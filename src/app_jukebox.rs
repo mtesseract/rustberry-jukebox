@@ -1,27 +1,16 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use async_std::sync::RwLock;
-
-use tokio::stream::StreamExt;
-use tokio::sync::mpsc::{channel, Receiver};
-use tokio::sync::oneshot;
-
 use failure::Fallible;
-use slog::{self, o, Drain};
-use slog_async;
 use slog_scope::{error, info, warn};
-use slog_term;
 
 use crate::config::Config;
-use crate::effects::{test::TestInterpreter, DynInterpreter, Interpreter, ProdInterpreter};
+use crate::effects::{DynInterpreter, Interpreter};
 use crate::input_controller::{
-    button, mock, playback, Input, InputSource, InputSourceFactory, ProdInputSource,
-    ProdInputSourceFactory,
+    button, Input, InputSource, InputSourceFactory,
 };
-use crate::player::{self, PlaybackRequest, PlaybackResource, Player};
+use crate::player::{PlaybackRequest, Player};
 use futures::future::AbortHandle;
-use futures_util::TryFutureExt;
 
 use crate::led::{self, Blinker};
 
@@ -146,6 +135,5 @@ impl App {
                 }
             };
         }
-        Ok(())
     }
 }
