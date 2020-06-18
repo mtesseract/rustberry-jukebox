@@ -1,13 +1,11 @@
-
-use std::cell::RefCell;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
+use crate::effects::Interpreter;
 use failure::Fallible;
 use futures::future::AbortHandle;
-use crate::effects::Interpreter;
 use slog_scope::{error, info};
 
 #[derive(Clone)]

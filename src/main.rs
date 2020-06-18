@@ -1,37 +1,22 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use async_std::sync::RwLock;
-
-use tokio::stream::StreamExt;
-use tokio::sync::mpsc::{channel, Receiver};
-use tokio::sync::oneshot;
-
 use failure::Fallible;
 use slog::{self, o, Drain};
 use slog_async;
 use slog_scope::{error, info, warn};
 use slog_term;
 
-use futures::future::AbortHandle;
 use futures_util::TryFutureExt;
 use rustberry::config::Config;
-use rustberry::effects::{test::TestInterpreter, DynInterpreter, Interpreter, ProdInterpreter};
+use rustberry::effects::{test::TestInterpreter, Interpreter, ProdInterpreter};
 use rustberry::input_controller::{
-    button, mock, playback, Input, InputSource, InputSourceFactory, ProdInputSource,
-    ProdInputSourceFactory,
+    button, mock, playback, InputSourceFactory, ProdInputSourceFactory,
 };
-use rustberry::player::{self, PlaybackRequest, PlaybackResource, Player};
 
-use rustberry::led::{self,Blinker};
+use rustberry::led::{self, Blinker};
 
-use rustberry::app_jukebox::{App};
-use rustberry::meta_app::{MetaApp, MetaAppHandle, AppMode};
-
-use std::convert::Infallible;
-use warp::http::StatusCode;
-use warp::Filter;
-
+use rustberry::meta_app::{AppMode, MetaApp};
 
 fn main() -> Fallible<()> {
     let decorator = slog_term::TermDecorator::new().build();
@@ -94,9 +79,7 @@ async fn create_production_meta_app(config: Config) -> Fallible<MetaApp> {
         playback::rfid::PlaybackRequestTransmitterRfid::new()
     }));
 
-    let mut application = MetaApp::new(config, interpreter, blinker, Box::new(isf)).await?;
-
-    Ok(application)
+    Ok(MetaApp::new(config, interpreter, blinker, Box::new(isf)).await?)
 }
 
 fn main_with_log() -> Fallible<()> {
@@ -119,12 +102,13 @@ fn main_with_log() -> Fallible<()> {
         };
 
         {
-            application.is_ready();
+            application.is_ready().await;
             let h = application.handle();
-            h.set_mode(AppMode::Jukebox).await;
+            if let Err(err) = h.set_mode(AppMode::Jukebox).await {
+                error!("Failed to activate Jukebox mode: {}", err);
+            }
         }
 
-        dbg!("about to block on application");
         application
             .run()
             .map_err(|err| {
@@ -132,10 +116,7 @@ fn main_with_log() -> Fallible<()> {
                 err
             })
             .await
-    });
-
-    dbg!("application terminated");
-    Ok(())
+    })
 }
 
 #[cfg(test)]

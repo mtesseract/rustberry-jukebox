@@ -23,7 +23,7 @@ use crate::player::{self, PlaybackRequest, PlaybackResource, Player};
 use futures::future::AbortHandle;
 use futures_util::TryFutureExt;
 
-use crate::led::{self,Blinker};
+use crate::led::{self, Blinker};
 
 #[derive(Clone)]
 pub struct App {

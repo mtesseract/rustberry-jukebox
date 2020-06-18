@@ -5,9 +5,9 @@ use std::sync::{Arc, RwLock};
 
 use failure::Fallible;
 use futures::future::{abortable, AbortHandle, Abortable};
+use slog_scope::error;
 use tokio::{
     sync::broadcast::{channel, Receiver, Sender},
-    task,
 };
 
 use crate::player::PlaybackRequest;
@@ -104,7 +104,12 @@ impl InputSourceFactory for ProdInputSourceFactory {
             let (f, abortable_handle) = futures::future::abortable(async move {
                 loop {
                     let el = Input::Button(receiver.recv().await.unwrap());
-                    tx.send(el);
+                    if let Err(err) = tx.send(el.clone()) {
+                        error!(
+                            "Failed to transmit button event {:?} in InputSource: {:?}",
+                            &el, err
+                        );
+                    }
                 }
             });
             tokio::spawn(f);
@@ -120,7 +125,12 @@ impl InputSourceFactory for ProdInputSourceFactory {
             let (f, abortable) = futures::future::abortable(async move {
                 loop {
                     let el = Input::Playback(rx.recv().await.unwrap());
-                    tx.send(el);
+                    if let Err(err) = tx.send(el.clone()) {
+                        error!(
+                            "Failed to transmit playback event {:?} in InputSource: {:?}",
+                            &el, err
+                        );
+                    }
                 }
             });
             tokio::spawn(f);
@@ -163,7 +173,7 @@ impl ProdInputSourceFactory {
 }
 
 pub mod mock {
-    use super::{button, playback, InputSource, InputSourceFactory, PlaybackRequest};
+    use super::{button, playback, InputSource, InputSourceFactory};
     use failure::Fallible;
 
     use super::Input;

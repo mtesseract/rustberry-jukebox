@@ -8,24 +8,23 @@ use tokio::sync::mpsc::{channel, Receiver};
 use tokio::sync::oneshot;
 
 use failure::Fallible;
-use slog::{self, o, Drain};
+use slog::{self, o};
 use slog_async;
 use slog_scope::{error, info, warn};
 use slog_term;
 
-use futures::future::AbortHandle;
-use futures_util::TryFutureExt;
 use crate::config::Config;
 use crate::effects::{test::TestInterpreter, DynInterpreter, Interpreter, ProdInterpreter};
 use crate::input_controller::{
     button, mock, playback, Input, InputSource, InputSourceFactory, ProdInputSource,
     ProdInputSourceFactory,
 };
-use crate::player::{self, PlaybackRequest, PlaybackResource, Player};
+use crate::player::{PlaybackRequest, PlaybackResource};
+use futures::future::AbortHandle;
 
-use crate::led::{self,Blinker};
+use crate::led::{self, Blinker};
 
-use crate::app_jukebox::{App};
+use crate::app_jukebox::App;
 use crate::components::rfid::RfidController;
 
 use std::convert::Infallible;
@@ -33,13 +32,9 @@ use warp::http::StatusCode;
 use warp::Filter;
 
 pub struct MetaApp {
-    config: Config,
     control_rx: tokio::sync::mpsc::Receiver<AppControl>,
     control_tx: tokio::sync::mpsc::Sender<AppControl>,
-    interpreter: DynInterpreter,
     jukebox_app: App,
-    blinker: Blinker,
-    input_factory: Arc<Box<dyn InputSourceFactory + Sync + Send + 'static>>,
     initialized: Arc<RwLock<bool>>,
 }
 
@@ -49,7 +44,7 @@ pub struct MetaAppHandle {
 }
 
 impl MetaAppHandle {
-   pub async fn current_mode(&self) -> AppMode {
+    pub async fn current_mode(&self) -> AppMode {
         let (os_tx, os_rx) = tokio::sync::oneshot::channel();
         let mut control_tx = self.control_tx.clone();
         control_tx
@@ -58,9 +53,10 @@ impl MetaAppHandle {
         os_rx.await.unwrap()
     }
 
-   pub async fn set_mode(&self, mode: AppMode) {
+    pub async fn set_mode(&self, mode: AppMode) -> Fallible<()> {
         let mut control_tx = self.control_tx.clone();
-        control_tx.try_send(AppControl::SetMode(mode));
+        control_tx.try_send(AppControl::SetMode(mode))?;
+        Ok(())
     }
 }
 
@@ -94,18 +90,13 @@ impl MetaApp {
             config.clone(),
             interpreter.clone(),
             blinker.clone(),
-            input_source_factory.clone(),
+            input_source_factory,
         )
         .unwrap();
 
         let meta_app = MetaApp {
             control_rx,
             control_tx,
-            config,
-            // app,
-            blinker,
-            interpreter,
-            input_factory: input_source_factory,
             jukebox_app,
             initialized: Arc::new(RwLock::new(false)),
         };
@@ -123,35 +114,48 @@ impl MetaApp {
         Ok(warp::reply::json(&current_mode))
     }
 
-    fn with_db(
-        db: MetaAppHandle,
+    fn with_meta_app_handle(
+        handle: MetaAppHandle,
     ) -> impl Filter<Extract = (MetaAppHandle,), Error = std::convert::Infallible> + Clone {
-        warp::any().map(move || db.clone())
+        warp::any().map(move || handle.clone())
     }
 
     async fn set_mode_admin(
         meta_app_handle: MetaAppHandle,
     ) -> Result<impl warp::Reply, Infallible> {
         info!("set_mode_admin()");
-
-        meta_app_handle.set_mode(AppMode::Admin).await;
-        Ok(StatusCode::OK)
+        Self::set_mode(meta_app_handle, AppMode::Admin).await
     }
 
     async fn set_mode_jukebox(
         meta_app_handle: MetaAppHandle,
     ) -> Result<impl warp::Reply, Infallible> {
         info!("set_mode_jukebox()");
+        Self::set_mode(meta_app_handle, AppMode::Jukebox).await
+    }
 
-        meta_app_handle.set_mode(AppMode::Jukebox).await;
-        Ok(StatusCode::OK)
+    async fn set_mode(
+        meta_app_handle: MetaAppHandle,
+        mode: AppMode,
+    ) -> Result<impl warp::Reply, Infallible> {
+        info!("set_mode_jukebox()");
+
+        let inner = |meta_app_handle: MetaAppHandle| async move {
+            Ok(meta_app_handle.set_mode(mode).await?)
+        };
+
+        let res: Fallible<()> = inner(meta_app_handle).await;
+
+        match res {
+            Ok(()) => Ok(StatusCode::OK),
+            Err(_) => Ok(StatusCode::INTERNAL_SERVER_ERROR),
+        }
     }
 
     async fn put_rfid_tag(
         meta_app_handle: MetaAppHandle,
         resource: PlaybackResource,
     ) -> Result<impl warp::Reply, Infallible> {
-        
         let resource_deserialized =
             serde_json::to_string(&resource).expect("Resource Deserialization");
         let mut rc = RfidController::new().unwrap();
@@ -180,29 +184,31 @@ impl MetaApp {
             let ep_mode = {
                 let meta_app_handle = meta_app_handle.clone();
                 warp::path!("mode")
-                    .and(Self::with_db(meta_app_handle))
+                    .and(Self::with_meta_app_handle(meta_app_handle))
                     .and_then(Self::get_current_mode)
             };
             let ep_mode_admin = {
                 let meta_app_handle = meta_app_handle.clone();
                 warp::path!("mode-admin")
-                    .and(Self::with_db(meta_app_handle))
+                    .and(Self::with_meta_app_handle(meta_app_handle))
                     .and_then(Self::set_mode_admin)
             };
             let eps_admin = {
                 warp::path!("rfid-tag").and(
                     (warp::put()
-                        .and(Self::with_db(meta_app_handle.clone()))
+                        .and(Self::with_meta_app_handle(meta_app_handle.clone()))
                         .and(warp::body::json::<PlaybackResource>())
                         .and_then(Self::put_rfid_tag))
-                    .or(warp::get()
-                        .and(Self::with_db(meta_app_handle.clone()).and_then(Self::get_rfid_tag))),
+                    .or(warp::get().and(
+                        Self::with_meta_app_handle(meta_app_handle.clone())
+                            .and_then(Self::get_rfid_tag),
+                    )),
                 )
             };
             let ep_mode_jukebox = {
                 let meta_app_handle = meta_app_handle.clone();
                 warp::path!("mode-jukebox")
-                    .and(Self::with_db(meta_app_handle))
+                    .and(Self::with_meta_app_handle(meta_app_handle))
                     .and_then(Self::set_mode_jukebox)
             };
             (warp::get().and(hello.or(ep_mode).or(ep_mode_admin).or(ep_mode_jukebox)))
@@ -225,7 +231,10 @@ impl MetaApp {
             info!("MetaApp Ctrl Cmd: {:?}", &cmd);
             match cmd {
                 AppControl::RequestCurrentMode(os_tx) => {
-                    os_tx.send(current_mode.clone());
+                    // Only fails if the Receiver has hung up already.
+                    // In that case, what else should we do than simply ignoring
+                    // this request?
+                    let _ = os_tx.send(current_mode.clone());
                 }
 
                 AppControl::SetMode(mode) => {

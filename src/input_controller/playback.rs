@@ -50,7 +50,7 @@ pub mod rfid {
     impl PlaybackRequestTransmitterRfid {
         pub fn new() -> Fallible<Handle> {
             let (tx, rx) = channel(1);
-            let (os_tx, mut os_rx) = oneshot::channel();
+            let (os_tx, os_rx) = oneshot::channel();
             let picc = RfidController::new()?;
             let transmitter = Self { picc, tx };
             std::thread::Builder::new()

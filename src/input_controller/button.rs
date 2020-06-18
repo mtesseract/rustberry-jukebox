@@ -142,7 +142,7 @@ pub mod cdev_gpio {
                     }
                 }
 
-                let mut tx = self.tx.clone();
+                let tx = self.tx.clone();
                 if let Err(err) = tx.send(cmd) {
                     error!("Failed to transmit GPIO event: {:?}", err);
                 }

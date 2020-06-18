@@ -6,7 +6,6 @@ use async_trait::async_trait;
 use failure::Fallible;
 use serde::{Deserialize, Serialize};
 use slog_scope::{error, info, warn};
-use tokio::runtime;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 use crate::effects::{DynInterpreter, Interpreter};
@@ -108,7 +107,7 @@ pub enum PlaybackResource {
 
 impl PlayerHandle {
     pub async fn playback(&self, req: PlaybackRequest) -> Fallible<()> {
-        let (mut tx, mut rx) = channel(1);
+        let (tx, mut rx) = channel(1);
         let mut xtx = self.tx.clone();
         xtx.send(PlayerCommand {
             result_transmitter: tx,

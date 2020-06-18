@@ -27,7 +27,8 @@ async fn main() {
             tokio::time::delay_for(std::time::Duration::from_millis(100)).await;
         }
     })
-    .await;
+    .await
+    .unwrap();
 }
 
 // works
