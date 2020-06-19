@@ -159,7 +159,7 @@ impl MetaApp {
         Ok(StatusCode::OK)
     }
 
-    async fn get_rfid_tag(meta_app_handle: MetaAppHandle) -> Result<impl warp::Reply, Infallible> {
+    async fn get_rfid_tag(_meta_app_handle: MetaAppHandle) -> Result<impl warp::Reply, Infallible> {
         let mut rc = RfidController::new().unwrap();
         let tag = rc.open_tag().unwrap().unwrap();
         println!("{:?}", tag.uid);

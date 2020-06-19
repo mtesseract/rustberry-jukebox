@@ -48,7 +48,6 @@ pub struct ProdInputSourceFactory {
     buttons: Option<Box<dyn Sync + Send + Fn() -> Fallible<button::Handle>>>, // This spawn a separate thread implementing the blocking event retrieval.
     playback: Option<Box<dyn Sync + Send + Fn() -> Fallible<playback::Handle>>>,
     button_controller: Arc<RwLock<Option<button::Handle>>>,
-    playback_controller: Arc<RwLock<Option<playback::Handle>>>,
 }
 
 pub struct ProdInputSource {
@@ -156,7 +155,6 @@ impl ProdInputSourceFactory {
         let input_source = ProdInputSourceFactory {
             buttons: None,
             playback: None,
-            playback_controller: Arc::new(RwLock::new(None)),
             button_controller: Arc::new(RwLock::new(None)),
         };
         Ok(input_source)
@@ -200,13 +198,13 @@ pub mod mock {
         }
         pub fn with_buttons(
             &mut self,
-            input_controller: Box<dyn Fn() -> Fallible<button::Handle> + Send + Sync + 'static>,
+            _input_controller: Box<dyn Fn() -> Fallible<button::Handle> + Send + Sync + 'static>,
         ) {
             unimplemented!()
         }
         pub fn with_playback(
             &mut self,
-            input_controller: Box<dyn Fn() -> Fallible<playback::Handle> + Send + Sync + 'static>,
+            _input_controller: Box<dyn Fn() -> Fallible<playback::Handle> + Send + Sync + 'static>,
         ) {
             unimplemented!()
         }

@@ -10,7 +10,6 @@ use std::sync::Arc;
 use std::thread::{Builder, JoinHandle};
 
 use async_trait::async_trait;
-use crossbeam_channel::{self, Sender};
 use tokio::runtime::Runtime;
 use tokio::task::spawn_blocking;
 
@@ -26,7 +25,7 @@ pub struct HttpPlayer {
 }
 
 pub struct HttpPlaybackHandle {
-    tx: Sender<()>,
+    // tx: Sender<()>,
     sink: Arc<Sink>,
     basic_auth: Option<(String, String)>,
     url: String,
@@ -117,22 +116,21 @@ impl HttpPlayer {
         let url = url.clone().to_string();
         let http_client = self.http_client.clone();
         let basic_auth = self.basic_auth.clone();
-        let (tx, rx) = crossbeam_channel::bounded(1);
+        // let (tx, rx) = crossbeam_channel::bounded(1);
         let sink = Arc::new(Sink::new(&device));
-        let sink_cp = sink.clone();
-        let _handle = Builder::new()
-            .name("http-player".to_string())
-            .spawn(move || {
-                let mut rt = Runtime::new().unwrap();
-                let f = async {
-                    let _msg = rx.recv();
-                };
-                rt.block_on(f);
-            })
-            .unwrap();
+        // let _handle = Builder::new()
+        //     .name("http-player".to_string())
+        //     .spawn(move || {
+        //         let mut rt = Runtime::new().unwrap();
+        //         let f = async {
+        //             let _msg = rx.recv();
+        //         };
+        //         rt.block_on(f);
+        //     })
+        //     .unwrap();
 
         let handle = HttpPlaybackHandle {
-            tx,
+            // tx,
             sink,
             basic_auth,
             url,
