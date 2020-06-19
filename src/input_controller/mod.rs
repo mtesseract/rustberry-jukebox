@@ -4,11 +4,9 @@ pub mod playback;
 use std::sync::{Arc, RwLock};
 
 use failure::Fallible;
-use futures::future::{AbortHandle};
-use slog_scope::{info,error};
-use tokio::{
-    sync::broadcast::{channel, Receiver, Sender},
-};
+use futures::future::AbortHandle;
+use slog_scope::{error, info};
+use tokio::sync::broadcast::{channel, Receiver, Sender};
 
 use crate::player::PlaybackRequest;
 

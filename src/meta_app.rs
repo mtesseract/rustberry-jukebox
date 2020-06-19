@@ -3,21 +3,16 @@ use std::time::Duration;
 
 use async_std::sync::RwLock;
 
-// use tokio::sync::mpsc::{channel, Receiver};
-use tokio::sync::oneshot;
-
 use failure::Fallible;
-use slog_scope::{info};
+use slog_scope::info;
 
 use crate::config::Config;
-use crate::effects::{Interpreter};
-use crate::input_controller::{
-     InputSourceFactory,
-};
+use crate::effects::Interpreter;
+use crate::input_controller::InputSourceFactory;
 use crate::player::{PlaybackRequest, PlaybackResource};
 use futures::future::AbortHandle;
 
-use crate::led::{Blinker};
+use crate::led::Blinker;
 
 use crate::app_jukebox::App;
 use crate::components::rfid::RfidController;
@@ -65,7 +60,7 @@ impl MetaApp {
             if ready {
                 return ready;
             } else {
-            tokio::time::delay_for(Duration::from_millis(50)).await;
+                tokio::time::delay_for(Duration::from_millis(50)).await;
             }
         }
     }

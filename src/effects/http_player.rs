@@ -65,7 +65,7 @@ impl PlaybackHandle for HttpPlaybackHandle {
         self.sink.pause();
         Ok(())
     }
-    async fn cont(&self, pause_state: PauseState) -> Fallible<()> {
+    async fn cont(&self, _pause_state: PauseState) -> Fallible<()> {
         self.sink.play();
         Ok(())
     }
@@ -136,7 +136,7 @@ impl HttpPlayer {
             sink,
             basic_auth,
             url,
-            http_client: self.http_client.clone(),
+            http_client,
         };
         handle.queue().await?;
         handle

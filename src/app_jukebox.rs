@@ -6,9 +6,7 @@ use slog_scope::{error, info, warn};
 
 use crate::config::Config;
 use crate::effects::{DynInterpreter, Interpreter};
-use crate::input_controller::{
-    button, Input, InputSource, InputSourceFactory,
-};
+use crate::input_controller::{button, Input, InputSource, InputSourceFactory};
 use crate::player::{PlaybackRequest, Player};
 use futures::future::AbortHandle;
 
@@ -72,68 +70,66 @@ impl App {
         loop {
             warn!("app loop");
             let mut rx = input_source.receiver();
-            let el = rx.recv().await;
-            match el {
+            let el = match rx.recv().await {
                 Err(err) => {
-                    // if err.is_empty() {
-                    //     // If the operation turns out not to be ready, retry.
-                    //     continue;
-                    // } else {
-                    //     error!("Failed to receive input event: {}", err);
-                    // }
-                    panic!()
+                    // Closed or lagged.
+                    error!(
+                        "Error while consuming input source in Jukebox App: {:?}",
+                        err
+                    );
+                    return Err(err.into())
                 }
-                Ok(input) => {
-                    blinker.stop();
-                    match input {
-                        Input::Button(cmd) => match cmd {
-                            button::Command::Shutdown => {
-                                if let Err(err) = interpreter.generic_command(
-                                    config
-                                        .shutdown_command
-                                        .clone()
-                                        .unwrap_or("sudo shutdown -h now".to_string()),
-                                ) {
-                                    error!("Failed to execute shutdown command: {}", err);
-                                }
-                            }
-                            button::Command::VolumeUp => {
-                                if let Err(err) = interpreter.generic_command(
-                                    config
-                                        .volume_up_command
-                                        .clone()
-                                        .unwrap_or("amixer -q -M set PCM 10%+".to_string()),
-                                ) {
-                                    error!("Failed to increase volume: {}", err);
-                                }
-                            }
-                            button::Command::VolumeDown => {
-                                if let Err(err) = interpreter.generic_command(
-                                    config
-                                        .volume_down_command
-                                        .clone()
-                                        .unwrap_or("amixer -q -M set PCM 10%-".to_string()),
-                                ) {
-                                    error!("Failed to decrease volume: {}", err);
-                                }
-                            }
-                        },
-                        Input::Playback(request) => {
-                            if let Err(err) = player.playback(request.clone()).await {
-                                error!("Failed to execute playback request {:?}: {}", request, err);
-                            }
-                            match request {
-                                PlaybackRequest::Start(_) => {
-                                    let _ = interpreter.led_on();
-                                }
-                                PlaybackRequest::Stop => {
-                                    let _ = interpreter.led_off();
-                                }
-                            }
+                Ok(input) => input,
+            };
+
+            blinker.stop();
+            match el {
+                Input::Button(cmd) => match cmd {
+                    button::Command::Shutdown => {
+                        if let Err(err) = interpreter.generic_command(
+                            config
+                                .shutdown_command
+                                .clone()
+                                .unwrap_or("sudo shutdown -h now".to_string()),
+                        ) {
+                            error!("Failed to execute shutdown command: {}", err);
+                        }
+                    }
+                    button::Command::VolumeUp => {
+                        if let Err(err) = interpreter.generic_command(
+                            config
+                                .volume_up_command
+                                .clone()
+                                .unwrap_or("amixer -q -M set PCM 10%+".to_string()),
+                        ) {
+                            error!("Failed to increase volume: {}", err);
+                        }
+                    }
+                    button::Command::VolumeDown => {
+                        if let Err(err) = interpreter.generic_command(
+                            config
+                                .volume_down_command
+                                .clone()
+                                .unwrap_or("amixer -q -M set PCM 10%-".to_string()),
+                        ) {
+                            error!("Failed to decrease volume: {}", err);
+                        }
+                    }
+                },
+                Input::Playback(request) => {
+                    if let Err(err) = player.playback(request.clone()).await {
+                        error!("Failed to execute playback request {:?}: {}", request, err);
+                    }
+                    match request {
+                        PlaybackRequest::Start(_) => {
+                            let _ = interpreter.led_on();
+                        }
+                        PlaybackRequest::Stop => {
+                            let _ = interpreter.led_off();
                         }
                     }
                 }
-            };
+            }
         }
     }
 }

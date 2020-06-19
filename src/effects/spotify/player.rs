@@ -238,7 +238,7 @@ impl SpotifyPlayer {
     pub async fn start_playback(
         &self,
         spotify_uri: &str,
-        pause_state: Option<PauseState>,
+        _pause_state: Option<PauseState>,
     ) -> Result<SpotifyPlaybackHandle, failure::Error> {
         // let req = Self::derive_start_playback_payload_from_spotify_uri(spotify_uri, &pause_state);
         let handle = SpotifyPlaybackHandle {

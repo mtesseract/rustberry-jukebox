@@ -174,7 +174,7 @@ pub mod test {
         async fn pause(&self) -> Fallible<()> {
             Ok(())
         }
-        async fn cont(&self, pause_state: PauseState) -> Fallible<()> {
+        async fn cont(&self, _pause_state: PauseState) -> Fallible<()> {
             Ok(())
         }
         async fn replay(&self) -> Fallible<()> {
@@ -191,7 +191,7 @@ pub mod test {
         async fn play(
             &self,
             res: PlaybackResource,
-            pause_state: Option<PauseState>,
+            _pause_state: Option<PauseState>,
         ) -> Fallible<DynPlaybackHandle> {
             use PlaybackResource::*;
 

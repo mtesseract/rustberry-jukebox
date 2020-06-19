@@ -6,7 +6,7 @@ use std::time::Duration;
 use crate::effects::Interpreter;
 use failure::Fallible;
 use futures::future::AbortHandle;
-use slog_scope::{info};
+use slog_scope::info;
 
 #[derive(Clone)]
 pub struct Blinker {
