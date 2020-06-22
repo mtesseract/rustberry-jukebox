@@ -246,9 +246,7 @@ impl MetaApp {
                 }
 
                 AppControl::SetMode(mode) => {
-                    info!("Shutting down mode {:?}", current_mode);
-                    abortable.map(|x: AbortHandle| x.abort());
-                    abortable = None;
+                    abortable.map(|x: AbortHandle| { info!("Shutting down mode {:?}", current_mode); x.abort(); });
                     info!("Starting {:?} mode", mode);
                     let abortable_handle = match mode {
                         AppMode::Starting => None,

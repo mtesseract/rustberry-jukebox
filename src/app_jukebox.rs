@@ -8,7 +8,6 @@ use crate::config::Config;
 use crate::effects::{DynInterpreter, Interpreter};
 use crate::input_controller::{button, Input, InputSource, InputSourceFactory};
 use crate::player::{PlaybackRequest, Player};
-use futures::future::AbortHandle;
 
 use crate::led::{self, Blinker};
 
@@ -36,20 +35,17 @@ impl App {
         Ok(app)
     }
 
-    pub async fn run(&self) -> Fallible<AbortHandle> {
+    pub async fn run(&self) -> Fallible<()> {
         let input_source_factory = self.input_source_factory.clone();
         let blinker = self.blinker.clone();
         let interpreter = self.interpreter.clone();
         let config = self.config.clone();
-        let (f, abortable_handle) = futures::future::abortable(async move {
-            info!("Consuming Input Source...");
-            let input_source = input_source_factory.consume().unwrap();
-            info!("About to run Jukebox logic");
-            Self::run_jukebox(config, input_source, blinker, interpreter).await;
-            info!("Jukebox loop terminated");
-        });
-        tokio::spawn(f);
-        Ok(abortable_handle)
+        info!("Consuming Input Source...");
+        let input_source = input_source_factory.consume().unwrap();
+        info!("About to run Jukebox logic");
+        Self::run_jukebox(config, input_source, blinker, interpreter).await;
+        info!("Jukebox loop terminated");
+        Ok(())
     }
 
     pub async fn run_jukebox(
