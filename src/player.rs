@@ -107,7 +107,7 @@ pub enum PlaybackResource {
 
 impl PlayerHandle {
     pub async fn playback(&self, req: PlaybackRequest) -> Fallible<()> {
-        let (tx, mut rx) = channel(1);
+        let (tx, mut rx) = channel(10);
         let mut xtx = self.tx.clone();
         xtx.send(PlayerCommand {
             result_transmitter: tx,
@@ -357,6 +357,7 @@ impl Player {
         };
 
         tokio::spawn(Self::player_loop(player));
+        eprintln!("spawned player loop");
         // tokio::time::delay_for(std::time::Duration::from_secs(0)).await; // FIXME: why is this necessary??
 
         let player_handle = PlayerHandle { tx };
@@ -410,36 +411,53 @@ pub mod err {
 #[cfg(test)]
 mod test {
     use failure::Fallible;
+    use futures::stream::StreamExt;
+    use slog::{self, o, Drain};
     use tokio::runtime::Runtime;
 
     use super::*;
     use crate::effects::{test::TestInterpreter, Effects};
 
-    #[tokio::test]
-    async fn player_plays_resource_on_playback_request() -> Fallible<()> {
-        let runtime = Runtime::new().unwrap();
-        let (interpreter, effects_rx) = TestInterpreter::new();
-        let interpreter =
-            Arc::new(Box::new(interpreter) as Box<dyn Interpreter + Send + Sync + 'static>);
-        let player_handle = Player::new(interpreter).await?;
-        let playback_requests = vec![
-            PlaybackRequest::Start(PlaybackResource::SpotifyUri(
-                "spotify:track:5j6ZZwA9BnxZi5Bk0Ng4jB".to_string(),
-            )),
-            PlaybackRequest::Stop,
-        ];
-        let effects_expected = vec![
-            Effects::PlaySpotify {
-                spotify_uri: "spotify:track:5j6ZZwA9BnxZi5Bk0Ng4jB".to_string(),
-            },
-            Effects::StopSpotify,
-        ];
-        for req in playback_requests.iter() {
-            player_handle.playback(req.clone()).await?;
-        }
-        let produced_effects: Vec<_> = effects_rx.iter().collect();
+    #[test]
+    fn player_plays_resource_on_playback_request() -> Fallible<()> {
+        let decorator = slog_term::TermDecorator::new().build();
+        let drain = slog_term::FullFormat::new(decorator).build().fuse();
+        let drain = slog_async::Async::new(drain).build().fuse();
+        let logger = slog::Logger::root(drain, o!());
+        let _guard = slog_scope::set_global_logger(logger);
+        slog_scope::scope(&slog_scope::logger().new(o!()), || {
+            let mut runtime = tokio::runtime::Builder::new()
+                .threaded_scheduler()
+                .enable_all()
+                .build()?;
+            runtime.block_on(async {
+                let (interpreter, effects_rx) = TestInterpreter::new();
+                let interpreter =
+                    Arc::new(Box::new(interpreter) as Box<dyn Interpreter + Send + Sync + 'static>);
+                let player_handle = Player::new(interpreter).await?;
+                let playback_requests = vec![
+                    PlaybackRequest::Start(PlaybackResource::SpotifyUri(
+                        "spotify:track:5j6ZZwA9BnxZi5Bk0Ng4jB".to_string(),
+                    )),
+                    PlaybackRequest::Stop,
+                ];
+                let effects_expected = vec![
+                    Effects::PlaySpotify {
+                        spotify_uri: "spotify:track:5j6ZZwA9BnxZi5Bk0Ng4jB".to_string(),
+                    },
+                    Effects::StopSpotify,
+                ];
+                for req in playback_requests.iter() {
+                    player_handle.playback(req.clone()).await?;
+                }
+                tokio::time::delay_for(std::time::Duration::from_millis(100)).await;
+                drop(player_handle);
 
-        assert_eq!(produced_effects, effects_expected);
-        Ok(())
+                let produced_effects: Vec<_> = effects_rx.collect().await;
+
+                assert_eq!(produced_effects, effects_expected);
+                Ok(())
+            })
+        })
     }
 }

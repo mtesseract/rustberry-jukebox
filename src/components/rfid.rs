@@ -11,6 +11,7 @@ pub struct RfidController {
     pub mfrc522: Arc<Mutex<MFRC522>>,
 }
 
+#[derive(Clone)]
 pub struct Tag {
     pub uid: Arc<Uid>,
     pub mfrc522: Arc<Mutex<MFRC522>>,

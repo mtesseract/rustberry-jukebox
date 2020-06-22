@@ -31,6 +31,7 @@ pub struct MetaApp {
 #[derive(Clone)]
 pub struct MetaAppHandle {
     control_tx: tokio::sync::mpsc::Sender<AppControl>,
+    initialized: Arc<RwLock<bool>>,
 }
 
 impl MetaAppHandle {
@@ -48,9 +49,7 @@ impl MetaAppHandle {
         control_tx.try_send(AppControl::SetMode(mode))?;
         Ok(())
     }
-}
 
-impl MetaApp {
     pub async fn is_ready(&self) -> bool {
         loop {
             let ready = {
@@ -64,10 +63,16 @@ impl MetaApp {
             }
         }
     }
+}
 
+impl MetaApp {
     pub fn handle(&self) -> MetaAppHandle {
         let control_tx = self.control_tx.clone();
-        let meta_app_handle = MetaAppHandle { control_tx };
+        let initialized = self.initialized.clone();
+        let meta_app_handle = MetaAppHandle {
+            control_tx,
+            initialized,
+        };
         meta_app_handle
     }
 
@@ -147,7 +152,7 @@ impl MetaApp {
     }
 
     async fn put_rfid_tag(
-        meta_app_handle: MetaAppHandle,
+        _meta_app_handle: MetaAppHandle,
         resource: PlaybackResource,
     ) -> Result<impl warp::Reply, Infallible> {
         let resource_deserialized =
@@ -171,7 +176,8 @@ impl MetaApp {
         Ok(StatusCode::OK)
     }
 
-    pub async fn run(mut self) -> Fallible<()> {
+    pub async fn run(mut self, initial_mode: Option<AppMode>) -> Fallible<()> {
+        let mut initial_mode = initial_mode;
         let routes = {
             let meta_app_handle = self.handle();
             let hello = warp::path!("hello" / String).map(|name| format!("Hello, {}!", name));
@@ -221,7 +227,14 @@ impl MetaApp {
         }
 
         loop {
-            let cmd = self.control_rx.recv().await.unwrap();
+            let cmd = {
+                if let Some(mode) = initial_mode {
+                    initial_mode = None;
+                    AppControl::SetMode(mode)
+                } else {
+                    self.control_rx.recv().await.unwrap()
+                }
+            };
             info!("MetaApp Ctrl Cmd: {:?}", &cmd);
             match cmd {
                 AppControl::RequestCurrentMode(os_tx) => {
@@ -234,29 +247,34 @@ impl MetaApp {
                 AppControl::SetMode(mode) => {
                     info!("Shutting down mode {:?}", current_mode);
                     abortable.map(|x: AbortHandle| x.abort());
+                    abortable = None;
                     info!("Starting {:?} mode", mode);
                     let abortable_handle = match mode {
                         AppMode::Starting => None,
                         AppMode::Jukebox => {
-                            let abortable_handle = self.jukebox_app.run().await?;
+                            let app = self.jukebox_app.clone();
+                            // let abortable_handle = self.jukebox_app.run().await?;
                             // let isf2 = self.input_factory.clone();
                             // let blinker = self.blinker.clone();
                             // let interpreter = self.interpreter.clone();
                             // let config = self.config.clone();
-                            // let (f, abortable_handle) = futures::future::abortable(async move {
-                            //     let input_source = isf2.consume().unwrap();
-                            //     Self::run_jukebox(config, input_source, blinker, interpreter).await
-                            // });
-                            // tokio::spawn(f);
+                            //
+                            let (f, abortable_handle) =
+                                futures::future::abortable(async move { app.run().await });
+                            tokio::spawn(f);
                             Some(abortable_handle)
                         }
-                        AppMode::Admin => None,
+                        AppMode::Admin => {
+                            None
+                        }
                     };
                     current_mode = mode;
                     abortable = abortable_handle;
                 }
             }
         }
+
+        info!("Exiting meta app run loop");
     }
 }
 

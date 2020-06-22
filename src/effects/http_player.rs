@@ -7,10 +7,8 @@ use std::env;
 use std::fmt::{self, Display};
 use std::io::BufReader;
 use std::sync::Arc;
-use std::thread::{Builder, JoinHandle};
 
 use async_trait::async_trait;
-use tokio::runtime::Runtime;
 use tokio::task::spawn_blocking;
 
 pub use err::*;
@@ -19,7 +17,6 @@ use crate::components::finite_stream::FiniteStream;
 use crate::player::{PauseState, PlaybackHandle};
 
 pub struct HttpPlayer {
-    _handle: Option<JoinHandle<()>>,
     basic_auth: Option<(String, String)>,
     http_client: Arc<reqwest::Client>,
 }
@@ -96,7 +93,6 @@ impl HttpPlayer {
             }
         };
         let player = HttpPlayer {
-            _handle: None,
             basic_auth,
             http_client,
         };
@@ -116,7 +112,6 @@ impl HttpPlayer {
         let url = url.clone().to_string();
         let http_client = self.http_client.clone();
         let basic_auth = self.basic_auth.clone();
-        // let (tx, rx) = crossbeam_channel::bounded(1);
         let sink = Arc::new(Sink::new(&device));
         // let _handle = Builder::new()
         //     .name("http-player".to_string())

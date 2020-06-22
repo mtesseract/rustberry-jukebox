@@ -56,9 +56,9 @@ pub trait Interpreter {
         res: PlaybackResource,
         pause_state: Option<PauseState>,
     ) -> Fallible<DynPlaybackHandle>;
-    fn led_on(&self) -> Fallible<()>;
-    fn led_off(&self) -> Fallible<()>;
-    fn generic_command(&self, cmd: String) -> Fallible<()>;
+    async fn led_on(&self) -> Fallible<()>;
+    async fn led_off(&self) -> Fallible<()>;
+    async fn generic_command(&self, cmd: String) -> Fallible<()>;
 }
 
 #[async_trait]
@@ -90,17 +90,17 @@ impl Interpreter for ProdInterpreter {
         }
     }
 
-    fn led_on(&self) -> Fallible<()> {
+    async fn led_on(&self) -> Fallible<()> {
         info!("Switching LED on");
         self.led_controller.switch_on(Led::Playback)
     }
 
-    fn led_off(&self) -> Fallible<()> {
+    async fn led_off(&self) -> Fallible<()> {
         info!("Switching LED off");
         self.led_controller.switch_off(Led::Playback)
     }
 
-    fn generic_command(&self, cmd: String) -> Fallible<()> {
+    async fn generic_command(&self, cmd: String) -> Fallible<()> {
         info!("Executing command '{}'", &cmd);
         let res = Command::new("/bin/sh").arg("-c").arg(&cmd).status();
         match res {
@@ -146,7 +146,7 @@ impl ProdInterpreter {
 pub mod test {
     use super::*;
     use async_trait::async_trait;
-    use crossbeam_channel::{self, Receiver, Sender};
+    use tokio::sync::mpsc::{channel, Receiver, Sender};
     use Effects::*;
 
     pub struct TestInterpreter {
@@ -155,17 +155,44 @@ pub mod test {
 
     impl TestInterpreter {
         pub fn new() -> (TestInterpreter, Receiver<Effects>) {
-            let (tx, rx) = crossbeam_channel::unbounded();
+            let (tx, rx) = channel(100);
             let interpreter = TestInterpreter { tx };
             (interpreter, rx)
         }
     }
 
-    struct DummyPlaybackHandle;
+    struct TestSpotifyPlaybackHandle {
+        tx: Sender<Effects>,
+    }
+    struct TestHttpPlaybackHandle {
+        tx: Sender<Effects>,
+    }
 
     #[async_trait]
-    impl PlaybackHandle for DummyPlaybackHandle {
+    impl PlaybackHandle for TestSpotifyPlaybackHandle {
         async fn stop(&self) -> Fallible<()> {
+            self.tx.clone().send(Effects::StopSpotify).await.unwrap();
+            Ok(())
+        }
+        async fn is_complete(&self) -> Fallible<bool> {
+            Ok(true)
+        }
+        async fn pause(&self) -> Fallible<()> {
+            self.tx.clone().send(Effects::StopSpotify).await.unwrap();
+            Ok(())
+        }
+        async fn cont(&self, _pause_state: PauseState) -> Fallible<()> {
+            Ok(())
+        }
+        async fn replay(&self) -> Fallible<()> {
+            Ok(())
+        }
+    }
+
+    #[async_trait]
+    impl PlaybackHandle for TestHttpPlaybackHandle {
+        async fn stop(&self) -> Fallible<()> {
+            self.tx.clone().send(Effects::StopHttp).await.unwrap();
             Ok(())
         }
         async fn is_complete(&self) -> Fallible<bool> {
@@ -196,27 +223,44 @@ pub mod test {
             use PlaybackResource::*;
 
             match res {
-                SpotifyUri(uri) => self.tx.send(PlaySpotify {
-                    spotify_uri: uri.to_string().clone(),
-                })?,
-                Http(url) => self.tx.send(PlayHttp {
-                    url: url.to_string().clone(),
-                })?,
+                SpotifyUri(uri) => {
+                    self.tx
+                        .clone()
+                        .send(PlaySpotify {
+                            spotify_uri: uri.to_string().clone(),
+                        })
+                        .await?;
+                    Ok(Box::new(TestSpotifyPlaybackHandle {
+                        tx: self.tx.clone(),
+                    }) as DynPlaybackHandle)
+                }
+                Http(url) => {
+                    self.tx
+                        .clone()
+                        .send(PlayHttp {
+                            url: url.to_string().clone(),
+                        })
+                        .await?;
+                    Ok(Box::new(TestHttpPlaybackHandle {
+                        tx: self.tx.clone(),
+                    }) as DynPlaybackHandle)
+                }
             }
-            Ok(Box::new(DummyPlaybackHandle) as DynPlaybackHandle)
         }
 
-        fn led_on(&self) -> Fallible<()> {
-            self.tx.send(LedOn).unwrap();
+        async fn led_on(&self) -> Fallible<()> {
+            self.tx.clone().send(LedOn).await.unwrap();
             Ok(())
         }
-        fn led_off(&self) -> Fallible<()> {
-            self.tx.send(LedOff).unwrap();
+        async fn led_off(&self) -> Fallible<()> {
+            self.tx.clone().send(LedOff).await.unwrap();
             Ok(())
         }
-        fn generic_command(&self, cmd: String) -> Fallible<()> {
+        async fn generic_command(&self, cmd: String) -> Fallible<()> {
             self.tx
+                .clone()
                 .send(GenericCommand(cmd.to_string().clone()))
+                .await
                 .unwrap();
             Ok(())
         }

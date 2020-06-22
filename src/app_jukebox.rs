@@ -43,7 +43,8 @@ impl App {
         let config = self.config.clone();
         let (f, abortable_handle) = futures::future::abortable(async move {
             let input_source = input_source_factory.consume().unwrap();
-            Self::run_jukebox(config, input_source, blinker, interpreter).await
+            Self::run_jukebox(config, input_source, blinker, interpreter).await;
+            info!("Jukebox loop terminated");
         });
         tokio::spawn(f);
         Ok(abortable_handle)
@@ -77,41 +78,55 @@ impl App {
                         "Error while consuming input source in Jukebox App: {:?}",
                         err
                     );
-                    return Err(err.into())
+                    return Err(err.into());
                 }
-                Ok(input) => input,
+                Ok(input) => {
+                    warn!("input = {:?}", input);
+                    input
+                }
             };
 
             blinker.stop();
             match el {
                 Input::Button(cmd) => match cmd {
                     button::Command::Shutdown => {
-                        if let Err(err) = interpreter.generic_command(
-                            config
-                                .shutdown_command
-                                .clone()
-                                .unwrap_or("sudo shutdown -h now".to_string()),
-                        ) {
+                        if let Err(err) = interpreter
+                            .generic_command(
+                                config
+                                    .shutdown_command
+                                    .clone()
+                                    .unwrap_or("sudo shutdown -h now".to_string()),
+                            )
+                            .await
+                        {
                             error!("Failed to execute shutdown command: {}", err);
+                        } else {
+                            return Ok(()); // For tests we need this to terminate.
                         }
                     }
                     button::Command::VolumeUp => {
-                        if let Err(err) = interpreter.generic_command(
-                            config
-                                .volume_up_command
-                                .clone()
-                                .unwrap_or("amixer -q -M set PCM 10%+".to_string()),
-                        ) {
+                        if let Err(err) = interpreter
+                            .generic_command(
+                                config
+                                    .volume_up_command
+                                    .clone()
+                                    .unwrap_or("amixer -q -M set PCM 10%+".to_string()),
+                            )
+                            .await
+                        {
                             error!("Failed to increase volume: {}", err);
                         }
                     }
                     button::Command::VolumeDown => {
-                        if let Err(err) = interpreter.generic_command(
-                            config
-                                .volume_down_command
-                                .clone()
-                                .unwrap_or("amixer -q -M set PCM 10%-".to_string()),
-                        ) {
+                        if let Err(err) = interpreter
+                            .generic_command(
+                                config
+                                    .volume_down_command
+                                    .clone()
+                                    .unwrap_or("amixer -q -M set PCM 10%-".to_string()),
+                            )
+                            .await
+                        {
                             error!("Failed to decrease volume: {}", err);
                         }
                     }

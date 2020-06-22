@@ -6,6 +6,7 @@ use slog::{self, o, Drain};
 use slog_async;
 use slog_scope::{error, info, warn};
 use slog_term;
+use tokio::stream::StreamExt;
 
 use futures_util::TryFutureExt;
 use rustberry::config::Config;
@@ -34,22 +35,20 @@ async fn create_mock_meta_app(config: Config) -> Fallible<MetaApp> {
     let isf = Box::new(mock::MockInputSourceFactory::new()?)
         as Box<dyn InputSourceFactory + Sync + Send + 'static>;
 
-    let (interpreter, interpreted_effects) = TestInterpreter::new();
+    let (interpreter, mut interpreted_effects) = TestInterpreter::new();
     let interpreter =
         Arc::new(Box::new(interpreter) as Box<dyn Interpreter + Sync + Send + 'static>);
 
     let blinker = Blinker::new(interpreter.clone())?;
 
-    let _handle = std::thread::Builder::new()
-        .name("mock-effect-interpreter".to_string())
-        .spawn(move || {
-            for eff in interpreted_effects.iter() {
-                info!("Mock interpreter received effect: {:?}", eff);
-            }
-        })?;
+    tokio::spawn(async move {
+        while let Some(eff) = interpreted_effects.next().await {
+            info!("Mock interpreter received effect: {:?}", eff);
+        }
+    });
 
     let application = MetaApp::new(config, interpreter, blinker, isf).await?;
-
+    eprintln!("mock app created");
     Ok(application)
 }
 
@@ -102,15 +101,17 @@ fn main_with_log() -> Fallible<()> {
         };
 
         {
-            application.is_ready().await;
-            let h = application.handle();
-            if let Err(err) = h.set_mode(AppMode::Jukebox).await {
-                error!("Failed to activate Jukebox mode: {}", err);
-            }
+            let handle = application.handle();
+            tokio::spawn(async move {
+                handle.is_ready().await;
+                if let Err(err) = handle.set_mode(AppMode::Jukebox).await {
+                    error!("Failed to activate Jukebox mode: {}", err);
+                }
+            });
         }
 
         application
-            .run()
+            .run(None)
             .map_err(|err| {
                 warn!("Meta App loop terminated, terminating application: {}", err);
                 err
@@ -127,29 +128,49 @@ mod test {
 
     use super::*;
 
-    #[tokio::test]
-    async fn jukebox_can_be_shut_down() -> Fallible<()> {
-        let (interpreter, effects_rx) = TestInterpreter::new();
-        let interpreter =
-            Arc::new(Box::new(interpreter) as Box<dyn Interpreter + Send + Sync + 'static>);
-        let config: Config = Config {
-            refresh_token: "token".to_string(),
-            client_id: "client".to_string(),
-            client_secret: "secret".to_string(),
-            device_name: "device".to_string(),
-            post_init_command: None,
-            shutdown_command: None,
-            volume_up_command: None,
-            volume_down_command: None,
-        };
-        let blinker = Blinker::new(interpreter.clone())?;
-        let inputs = vec![Input::Button(button::Command::Shutdown)];
-        let effects_expected = vec![Effects::GenericCommand("sudo shutdown -h now".to_string())];
-        let app = MetaApp::new(config, interpreter, blinker, Box::new(inputs)).await?;
-        tokio::spawn(app.run_jukebox());
-        let produced_effects: Vec<Effects> = effects_rx.iter().collect();
+    #[test]
+    fn jukebox_can_be_shut_down() -> Fallible<()> {
+        let decorator = slog_term::TermDecorator::new().build();
+        let drain = slog_term::FullFormat::new(decorator).build().fuse();
+        let drain = slog_async::Async::new(drain).build().fuse();
+        let logger = slog::Logger::root(drain, o!());
+        let _guard = slog_scope::set_global_logger(logger);
+        slog_scope::scope(&slog_scope::logger().new(o!()), || {
+            let mut runtime = tokio::runtime::Builder::new()
+                .threaded_scheduler()
+                .enable_all()
+                .build()?;
+            runtime.block_on(async {
+                let (interpreter, effects_rx) = TestInterpreter::new();
+                let interpreter =
+                    Arc::new(Box::new(interpreter) as Box<dyn Interpreter + Send + Sync + 'static>);
+                let config: Config = Config {
+                    refresh_token: "token".to_string(),
+                    client_id: "client".to_string(),
+                    client_secret: "secret".to_string(),
+                    device_name: "device".to_string(),
+                    post_init_command: None,
+                    shutdown_command: None,
+                    volume_up_command: None,
+                    volume_down_command: None,
+                };
+                let blinker = Blinker::new(interpreter.clone())?;
+                let inputs = vec![Input::Button(button::Command::Shutdown)];
+                let effects_expected =
+                    vec![Effects::GenericCommand("sudo shutdown -h now".to_string())];
+                let app = MetaApp::new(config, interpreter, blinker, Box::new(inputs)).await?;
+                let handle = app.handle();
 
-        assert_eq!(produced_effects, effects_expected);
-        Ok(())
+                let (f, abortable) = futures::future::abortable(app.run(Some(AppMode::Jukebox)));
+                tokio::spawn(f);
+                tokio::time::delay_for(std::time::Duration::from_secs(1)).await;
+                abortable.abort();
+
+                let produced_effects: Vec<Effects> = effects_rx.collect().await;
+
+                assert_eq!(produced_effects, effects_expected);
+                Ok(())
+            })
+        })
     }
 }

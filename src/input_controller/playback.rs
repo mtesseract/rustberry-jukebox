@@ -1,7 +1,7 @@
 use std::time::Duration;
 
-// use crossbeam_channel::{self, Receiver, Sender};
 use failure::Fallible;
+use futures::future::AbortHandle;
 use slog_scope::{error, info, warn};
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
@@ -18,25 +18,25 @@ mod test {
     }
 }
 
-use tokio::sync::oneshot;
-
 pub struct Handle {
     channel: Receiver<PlaybackRequest>,
-    _abort: oneshot::Sender<()>,
+    abortable_handle: AbortHandle,
+}
+
+impl Drop for Handle {
+    fn drop(&mut self) {
+        info!("Dropping Playback Input Handle, terminating Playback Input Controller");
+        self.abortable_handle.abort();
+    }
 }
 
 impl Handle {
-    pub fn channel(self) -> Receiver<PlaybackRequest> {
-        self.channel
-    }
-
-    // pub fn abort(self) {
-    //     if let Err(err) = self.abort.send(()) {
-    //         error!("Failed to terminate playback controller: {:?}", err);
-    //     } else {
-    //         info!("Terminated playback controller");
-    //     }
+    // pub fn channel(self) -> Receiver<PlaybackRequest> {
+    //     self.channel
     // }
+    pub async fn recv(&mut self) -> Option<PlaybackRequest> {
+        self.channel.recv().await
+    }
 }
 
 pub mod rfid {
@@ -52,49 +52,46 @@ pub mod rfid {
     impl PlaybackRequestTransmitterRfid {
         pub fn new() -> Fallible<Handle> {
             let (tx, rx) = channel(1);
-            let (os_tx, os_rx) = oneshot::channel();
             let picc = RfidController::new()?;
             let transmitter = Self { picc, tx };
-            std::thread::Builder::new()
-                .name("playback-transmitter".to_string())
-                .spawn(move || transmitter.run(os_rx).unwrap())?;
+            let (f, abortable_handle) =
+                futures::future::abortable(async move { transmitter.run().await.unwrap() });
+            tokio::spawn(f);
             Ok(Handle {
                 channel: rx,
-                _abort: os_tx,
+                abortable_handle,
             })
         }
 
-        fn run(mut self, mut os_rx: oneshot::Receiver<()>) -> Fallible<()> {
+        async fn run(self) -> Fallible<()> {
             let mut last_uid: Option<String> = None;
 
             loop {
-                if let Err(tokio::sync::oneshot::error::TryRecvError::Closed) = os_rx.try_recv() {
-                    info!("Terminating Playback Controller due to closed channel");
-                    return Ok(());
-                }
-
-                match self.picc.open_tag() {
+                let mut picc2 = self.picc.clone();
+                match tokio::task::spawn_blocking(move || picc2.open_tag()).await? {
                     Err(err) => {
                         // Do not change playback state in this case.
                         warn!("Failed to open RFID tag: {}", err);
-                        std::thread::sleep(std::time::Duration::from_millis(80));
+                        tokio::time::delay_for(std::time::Duration::from_millis(80)).await;
                     }
                     Ok(None) => {
                         if last_uid.is_some() {
                             info!("RFID Tag gone");
                             last_uid = None;
                             let mut tx = self.tx.clone();
-                            futures::executor::block_on(tx.send(PlaybackRequest::Stop));
-                            std::thread::sleep(std::time::Duration::from_millis(80));
+                            tx.send(PlaybackRequest::Stop).await.unwrap(); // FIXME
+                            tokio::time::delay_for(std::time::Duration::from_millis(80)).await;
                         }
                     }
                     Ok(Some(tag)) => {
                         let current_uid = format!("{:?}", tag.uid);
                         if last_uid != Some(current_uid.clone()) {
                             // new tag!
-                            if let Err(err) = Self::handle_tag(&tag, &mut self.tx.clone()) {
+                            if let Err(err) =
+                                Self::handle_tag(tag.clone(), &mut self.tx.clone()).await
+                            {
                                 error!("Failed to handle tag: {}", err);
-                                std::thread::sleep(Duration::from_millis(80));
+                                tokio::time::delay_for(Duration::from_millis(80)).await;
                                 continue;
                             }
                             last_uid = Some(current_uid);
@@ -102,12 +99,17 @@ pub mod rfid {
 
                         // wait for card status change
                         loop {
-                            let mut reader = tag.new_reader();
-                            if let Err(_err) = reader.tag_still_readable() {
-                                std::thread::sleep(std::time::Duration::from_millis(80));
+                            let tag2 = tag.clone();
+                            let mut reader =
+                                tokio::task::spawn_blocking(move || tag2.new_reader()).await?;
+                            if let Err(_err) =
+                                tokio::task::spawn_blocking(move || reader.tag_still_readable())
+                                    .await?
+                            {
+                                tokio::time::delay_for(std::time::Duration::from_millis(80)).await;
                                 break;
                             } else {
-                                std::thread::sleep(std::time::Duration::from_millis(80));
+                                tokio::time::delay_for(std::time::Duration::from_millis(80)).await;
                             }
                         }
                     }
@@ -115,9 +117,11 @@ pub mod rfid {
             }
         }
 
-        fn handle_tag(tag: &Tag, tx: &mut Sender<PlaybackRequest>) -> Fallible<()> {
-            let mut tag_reader = tag.new_reader();
-            let request_string = tag_reader.read_string()?;
+        async fn handle_tag(tag: Tag, tx: &mut Sender<PlaybackRequest>) -> Fallible<()> {
+            let mut tag_reader = tokio::task::spawn_blocking(move || tag.new_reader()).await?;
+            let request_string = tokio::task::spawn_blocking(move || tag_reader.read_string())
+                .await?
+                .unwrap();
             let request_deserialized: PlaybackResource = match serde_json::from_str(&request_string)
             {
                 Ok(deserialized) => deserialized,
@@ -129,7 +133,8 @@ pub mod rfid {
                     return Err(err.into());
                 }
             };
-            futures::executor::block_on(tx.send(PlaybackRequest::Start(request_deserialized)))?;
+            tx.send(PlaybackRequest::Start(request_deserialized))
+                .await?;
             Ok(())
         }
     }

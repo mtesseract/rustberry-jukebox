@@ -121,12 +121,12 @@ impl InputSourceFactory for ProdInputSourceFactory {
         };
 
         let playback_transmitter = if let Some(mk_playback) = &self.playback {
-            let playback_controller = mk_playback()?;
-            let mut rx = playback_controller.channel();
+            let mut playback_controller = mk_playback()?;
+            // let mut rx = playback_controller.channel();
             let tx = tx.clone();
             let (f, abortable) = futures::future::abortable(async move {
                 loop {
-                    let el = Input::Playback(rx.recv().await.unwrap());
+                    let el = Input::Playback(playback_controller.recv().await.unwrap());
                     if let Err(err) = tx.send(el.clone()) {
                         error!(
                             "Failed to transmit playback event {:?} in InputSource: {:?}",
