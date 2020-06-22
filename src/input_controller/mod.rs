@@ -58,8 +58,6 @@ pub struct ProdInputSource {
 
 impl Drop for ProdInputSource {
     fn drop(&mut self) {
-        eprintln!("Dropping InputSource");
-
         if let Some(buttons_transmitter) = &self.buttons_transmitter {
             info!("Aborting button input controller");
             buttons_transmitter.abort();

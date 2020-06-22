@@ -48,7 +48,6 @@ async fn create_mock_meta_app(config: Config) -> Fallible<MetaApp> {
     });
 
     let application = MetaApp::new(config, interpreter, blinker, isf).await?;
-    eprintln!("mock app created");
     Ok(application)
 }
 

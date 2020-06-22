@@ -357,7 +357,6 @@ impl Player {
         };
 
         tokio::spawn(Self::player_loop(player));
-        eprintln!("spawned player loop");
         // tokio::time::delay_for(std::time::Duration::from_secs(0)).await; // FIXME: why is this necessary??
 
         let player_handle = PlayerHandle { tx };
