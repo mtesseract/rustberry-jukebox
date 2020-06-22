@@ -78,24 +78,34 @@ impl InputSource for ProdInputSource {
 
 impl InputSourceFactory for ProdInputSourceFactory {
     fn consume(&self) -> Fallible<Box<dyn InputSource + Sync + Send + 'static>> {
+        info!("Setting up Prod Input Source from Factor");
         let (tx, _rx) = channel(2);
 
         let opt_buttons_handle =
-            if let Some(ref button_controller) = *(self.button_controller.read().unwrap()) {
+        {
+            let reader = self.button_controller.read().unwrap();
+            let opt_button_controller = (*reader).clone();
+            drop(reader);
+            if let Some(button_controller) = opt_button_controller {
                 // button controller exists already. reuse it.
-                Some(button_controller.clone())
+                Some(button_controller)
             } else if let Some(mk_buttons) = &self.buttons {
                 // have a closure for creating a button controller, execute it.
                 let button_controller = mk_buttons()?; // spawns thread.
                 {
+                    info!("about to acquire writer");
                     let mut writer = self.button_controller.write().unwrap();
+                    info!("acquired writer");
                     *writer = Some(button_controller.clone());
                 }
                 Some(button_controller)
             } else {
                 // no button controller configured
                 None
-            };
+            }
+        };
+
+        info!("Preparing button transmitter");
 
         let buttons_transmitter = if let Some(buttons_handle) = opt_buttons_handle {
             // spawn button controller transmitter.
@@ -117,10 +127,12 @@ impl InputSourceFactory for ProdInputSourceFactory {
         } else {
             None
         };
+        
+        info!("About to setup playback input");
 
         let playback_transmitter = if let Some(mk_playback) = &self.playback {
+            info!("Creating Playback Controller...");
             let mut playback_controller = mk_playback()?;
-            // let mut rx = playback_controller.channel();
             let tx = tx.clone();
             let (f, abortable) = futures::future::abortable(async move {
                 loop {
@@ -133,11 +145,14 @@ impl InputSourceFactory for ProdInputSourceFactory {
                     }
                 }
             });
+            info!("Spawning Playback Controller Task");
             tokio::spawn(f);
             Some(abortable)
         } else {
             None
         };
+
+        info!("Creating Production Input Source");
 
         let input_source = ProdInputSource {
             sender: tx,

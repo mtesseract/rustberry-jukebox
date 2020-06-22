@@ -66,11 +66,16 @@ async fn create_production_meta_app(config: Config) -> Fallible<MetaApp> {
         ]))))
         .await;
 
+    info!("Waiting for interpreter readiness...");
+
     interpreter.wait_until_ready().map_err(|err| {
         error!("Failed to wait for interpreter readiness: {}", err);
         err
     })?;
 
+    info!("Interpreter ready");
+
+    info!("Creating Input Source Factory");
     let mut isf = ProdInputSourceFactory::new()?;
     isf.with_buttons(Box::new(|| button::cdev_gpio::CdevGpio::new_from_env()));
     isf.with_playback(Box::new(|| {

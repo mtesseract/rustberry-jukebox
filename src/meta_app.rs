@@ -232,6 +232,7 @@ impl MetaApp {
                     initial_mode = None;
                     AppControl::SetMode(mode)
                 } else {
+                    info!("Waiting for new Meta App Control Command");
                     self.control_rx.recv().await.unwrap()
                 }
             };

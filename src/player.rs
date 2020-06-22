@@ -394,16 +394,6 @@ pub mod err {
         }
     }
 
-    // impl<T> From<crossbeam_channel::SendError<T>> for Error {
-    //     fn from(err: crossbeam_channel::SendError<T>) -> Self {
-    //         Error::SendError(err.to_string())
-    //     }
-    // }
-    // impl From<tokio::channel::mpsc::SendError> for Error {
-    //     fn from(err: tokio::channel::mpsc::SendError) -> Self {
-    //         Error::SendError(err.to_string())
-    //     }
-    // }
     impl std::error::Error for Error {}
 }
 
