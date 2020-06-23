@@ -43,8 +43,11 @@ impl App {
         info!("Consuming Input Source...");
         let input_source = input_source_factory.consume().unwrap();
         info!("About to run Jukebox logic");
-        Self::run_jukebox(config, input_source, blinker, interpreter).await;
-        info!("Jukebox loop terminated");
+        if let Err(err) = Self::run_jukebox(config, input_source, blinker, interpreter).await {
+            error!("Jukebox loop terminated with error: {}", err);
+        } else {
+            error!("Jukebox loop terminated unexpectedly");
+        }
         Ok(())
     }
 

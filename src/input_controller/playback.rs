@@ -79,7 +79,9 @@ pub mod rfid {
                             info!("RFID Tag gone");
                             last_uid = None;
                             let mut tx = self.tx.clone();
-                            tx.send(PlaybackRequest::Stop).await.unwrap(); // FIXME
+                            if let Err(err) = tx.send(PlaybackRequest::Stop).await {
+                                error!("Failed to transmit Playback Stop Request: {}", err);
+                            }
                             tokio::time::delay_for(std::time::Duration::from_millis(80)).await;
                         }
                     }
@@ -91,8 +93,8 @@ pub mod rfid {
                                 Self::handle_tag(tag.clone(), &mut self.tx.clone()).await
                             {
                                 error!("Failed to handle tag: {}", err);
-                                tokio::time::delay_for(Duration::from_millis(80)).await;
-                                continue;
+                                // tokio::time::delay_for(Duration::from_millis(80)).await;
+                                // continue;
                             }
                             last_uid = Some(current_uid);
                         }
@@ -120,8 +122,7 @@ pub mod rfid {
         async fn handle_tag(tag: Tag, tx: &mut Sender<PlaybackRequest>) -> Fallible<()> {
             let mut tag_reader = tokio::task::spawn_blocking(move || tag.new_reader()).await?;
             let request_string = tokio::task::spawn_blocking(move || tag_reader.read_string())
-                .await?
-                .unwrap();
+                .await??;
             let request_deserialized: PlaybackResource = match serde_json::from_str(&request_string)
             {
                 Ok(deserialized) => deserialized,

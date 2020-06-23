@@ -22,7 +22,6 @@ pub struct HttpPlayer {
 }
 
 pub struct HttpPlaybackHandle {
-    // tx: Sender<()>,
     sink: Arc<Sink>,
     basic_auth: Option<(String, String)>,
     url: String,
@@ -42,6 +41,13 @@ impl HttpPlaybackHandle {
         self.sink.append(source);
 
         Ok(())
+    }
+}
+
+impl Drop for HttpPlaybackHandle {
+    fn drop(&mut self) {
+        info!("Dropping HttpPlaybackHandle");
+        self.sink.stop();
     }
 }
 
