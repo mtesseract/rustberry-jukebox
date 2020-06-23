@@ -78,10 +78,7 @@ impl App {
                     );
                     return Err(err.into());
                 }
-                Ok(input) => {
-                    warn!("input = {:?}", input);
-                    input
-                }
+                Ok(input) => input,
             };
 
             blinker.stop();

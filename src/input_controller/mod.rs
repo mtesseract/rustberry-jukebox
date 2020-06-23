@@ -81,8 +81,7 @@ impl InputSourceFactory for ProdInputSourceFactory {
         info!("Setting up Prod Input Source from Factor");
         let (tx, _rx) = channel(2);
 
-        let opt_buttons_handle =
-        {
+        let opt_buttons_handle = {
             let reader = self.button_controller.read().unwrap();
             let opt_button_controller = (*reader).clone();
             drop(reader);
@@ -127,7 +126,7 @@ impl InputSourceFactory for ProdInputSourceFactory {
         } else {
             None
         };
-        
+
         info!("About to setup playback input");
 
         let playback_transmitter = if let Some(mk_playback) = &self.playback {

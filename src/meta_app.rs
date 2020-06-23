@@ -1,6 +1,8 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use serde::{Serialize, Deserialize};
+
 use async_std::sync::RwLock;
 
 use failure::Fallible;
@@ -246,7 +248,10 @@ impl MetaApp {
                 }
 
                 AppControl::SetMode(mode) => {
-                    abortable.map(|x: AbortHandle| { info!("Shutting down mode {:?}", current_mode); x.abort(); });
+                    abortable.map(|x: AbortHandle| {
+                        info!("Shutting down mode {:?}", current_mode);
+                        x.abort();
+                    });
                     info!("Starting {:?} mode", mode);
                     let abortable_handle = match mode {
                         AppMode::Starting => None,
@@ -263,9 +268,7 @@ impl MetaApp {
                             tokio::spawn(f);
                             Some(abortable_handle)
                         }
-                        AppMode::Admin => {
-                            None
-                        }
+                        AppMode::Admin => None,
                     };
                     current_mode = mode;
                     abortable = abortable_handle;
@@ -277,7 +280,7 @@ impl MetaApp {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AppMode {
     Starting,
     Jukebox,

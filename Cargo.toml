@@ -15,7 +15,6 @@ warp = "0.2.2"
 nix = "0.17"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-crossbeam-channel = "0.4"
 futures = "0.3.5"
 futures-util = "0.3.5"
 async-std = "1.6.1"
@@ -42,6 +41,10 @@ sysfs_gpio = "0.5"
 rmp = "^0.8"
 bytes = "0.5.4"
 async-trait = "0.1.30"
+thiserror = "1.0"
+anyhow = "1.0.31"
+fehler = "1.0.0"
+clap = "2.33.1"
 
 [target.'cfg(target_arch = "arm")'.dependencies]
 blinkt = { version = "0.5.0" }
