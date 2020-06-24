@@ -91,6 +91,7 @@ impl Drop for PlayerHandle {
 #[derive(Clone)]
 pub struct PlayerHandle {
     tx: Sender<PlayerCommand>,
+    guard: Arc<PlayerGuard>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -356,12 +357,27 @@ impl Player {
             rx,
         };
 
-        tokio::spawn(Self::player_loop(player));
+        let (f, abort_handle) = futures::future::abortable(Self::player_loop(player));
+        tokio::spawn(f);
         // tokio::time::delay_for(std::time::Duration::from_secs(0)).await; // FIXME: why is this necessary??
 
-        let player_handle = PlayerHandle { tx };
+        let guard = Arc::new(PlayerGuard { abort_handle });
+        let player_handle = PlayerHandle { tx, guard };
 
         Ok(player_handle)
+    }
+}
+
+use futures::future::AbortHandle;
+
+struct PlayerGuard {
+    abort_handle: AbortHandle,
+}
+
+impl Drop for PlayerGuard {
+    fn drop(&mut self) {
+        info!("Dropping PlayerGuard, terminating Player task");
+        self.abort_handle.abort();
     }
 }
 
