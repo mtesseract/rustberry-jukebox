@@ -71,7 +71,7 @@ enum PlayerState {
     },
 }
 pub struct Player {
-    interpreter: DynInterpreter,
+    interpreter: Arc<DynInterpreter>,
     state: PlayerState,
     rx: Receiver<PlayerCommand>,
 }

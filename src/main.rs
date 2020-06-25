@@ -10,7 +10,7 @@ use tokio::stream::StreamExt;
 
 use futures_util::TryFutureExt;
 use rustberry::config::Config;
-use rustberry::effects::{test::TestInterpreter, Interpreter, ProdInterpreter};
+use rustberry::effects::{test::{TestInterpreterFactory,  TestInterpreter}, DynInterpreter, DynInterpreterFactory, Interpreter, ProdInterpreter, ProdInterpreterFactory};
 use rustberry::input_controller::{
     button, mock, playback, InputSourceFactory, ProdInputSourceFactory,
 };
@@ -35,11 +35,11 @@ async fn create_mock_meta_app(config: Config) -> Fallible<MetaApp> {
     let isf = Box::new(mock::MockInputSourceFactory::new()?)
         as Box<dyn InputSourceFactory + Sync + Send + 'static>;
 
-    let (interpreter, mut interpreted_effects) = TestInterpreter::new();
-    let interpreter =
-        Arc::new(Box::new(interpreter) as Box<dyn Interpreter + Sync + Send + 'static>);
+    let (interpreter_factory, mut interpreted_effects) = TestInterpreterFactory::new();
+    let interpreter_factory =
+        Box::new(interpreter_factory) as DynInterpreterFactory;
 
-    let blinker = Blinker::new(interpreter.clone())?;
+    // let blinker = Blinker::new(interpreter.clone())?;
 
     tokio::spawn(async move {
         while let Some(eff) = interpreted_effects.next().await {
@@ -47,33 +47,16 @@ async fn create_mock_meta_app(config: Config) -> Fallible<MetaApp> {
         }
     });
 
-    let application = MetaApp::new(config, interpreter, blinker, isf).await?;
+    let application = MetaApp::new(config, interpreter_factory, isf).await?;
     Ok(application)
 }
 
 async fn create_production_meta_app(config: Config) -> Fallible<MetaApp> {
     info!("Creating Production Application");
     // Create Effects Channel and Interpreter.
-    let interpreter = ProdInterpreter::new(&config)?;
-    let interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>> =
-        Arc::new(Box::new(interpreter));
-
-    let blinker = Blinker::new(interpreter.clone())?;
-    blinker
-        .run_async(led::Cmd::Loop(Box::new(led::Cmd::Many(vec![
-            led::Cmd::On(Duration::from_millis(100)),
-            led::Cmd::Off(Duration::from_millis(100)),
-        ]))))
-        .await;
-
-    info!("Waiting for interpreter readiness...");
-
-    interpreter.wait_until_ready().map_err(|err| {
-        error!("Failed to wait for interpreter readiness: {}", err);
-        err
-    })?;
-
-    info!("Interpreter ready");
+    let interpreter_factory = ProdInterpreterFactory::new(&config);
+    let interpreter_factory =
+        Box::new(interpreter_factory) as DynInterpreterFactory;
 
     info!("Creating Input Source Factory");
     let mut isf = ProdInputSourceFactory::new()?;
@@ -82,7 +65,7 @@ async fn create_production_meta_app(config: Config) -> Fallible<MetaApp> {
         playback::rfid::PlaybackRequestTransmitterRfid::new()
     }));
 
-    Ok(MetaApp::new(config, interpreter, blinker, Box::new(isf)).await?)
+    Ok(MetaApp::new(config, interpreter_factory, Box::new(isf)).await?)
 }
 
 fn main_with_log() -> Fallible<()> {

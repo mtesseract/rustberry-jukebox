@@ -9,8 +9,8 @@ use failure::Fallible;
 use slog_scope::info;
 
 use crate::config::Config;
-use crate::effects::Interpreter;
-use crate::input_controller::InputSourceFactory;
+use crate::effects::{Interpreter, InterpreterFactory, DynInterpreter, DynInterpreterFactory};
+use crate::input_controller::{DynInputSourceFactory, InputSourceFactory};
 use crate::player::{PlaybackRequest, PlaybackResource};
 use futures::future::AbortHandle;
 
@@ -26,8 +26,10 @@ use warp::Filter;
 pub struct MetaApp {
     control_rx: tokio::sync::mpsc::Receiver<AppControl>,
     control_tx: tokio::sync::mpsc::Sender<AppControl>,
-    jukebox_app: App,
     initialized: Arc<RwLock<bool>>,
+    config: Config,
+    input_source_factory: DynInputSourceFactory,
+    interpreter_factory: DynInterpreterFactory,
 }
 
 #[derive(Clone)]
@@ -80,25 +82,16 @@ impl MetaApp {
 
     pub async fn new(
         config: Config,
-        interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>>,
-        blinker: Blinker,
-        input_factory: Box<dyn InputSourceFactory + Sync + Send + 'static>,
+        interpreter_factory: DynInterpreterFactory,
+        input_source_factory: Box<dyn InputSourceFactory + Sync + Send + 'static>,
     ) -> Fallible<Self> {
         let (control_tx, control_rx) = tokio::sync::mpsc::channel(1);
-        let input_source_factory = Arc::new(input_factory);
-
-        let jukebox_app = App::new(
-            config.clone(),
-            interpreter.clone(),
-            blinker.clone(),
-            input_source_factory,
-        )
-        .unwrap();
-
         let meta_app = MetaApp {
+            input_source_factory,
+            interpreter_factory,
+            config,
             control_rx,
             control_tx,
-            jukebox_app,
             initialized: Arc::new(RwLock::new(false)),
         };
         Ok(meta_app)
@@ -256,7 +249,10 @@ impl MetaApp {
                     let abortable_handle = match mode {
                         AppMode::Starting => None,
                         AppMode::Jukebox => {
-                            let app = self.jukebox_app.clone();
+                            let config = self.config.clone();
+                            // let interpreter_factory = self.interpreter_factory.clone();
+                            // let input_source_factory = self.input_source_factory.clone();
+                            let app = App::new(config, &self.interpreter_factory, &self.input_source_factory).unwrap();
                             // let abortable_handle = self.jukebox_app.run().await?;
                             // let isf2 = self.input_factory.clone();
                             // let blinker = self.blinker.clone();

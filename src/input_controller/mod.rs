@@ -20,6 +20,9 @@ pub trait InputSourceFactory {
     fn consume(&self) -> Fallible<Box<dyn InputSource + Sync + Send + 'static>>;
 }
 
+pub type DynInputSourceFactory = Box<dyn InputSourceFactory + Sync + Send + 'static>;
+
+
 pub mod test {
     use super::*;
 
@@ -43,6 +46,9 @@ pub mod test {
 pub trait InputSource {
     fn receiver(&self) -> Receiver<Input>;
 }
+
+pub type DynInputSource = Box<dyn InputSource + Sync + Send + 'static>;
+
 
 pub struct ProdInputSourceFactory {
     buttons: Option<Box<dyn Sync + Send + Fn() -> Fallible<button::Handle>>>, // This spawn a separate thread implementing the blocking event retrieval.

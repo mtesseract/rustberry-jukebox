@@ -5,45 +5,57 @@ use failure::Fallible;
 use slog_scope::{error, info, warn};
 
 use crate::config::Config;
-use crate::effects::{DynInterpreter, Interpreter};
-use crate::input_controller::{button, Input, InputSource, InputSourceFactory};
+use crate::effects::{DynInterpreter, DynInterpreterFactory, InterpreterFactory, Interpreter};
+use crate::input_controller::{button, Input, InputSource, InputSourceFactory, DynInputSourceFactory};
 use crate::player::{PlaybackRequest, Player};
 
 use crate::led::{self, Blinker};
 
-#[derive(Clone)]
 pub struct App {
     config: Config,
-    interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>>,
-    input_source_factory: Arc<Box<dyn InputSourceFactory + Sync + Send + 'static>>,
-    blinker: Blinker,
+    interpreter: DynInterpreter,
+    input_source: Box<dyn InputSource + Sync + Send + 'static>,
 }
 
 impl App {
     pub fn new(
         config: Config,
-        interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>>,
-        blinker: Blinker,
-        input_source_factory: Arc<Box<dyn InputSourceFactory + Sync + Send + 'static>>,
+        interpreter_factory: &DynInterpreterFactory,
+        input_source_factory: &DynInputSourceFactory,
     ) -> Fallible<Self> {
+        let interpreter = interpreter_factory.run()?;
+        let input_source = input_source_factory.consume()?;
+
         let app = Self {
             config,
             interpreter,
-            input_source_factory,
-            blinker,
+            input_source,
         };
         Ok(app)
     }
 
-    pub async fn run(&self) -> Fallible<()> {
-        let input_source_factory = self.input_source_factory.clone();
-        let blinker = self.blinker.clone();
-        let interpreter = self.interpreter.clone();
-        let config = self.config.clone();
-        info!("Consuming Input Source...");
-        let input_source = input_source_factory.consume().unwrap();
+    pub async fn run(self) -> Fallible<()> {
+        let interpreter = Arc::new(self.interpreter);
+
+        let blinker = Blinker::new(interpreter.clone())?;
+        blinker
+            .run_async(led::Cmd::Loop(Box::new(led::Cmd::Many(vec![
+                led::Cmd::On(Duration::from_millis(100)),
+                led::Cmd::Off(Duration::from_millis(100)),
+            ]))))
+            .await;
+
+        info!("Waiting for interpreter readiness...");
+
+        interpreter.wait_until_ready().map_err(|err| {
+            error!("Failed to wait for interpreter readiness: {}", err);
+            err
+        })?;
+
+        info!("Interpreter for Jukebox ready");
+
         info!("About to run Jukebox logic");
-        if let Err(err) = Self::run_jukebox(config, input_source, blinker, interpreter).await {
+        if let Err(err) = Self::run_jukebox(self.config, self.input_source, blinker, interpreter).await {
             error!("Jukebox loop terminated with error: {}", err);
         } else {
             error!("Jukebox loop terminated unexpectedly");
@@ -55,7 +67,7 @@ impl App {
         config: Config,
         input_source: Box<dyn InputSource + Sync + Send + 'static>,
         blinker: Blinker,
-        interpreter: DynInterpreter,
+        interpreter: Arc<DynInterpreter>,
     ) -> Fallible<()> {
         info!("Running Jukebox App");
         let player = Player::new(interpreter.clone()).await?;

@@ -6,7 +6,6 @@ use url::Url;
 
 use clap::{App, Arg};
 
-use rustberry::config::Config;
 use rustberry::meta_app::AppMode;
 use rustberry::player::PlaybackResource;
 

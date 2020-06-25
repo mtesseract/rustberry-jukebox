@@ -28,7 +28,8 @@ use std::process::Command;
 
 use crate::player::{DynPlaybackHandle, PauseState, PlaybackHandle, PlaybackResource};
 
-pub type DynInterpreter = Arc<Box<dyn Interpreter + Sync + Send + 'static>>;
+pub type DynInterpreter = Box<dyn Interpreter + Sync + Send + 'static>;
+pub type DynInterpreterFactory = Box<dyn InterpreterFactory + Sync + Send + 'static>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Effects {
@@ -48,6 +49,20 @@ pub struct ProdInterpreter {
     _config: Config,
 }
 
+pub struct ProdInterpreterFactory {
+    _config: Config,
+}
+
+impl ProdInterpreterFactory {
+    pub fn new(config: &Config) -> Self { ProdInterpreterFactory { _config: config.clone() }}
+}
+
+impl InterpreterFactory for ProdInterpreterFactory {
+    fn run(&self) -> Fallible<DynInterpreter> {
+        let interpreter = ProdInterpreter::new(&self._config)?;
+        Ok(Box::new(interpreter))
+    }
+}
 #[async_trait]
 pub trait Interpreter {
     fn wait_until_ready(&self) -> Fallible<()>;
@@ -59,6 +74,11 @@ pub trait Interpreter {
     async fn led_on(&self) -> Fallible<()>;
     async fn led_off(&self) -> Fallible<()>;
     async fn generic_command(&self, cmd: String) -> Fallible<()>;
+}
+
+
+pub trait InterpreterFactory {
+    fn run(&self) -> Fallible<Box<dyn Interpreter + Sync + Send + 'static>>;
 }
 
 #[async_trait]
@@ -153,11 +173,29 @@ pub mod test {
         tx: Sender<Effects>,
     }
 
+    pub struct TestInterpreterFactory {
+        tx: Sender<Effects>,
+    }
+
     impl TestInterpreter {
         pub fn new() -> (TestInterpreter, Receiver<Effects>) {
             let (tx, rx) = channel(100);
             let interpreter = TestInterpreter { tx };
             (interpreter, rx)
+        }
+    }
+
+    impl TestInterpreterFactory {
+        pub fn new() -> (TestInterpreterFactory, Receiver<Effects>) {
+            let (tx, rx) = channel(100);
+            let interpreter_factory = TestInterpreterFactory { tx };
+            (interpreter_factory, rx)
+        }
+    }
+
+    impl InterpreterFactory for TestInterpreterFactory {
+        fn run(&self) -> Fallible<Box<dyn Interpreter + Sync + Send + 'static>> {
+            Ok(Box::new(TestInterpreter { tx: self.tx.clone() }))
         }
     }
 
