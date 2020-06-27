@@ -1,8 +1,8 @@
 use std::sync::{Arc, RwLock};
 use std::thread;
-use std::time::Duration;
 
 use slog_scope::{error, info};
+use async_trait::async_trait;
 
 use crate::components::access_token_provider::AccessTokenProvider;
 
@@ -12,21 +12,9 @@ pub enum SupervisorCommands {
     Terminate,
 }
 
+#[async_trait]
 pub trait SpotifyConnector {
-    fn wait_until_ready(&self) -> Result<(), util::JukeboxError> {
-        let n_attempts = 30;
-        for _idx in 0..n_attempts {
-            if self.device_id().is_some() {
-                info!("Initial Device ID retrieved");
-                return Ok(());
-            }
-            thread::sleep(Duration::from_millis(500));
-        }
-        error!("Failed to wait for initial Device ID");
-        Err(util::JukeboxError::DeviceNotFound {
-            device_name: "FIXME".to_string(),
-        })
-    }
+    async fn wait_until_ready(&self) -> Result<(), util::JukeboxError>;
     fn device_id(&self) -> Option<String>;
     fn request_restart(&self);
 }
@@ -40,7 +28,8 @@ pub mod external_command {
     use slog_scope::{error, info, warn};
     use std::env;
     use std::process::{Child, Command};
-    use std::thread::{self, JoinHandle};
+    use tokio::task;
+    use futures::future::{abortable,AbortHandle};
     use std::time::Duration;
 
     pub struct ExternalCommand {
@@ -48,9 +37,20 @@ pub mod external_command {
         // status: Receiver<T>,
         child: Arc<RwLock<Child>>,
         // command: Sender<SupervisorCommands>,
-        _supervisor: JoinHandle<()>,
+        // _supervisor: JoinHandle<()>,
+        abort_handle_device_id_watcher: AbortHandle,
+        abort_handle_supervisor: AbortHandle,
     }
 
+    impl Drop for ExternalCommand {
+        fn drop(&mut self) {
+            info!("Dropping ExternalCommand (Device ID Watcher and Supervisor)");
+            self.abort_handle_device_id_watcher.abort();
+            self.abort_handle_supervisor.abort();
+        }
+    }
+
+    #[derive(Clone)]
     struct SupervisedCommand {
         pub cmd: String,
         pub device_name: String,
@@ -67,7 +67,7 @@ pub mod external_command {
         fn drop(&mut self) {
             if let Err(err) = self.child.write().unwrap().kill() {
                 error!(
-                    "Failed to terminate supervised librespot while dropiing SupervisedCommand: {}",
+                    "Failed to terminate supervised librespot while dropping SupervisedCommand: {}",
                     err
                 );
             }
@@ -116,27 +116,17 @@ pub mod external_command {
             Ok(())
         }
 
-        fn spawn_supervisor(self) -> JoinHandle<()> {
-            info!("Spawning supervisor for Spotify Connect command");
-            thread::Builder::new()
-                .name("spotify-supervisor".to_string())
-                .spawn(move || Self::supervisor(self))
-                .unwrap()
+        async fn run_supervisor(supervised_cmd: SupervisedCommand) -> () {
+            Self::supervisor(supervised_cmd)
         }
 
-        fn spawn_device_id_watcher(&self) -> JoinHandle<()> {
-            info!("Spawning device ID watcher for Spotify Connect command");
-            let access_token_provider = Arc::new(self.access_token_provider.clone());
-            let device_name = self.device_name.clone();
-            let device_id = Arc::clone(&self.device_id);
-            let child = Arc::clone(&self.child);
-            thread::Builder::new()
-                .name("spotify-device-watcher".to_string())
-                .spawn(move || {
-                    thread::sleep(Duration::from_secs(2));
-                    Self::device_id_watcher(access_token_provider, device_name, device_id, child)
-                })
-                .unwrap()
+        async fn run_device_id_watcher(supervised_cmd: SupervisedCommand) -> () {
+            let access_token_provider = Arc::new(supervised_cmd.access_token_provider.clone());
+            let device_name = supervised_cmd.device_name.clone();
+            let device_id = Arc::clone(&supervised_cmd.device_id);
+            let child = Arc::clone(&supervised_cmd.child);
+            tokio::time::delay_for(std::time::Duration::from_secs(2)).await;
+            Self::device_id_watcher(access_token_provider, device_name, device_id, child)
         }
 
         fn device_id_watcher(
@@ -174,7 +164,7 @@ pub mod external_command {
             }
         }
 
-        fn supervisor(mut self) {
+        fn supervisor(mut self) -> () {
             loop {
                 // info!("supervisor tick");
 
@@ -245,7 +235,7 @@ pub mod external_command {
     }
 
     impl ExternalCommand {
-        pub fn new_from_env(
+        pub async fn new_from_env(
             access_token_provider: &AccessTokenProvider,
             device_name: String,
         ) -> Fallible<Self> {
@@ -263,9 +253,9 @@ pub mod external_command {
                 password,
                 cache_directory,
                 librespot_cmd,
-            )
+            ).await
         }
-        pub fn new(
+        pub async fn new(
             access_token_provider: &AccessTokenProvider,
             cmd: String,
             device_name: String,
@@ -285,17 +275,30 @@ pub mod external_command {
                 Arc::clone(&device_id),
                 access_token_provider,
             )?;
-            let _ = supervised_cmd.spawn_device_id_watcher();
-            let supervisor = supervised_cmd.spawn_supervisor();
+            let abort_handle_device_id_watcher = {
+                info!("Spawning Device ID Watcher for Spotify Connect command");
+                let supervised_cmd = supervised_cmd.clone();
+                let (f, abort_handle) = abortable(SupervisedCommand::run_device_id_watcher(supervised_cmd));
+                task::spawn(f);
+                abort_handle
+            };
+            let abort_handle_supervisor = {
+                info!("Spawning Supervisor for Spotify Connect command");
+                let (f, abort_handle) = abortable(SupervisedCommand::run_supervisor(supervised_cmd));
+                task::spawn(f);
+                abort_handle
+            };
 
             Ok(ExternalCommand {
                 device_id,
                 child: rw_child,
-                _supervisor: supervisor,
+                abort_handle_device_id_watcher,
+                abort_handle_supervisor,
             })
         }
     }
 
+    #[async_trait]
     impl SpotifyConnector for ExternalCommand {
         fn request_restart(&self) {
             if let Err(err) = self.child.write().unwrap().kill() {
@@ -308,5 +311,19 @@ pub mod external_command {
             let reader = self.device_id.read().unwrap();
             (*reader).clone()
         }
-    }
+        async fn wait_until_ready(&self) -> Result<(), util::JukeboxError> {
+            let n_attempts = 30;
+            for _idx in 0..n_attempts {
+                if self.device_id().is_some() {
+                    info!("Initial Device ID retrieved");
+                    return Ok(());
+                }
+                tokio::time::delay_for(Duration::from_millis(500)).await;
+            }
+            error!("Failed to wait for initial Device ID");
+            Err(util::JukeboxError::DeviceNotFound {
+                device_name: "FIXME".to_string(),
+            })
+        }
+        }
 }

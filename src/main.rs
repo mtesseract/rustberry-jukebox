@@ -1,6 +1,3 @@
-use std::sync::Arc;
-use std::time::Duration;
-
 use failure::Fallible;
 use slog::{self, o, Drain};
 use slog_async;

@@ -57,15 +57,16 @@ impl ProdInterpreterFactory {
     pub fn new(config: &Config) -> Self { ProdInterpreterFactory { _config: config.clone() }}
 }
 
+#[async_trait]
 impl InterpreterFactory for ProdInterpreterFactory {
-    fn run(&self) -> Fallible<DynInterpreter> {
-        let interpreter = ProdInterpreter::new(&self._config)?;
+    async fn run(&self) -> Fallible<DynInterpreter> {
+        let interpreter = ProdInterpreter::new(&self._config).await?;
         Ok(Box::new(interpreter))
     }
 }
 #[async_trait]
 pub trait Interpreter {
-    fn wait_until_ready(&self) -> Fallible<()>;
+    async fn wait_until_ready(&self) -> Fallible<()>;
     async fn play(
         &self,
         res: PlaybackResource,
@@ -77,14 +78,15 @@ pub trait Interpreter {
 }
 
 
+#[async_trait]
 pub trait InterpreterFactory {
-    fn run(&self) -> Fallible<Box<dyn Interpreter + Sync + Send + 'static>>;
+    async fn run(&self) -> Fallible<Box<dyn Interpreter + Sync + Send + 'static>>;
 }
 
 #[async_trait]
 impl Interpreter for ProdInterpreter {
-    fn wait_until_ready(&self) -> Fallible<()> {
-        self.spotify_player.wait_until_ready()?;
+    async fn wait_until_ready(&self) -> Fallible<()> {
+        self.spotify_player.wait_until_ready().await?;
         Ok(())
     }
 
@@ -148,11 +150,11 @@ impl Interpreter for ProdInterpreter {
 }
 
 impl ProdInterpreter {
-    pub fn new(config: &Config) -> Fallible<Self> {
+    pub async fn new(config: &Config) -> Fallible<Self> {
         let config = config.clone();
         let led_controller = Arc::new(Box::new(led::gpio_cdev::GpioCdev::new()?)
             as Box<dyn LedController + 'static + Send + Sync>);
-        let spotify_player = SpotifyPlayer::new(&config)?;
+        let spotify_player = SpotifyPlayer::new(&config).await?;
         let http_player = HttpPlayer::new()?;
         Ok(ProdInterpreter {
             spotify_player,
@@ -193,8 +195,9 @@ pub mod test {
         }
     }
 
+    #[async_trait]
     impl InterpreterFactory for TestInterpreterFactory {
-        fn run(&self) -> Fallible<Box<dyn Interpreter + Sync + Send + 'static>> {
+        async fn run(&self) -> Fallible<Box<dyn Interpreter + Sync + Send + 'static>> {
             Ok(Box::new(TestInterpreter { tx: self.tx.clone() }))
         }
     }
@@ -249,7 +252,7 @@ pub mod test {
 
     #[async_trait]
     impl Interpreter for TestInterpreter {
-        fn wait_until_ready(&self) -> Fallible<()> {
+        async fn wait_until_ready(&self) -> Fallible<()> {
             Ok(())
         }
 

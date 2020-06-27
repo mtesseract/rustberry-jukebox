@@ -90,7 +90,7 @@ pub mod cdev_gpio {
             }
             let chip = Chip::new("/dev/gpiochip0")
                 .map_err(|err| Error::IO(format!("Failed to open Chip: {:?}", err)))?;
-            let (tx, _rx) = channel(1);
+            let (tx, _rx) = channel(128);
             let mut gpio_cdev = Self {
                 map,
                 chip: Arc::new(RwLock::new(chip)),
@@ -142,9 +142,13 @@ pub mod cdev_gpio {
                     }
                 }
 
-                let tx = self.tx.clone();
-                if let Err(err) = tx.send(cmd) {
-                    error!("Failed to transmit GPIO event: {:?}", err);
+                if self.tx.receiver_count() > 0 {
+                    let tx = self.tx.clone();
+                    if let Err(err) = tx.send(cmd) {
+                        error!("Failed to transmit GPIO event: {:?}", err);
+                    }
+                } else {
+                    warn!("Skpping transmitting of GPIO event since no receiver connected");
                 }
             }
             Ok(())

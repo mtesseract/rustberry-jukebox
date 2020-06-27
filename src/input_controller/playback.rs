@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use failure::Fallible;
 use futures::future::AbortHandle;
 use slog_scope::{error, info, warn};
@@ -51,7 +49,7 @@ pub mod rfid {
 
     impl PlaybackRequestTransmitterRfid {
         pub fn new() -> Fallible<Handle> {
-            let (tx, rx) = channel(1);
+            let (tx, rx) = channel(128);
             let picc = RfidController::new()?;
             let transmitter = Self { picc, tx };
             let (f, abortable_handle) =

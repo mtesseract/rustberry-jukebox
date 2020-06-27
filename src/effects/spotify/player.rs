@@ -198,7 +198,7 @@ impl SpotifyPlaybackHandle {
 }
 
 impl SpotifyPlayer {
-    pub fn new(config: &Config) -> Fallible<Self> {
+    pub async fn new(config: &Config) -> Fallible<Self> {
         let http_client = Arc::new(Client::new());
         // Create Access Token Provider
         let access_token_provider = Arc::new(access_token_provider::AccessTokenProvider::new(
@@ -210,8 +210,7 @@ impl SpotifyPlayer {
             connect::external_command::ExternalCommand::new_from_env(
                 &access_token_provider.clone(),
                 config.device_name.clone(),
-            )
-            .unwrap(),
+            ).await?
         )
             as Box<dyn SpotifyConnector + 'static + Sync + Send>);
 
@@ -225,13 +224,13 @@ impl SpotifyPlayer {
         })
     }
 
-    pub fn wait_until_ready(&self) -> Result<(), Error> {
+    pub async fn wait_until_ready(&self) -> Result<(), Error> {
         self.spotify_connector
-            .wait_until_ready()
+            .wait_until_ready().await
             .map_err(|_err| Error::NoSpotifyDevice)?;
         self.access_token_provider
             .wait_for_token()
-            .map_err(|_err| Error::NoToken)?;
+            .map_err(|_err| Error::NoToken)?; // fixme async missing
         Ok(())
     }
 

@@ -42,12 +42,12 @@ impl Blinker {
             match cmd {
                 Cmd::On(duration) => {
                     info!("Blinker switches on");
-                    interpreter.led_on().await;
+                    let _ = interpreter.led_on().await;
                     tokio::time::delay_for(duration).await;
                 }
                 Cmd::Off(duration) => {
                     info!("Blinker switches off");
-                    interpreter.led_off().await;
+                    let _ = interpreter.led_off().await;
                     tokio::time::delay_for(duration).await;
                 }
                 Cmd::Many(cmds) => {

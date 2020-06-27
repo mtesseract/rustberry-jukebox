@@ -5,7 +5,7 @@ use std::sync::{Arc, RwLock};
 
 use failure::Fallible;
 use futures::future::AbortHandle;
-use slog_scope::{error, info};
+use slog_scope::{error, warn, info};
 use tokio::sync::broadcast::{channel, Receiver, Sender};
 
 use crate::player::PlaybackRequest;
@@ -118,7 +118,28 @@ impl InputSourceFactory for ProdInputSourceFactory {
             let tx = tx.clone();
             let (f, abortable_handle) = futures::future::abortable(async move {
                 loop {
-                    let el = Input::Button(receiver.recv().await.unwrap());
+                    let el = {
+                        let x = receiver.recv().await;
+                        match x {
+                            Err(tokio::sync::broadcast::RecvError::Lagged(_)) => {
+                                warn!("Lagged while transmitting button events");
+                                match receiver.recv().await {
+                                    Ok(el) => el,
+                                    Err(err) => {
+                                        error!("Error while receiving button event");
+                                        continue
+                                    }
+                                }
+                            }
+                            Err(err) => {
+                                error!("Error while receiving button event");
+                                continue
+                            }
+                            Ok(el) => el,
+                        }
+                    };
+                    let el = Input::Button(el);
+
                     if let Err(err) = tx.send(el.clone()) {
                         error!(
                             "Failed to transmit button event {:?} in InputSource: {:?}",

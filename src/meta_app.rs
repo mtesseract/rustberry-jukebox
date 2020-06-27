@@ -14,8 +14,6 @@ use crate::input_controller::{DynInputSourceFactory, InputSourceFactory};
 use crate::player::{PlaybackRequest, PlaybackResource};
 use futures::future::AbortHandle;
 
-use crate::led::Blinker;
-
 use crate::app_jukebox::App;
 use crate::components::rfid::RfidController;
 
@@ -85,7 +83,7 @@ impl MetaApp {
         interpreter_factory: DynInterpreterFactory,
         input_source_factory: Box<dyn InputSourceFactory + Sync + Send + 'static>,
     ) -> Fallible<Self> {
-        let (control_tx, control_rx) = tokio::sync::mpsc::channel(1);
+        let (control_tx, control_rx) = tokio::sync::mpsc::channel(128);
         let meta_app = MetaApp {
             input_source_factory,
             interpreter_factory,
@@ -250,15 +248,7 @@ impl MetaApp {
                         AppMode::Starting => None,
                         AppMode::Jukebox => {
                             let config = self.config.clone();
-                            // let interpreter_factory = self.interpreter_factory.clone();
-                            // let input_source_factory = self.input_source_factory.clone();
-                            let app = App::new(config, &self.interpreter_factory, &self.input_source_factory).unwrap();
-                            // let abortable_handle = self.jukebox_app.run().await?;
-                            // let isf2 = self.input_factory.clone();
-                            // let blinker = self.blinker.clone();
-                            // let interpreter = self.interpreter.clone();
-                            // let config = self.config.clone();
-                            //
+                            let app = App::new(config, &self.interpreter_factory, &self.input_source_factory).await.unwrap();
                             let (f, abortable_handle) =
                                 futures::future::abortable(async move { app.run().await });
                             tokio::spawn(f);
@@ -271,8 +261,6 @@ impl MetaApp {
                 }
             }
         }
-
-        info!("Exiting meta app run loop");
     }
 }
 

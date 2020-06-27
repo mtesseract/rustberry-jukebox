@@ -349,7 +349,7 @@ impl Player {
     pub async fn new(
         interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
     ) -> Fallible<PlayerHandle> {
-        let (tx, rx) = channel(1);
+        let (tx, rx) = channel(128);
 
         let player = Player {
             interpreter,

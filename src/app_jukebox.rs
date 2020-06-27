@@ -18,12 +18,12 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(
+    pub async fn new(
         config: Config,
         interpreter_factory: &DynInterpreterFactory,
         input_source_factory: &DynInputSourceFactory,
     ) -> Fallible<Self> {
-        let interpreter = interpreter_factory.run()?;
+        let interpreter = interpreter_factory.run().await?;
         let input_source = input_source_factory.consume()?;
 
         let app = Self {
@@ -47,7 +47,7 @@ impl App {
 
         info!("Waiting for interpreter readiness...");
 
-        interpreter.wait_until_ready().map_err(|err| {
+        interpreter.wait_until_ready().await.map_err(|err| {
             error!("Failed to wait for interpreter readiness: {}", err);
             err
         })?;
@@ -147,10 +147,10 @@ impl App {
                     }
                     match request {
                         PlaybackRequest::Start(_) => {
-                            interpreter.led_on().await;
+                           let _ = interpreter.led_on().await;
                         }
                         PlaybackRequest::Stop => {
-                            interpreter.led_off().await;
+                            let _ = interpreter.led_off().await;
                         }
                     }
                 }
