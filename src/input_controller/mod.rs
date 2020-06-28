@@ -5,7 +5,7 @@ use std::sync::{Arc, RwLock};
 
 use failure::Fallible;
 use futures::future::AbortHandle;
-use slog_scope::{error, warn, info};
+use slog_scope::{error, info, warn};
 use tokio::sync::broadcast::{channel, Receiver, Sender};
 
 use crate::player::PlaybackRequest;
@@ -17,41 +17,40 @@ pub enum Input {
 }
 
 pub trait InputSourceFactory {
-    fn consume(&self) -> Fallible<Box<dyn InputSource + Sync + Send + 'static>>;
+    fn consume(&self) -> Fallible<(Box<dyn InputSource + Sync + Send + 'static>, Receiver<Input>)>;
 }
 
 pub type DynInputSourceFactory = Box<dyn InputSourceFactory + Sync + Send + 'static>;
 
-
 pub mod test {
     use super::*;
 
+    struct VecInputSource;
+
+    impl InputSource for VecInputSource { }
+
     impl InputSourceFactory for Vec<Input> {
-        fn consume(&self) -> Fallible<Box<dyn InputSource + Sync + Send + 'static>> {
-            Ok(Box::new(self.clone()))
-        }
-    }
-
-    impl InputSource for Vec<Input> {
-        fn receiver(&self) -> Receiver<Input> {
+        fn consume(
+            &self,
+        ) -> Fallible<(
+            Box<dyn InputSource + Sync + Send + 'static>,
+            Receiver<Input>,
+        )> {
             let (tx, rx) = channel(self.len());
-            for i in self.iter() {
-                tx.send(i.clone()).unwrap();
+            for el in self.iter() {
+                tx.send((*el).clone()).unwrap();
             }
-            rx
+            Ok((Box::new(VecInputSource), rx))
         }
     }
 }
 
-pub trait InputSource {
-    fn receiver(&self) -> Receiver<Input>;
-}
+pub trait InputSource {}
 
 pub type DynInputSource = Box<dyn InputSource + Sync + Send + 'static>;
 
-
 pub struct ProdInputSourceFactory {
-    buttons: Option<Box<dyn Sync + Send + Fn() -> Fallible<button::Handle>>>, // This spawn a separate thread implementing the blocking event retrieval.
+    buttons: Option<Box<dyn Sync + Send + Fn() -> Fallible<button::Handle>>>, // This spawns a separate thread implementing the blocking event retrieval.
     playback: Option<Box<dyn Sync + Send + Fn() -> Fallible<playback::Handle>>>,
     button_controller: Arc<RwLock<Option<button::Handle>>>,
 }
@@ -61,6 +60,8 @@ pub struct ProdInputSource {
     playback_transmitter: Option<AbortHandle>,
     sender: Sender<Input>,
 }
+
+impl InputSource for ProdInputSource { }
 
 impl Drop for ProdInputSource {
     fn drop(&mut self) {
@@ -76,16 +77,10 @@ impl Drop for ProdInputSource {
     }
 }
 
-impl InputSource for ProdInputSource {
-    fn receiver(&self) -> Receiver<Input> {
-        self.sender.subscribe()
-    }
-}
-
 impl InputSourceFactory for ProdInputSourceFactory {
-    fn consume(&self) -> Fallible<Box<dyn InputSource + Sync + Send + 'static>> {
+    fn consume(&self) -> Fallible<(Box<dyn InputSource + Sync + Send + 'static>, Receiver<Input>)> {
         info!("Setting up Prod Input Source from Factor");
-        let (tx, _rx) = channel(2);
+        let (tx, rx) = channel(2);
 
         let opt_buttons_handle = {
             let reader = self.button_controller.read().unwrap();
@@ -127,13 +122,13 @@ impl InputSourceFactory for ProdInputSourceFactory {
                                     Ok(el) => el,
                                     Err(err) => {
                                         error!("Error while receiving button event");
-                                        continue
+                                        continue;
                                     }
                                 }
                             }
                             Err(err) => {
                                 error!("Error while receiving button event");
-                                continue
+                                continue;
                             }
                             Ok(el) => el,
                         }
@@ -185,7 +180,7 @@ impl InputSourceFactory for ProdInputSourceFactory {
             buttons_transmitter,
             playback_transmitter,
         };
-        Ok(Box::new(input_source))
+        Ok((Box::new(input_source), rx))
     }
 }
 
@@ -225,11 +220,13 @@ pub mod mock {
     }
 
     impl InputSourceFactory for MockInputSourceFactory {
-        fn consume(&self) -> Fallible<Box<dyn InputSource + Sync + Send + 'static>> {
-            let (tx, _rx) = channel(2);
-            Ok(Box::new(MockInputSource { sender: tx }))
+        fn consume(&self) -> Fallible<(Box<dyn InputSource + Sync + Send + 'static>, Receiver<Input>)> {
+            let (tx, rx) = channel(2);
+            Ok((Box::new(MockInputSource { sender: tx }), rx))
         }
     }
+
+    impl InputSource for MockInputSource { }
 
     impl MockInputSourceFactory {
         pub fn new() -> Fallible<MockInputSourceFactory> {
@@ -246,12 +243,6 @@ pub mod mock {
             _input_controller: Box<dyn Fn() -> Fallible<playback::Handle> + Send + Sync + 'static>,
         ) {
             unimplemented!()
-        }
-    }
-
-    impl InputSource for MockInputSource {
-        fn receiver(&self) -> Receiver<Input> {
-            self.sender.subscribe()
         }
     }
 }

@@ -1,10 +1,10 @@
 use std::sync::{Arc, RwLock};
 use std::thread;
 
-use slog_scope::{error, info};
 use async_trait::async_trait;
+use slog_scope::{error, info};
 
-use crate::components::access_token_provider::AccessTokenProvider;
+use crate::components::access_token_provider::{AccessTokenProvider, AtpError};
 
 use super::util;
 
@@ -25,12 +25,12 @@ pub mod external_command {
 
     use crate::effects::spotify::{self, util::JukeboxError};
     use failure::{Context, Fallible};
+    use futures::future::{abortable, AbortHandle};
     use slog_scope::{error, info, warn};
     use std::env;
     use std::process::{Child, Command};
-    use tokio::task;
-    use futures::future::{abortable,AbortHandle};
     use std::time::Duration;
+    use tokio::task;
 
     pub struct ExternalCommand {
         device_id: Arc<RwLock<Option<String>>>,
@@ -155,6 +155,15 @@ pub mod external_command {
                             info!("Terminated Spotify Connector");
                         }
                     }
+                    Err(
+                        err
+                        @
+                        JukeboxError::TokenRetrieval {
+                            err: AtpError::NoTokenReceivedYet,
+                        },
+                    ) => {
+                        warn!("Failed to lookup Spotify Device ID: {}", err);
+                    }
                     Err(err) => {
                         error!("Failed to lookup Spotify Device ID: {}", err);
                         // fixme, what to do here for resilience?
@@ -253,7 +262,8 @@ pub mod external_command {
                 password,
                 cache_directory,
                 librespot_cmd,
-            ).await
+            )
+            .await
         }
         pub async fn new(
             access_token_provider: &AccessTokenProvider,
@@ -278,13 +288,15 @@ pub mod external_command {
             let abort_handle_device_id_watcher = {
                 info!("Spawning Device ID Watcher for Spotify Connect command");
                 let supervised_cmd = supervised_cmd.clone();
-                let (f, abort_handle) = abortable(SupervisedCommand::run_device_id_watcher(supervised_cmd));
+                let (f, abort_handle) =
+                    abortable(SupervisedCommand::run_device_id_watcher(supervised_cmd));
                 task::spawn(f);
                 abort_handle
             };
             let abort_handle_supervisor = {
                 info!("Spawning Supervisor for Spotify Connect command");
-                let (f, abort_handle) = abortable(SupervisedCommand::run_supervisor(supervised_cmd));
+                let (f, abort_handle) =
+                    abortable(SupervisedCommand::run_supervisor(supervised_cmd));
                 task::spawn(f);
                 abort_handle
             };
@@ -325,5 +337,5 @@ pub mod external_command {
                 device_name: "FIXME".to_string(),
             })
         }
-        }
+    }
 }

@@ -210,7 +210,8 @@ impl SpotifyPlayer {
             connect::external_command::ExternalCommand::new_from_env(
                 &access_token_provider.clone(),
                 config.device_name.clone(),
-            ).await?
+            )
+            .await?,
         )
             as Box<dyn SpotifyConnector + 'static + Sync + Send>);
 
@@ -226,7 +227,8 @@ impl SpotifyPlayer {
 
     pub async fn wait_until_ready(&self) -> Result<(), Error> {
         self.spotify_connector
-            .wait_until_ready().await
+            .wait_until_ready()
+            .await
             .map_err(|_err| Error::NoSpotifyDevice)?;
         self.access_token_provider
             .wait_for_token()

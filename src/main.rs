@@ -7,7 +7,10 @@ use tokio::stream::StreamExt;
 
 use futures_util::TryFutureExt;
 use rustberry::config::Config;
-use rustberry::effects::{test::{TestInterpreterFactory,  TestInterpreter}, DynInterpreter, DynInterpreterFactory, Interpreter, ProdInterpreter, ProdInterpreterFactory};
+use rustberry::effects::{
+    test::{TestInterpreter, TestInterpreterFactory},
+    DynInterpreter, DynInterpreterFactory, Interpreter, ProdInterpreter, ProdInterpreterFactory,
+};
 use rustberry::input_controller::{
     button, mock, playback, InputSourceFactory, ProdInputSourceFactory,
 };
@@ -33,8 +36,7 @@ async fn create_mock_meta_app(config: Config) -> Fallible<MetaApp> {
         as Box<dyn InputSourceFactory + Sync + Send + 'static>;
 
     let (interpreter_factory, mut interpreted_effects) = TestInterpreterFactory::new();
-    let interpreter_factory =
-        Box::new(interpreter_factory) as DynInterpreterFactory;
+    let interpreter_factory = Box::new(interpreter_factory) as DynInterpreterFactory;
 
     // let blinker = Blinker::new(interpreter.clone())?;
 
@@ -52,8 +54,7 @@ async fn create_production_meta_app(config: Config) -> Fallible<MetaApp> {
     info!("Creating Production Application");
     // Create Effects Channel and Interpreter.
     let interpreter_factory = ProdInterpreterFactory::new(&config);
-    let interpreter_factory =
-        Box::new(interpreter_factory) as DynInterpreterFactory;
+    let interpreter_factory = Box::new(interpreter_factory) as DynInterpreterFactory;
 
     info!("Creating Input Source Factory");
     let mut isf = ProdInputSourceFactory::new()?;

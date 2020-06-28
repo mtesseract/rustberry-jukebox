@@ -54,7 +54,11 @@ pub struct ProdInterpreterFactory {
 }
 
 impl ProdInterpreterFactory {
-    pub fn new(config: &Config) -> Self { ProdInterpreterFactory { _config: config.clone() }}
+    pub fn new(config: &Config) -> Self {
+        ProdInterpreterFactory {
+            _config: config.clone(),
+        }
+    }
 }
 
 #[async_trait]
@@ -76,7 +80,6 @@ pub trait Interpreter {
     async fn led_off(&self) -> Fallible<()>;
     async fn generic_command(&self, cmd: String) -> Fallible<()>;
 }
-
 
 #[async_trait]
 pub trait InterpreterFactory {
@@ -198,7 +201,9 @@ pub mod test {
     #[async_trait]
     impl InterpreterFactory for TestInterpreterFactory {
         async fn run(&self) -> Fallible<Box<dyn Interpreter + Sync + Send + 'static>> {
-            Ok(Box::new(TestInterpreter { tx: self.tx.clone() }))
+            Ok(Box::new(TestInterpreter {
+                tx: self.tx.clone(),
+            }))
         }
     }
 

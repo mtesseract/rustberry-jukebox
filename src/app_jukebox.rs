@@ -4,6 +4,8 @@ use std::time::Duration;
 use failure::Fallible;
 use slog_scope::{error, info, warn};
 
+use tokio::sync::broadcast::Receiver; // FIXME: use mpsc?
+
 use crate::config::Config;
 use crate::effects::{DynInterpreter, DynInterpreterFactory, InterpreterFactory, Interpreter};
 use crate::input_controller::{button, Input, InputSource, InputSourceFactory, DynInputSourceFactory};
@@ -15,6 +17,7 @@ pub struct App {
     config: Config,
     interpreter: DynInterpreter,
     input_source: Box<dyn InputSource + Sync + Send + 'static>,
+    rx: Receiver<Input>,
 }
 
 impl App {
@@ -24,12 +27,13 @@ impl App {
         input_source_factory: &DynInputSourceFactory,
     ) -> Fallible<Self> {
         let interpreter = interpreter_factory.run().await?;
-        let input_source = input_source_factory.consume()?;
+        let (input_source, rx) = input_source_factory.consume()?;
 
         let app = Self {
             config,
             interpreter,
             input_source,
+            rx,
         };
         Ok(app)
     }
@@ -55,7 +59,7 @@ impl App {
         info!("Interpreter for Jukebox ready");
 
         info!("About to run Jukebox logic");
-        if let Err(err) = Self::run_jukebox(self.config, self.input_source, blinker, interpreter).await {
+        if let Err(err) = Self::run_jukebox(self.config, self.rx, self.input_source, blinker, interpreter).await {
             error!("Jukebox loop terminated with error: {}", err);
         } else {
             error!("Jukebox loop terminated unexpectedly");
@@ -65,11 +69,13 @@ impl App {
 
     pub async fn run_jukebox(
         config: Config,
+        rx: Receiver<Input>,
         input_source: Box<dyn InputSource + Sync + Send + 'static>,
         blinker: Blinker,
         interpreter: Arc<DynInterpreter>,
     ) -> Fallible<()> {
         info!("Running Jukebox App");
+        let mut rx = rx;
         let player = Player::new(interpreter.clone()).await?;
         blinker
             .run_async(led::Cmd::Repeat(
@@ -83,10 +89,13 @@ impl App {
 
         loop {
             warn!("app loop");
-            let mut rx = input_source.receiver();
             let el = match rx.recv().await {
+                Err(tokio::sync::broadcast::RecvError::Lagged(_)) => {
+                    warn!("Lagged while transmitting button events");
+                    continue
+                },
                 Err(err) => {
-                    // Closed or lagged.
+                    // Closed.
                     error!(
                         "Error while consuming input source in Jukebox App: {:?}",
                         err

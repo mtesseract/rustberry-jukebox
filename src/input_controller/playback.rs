@@ -119,8 +119,8 @@ pub mod rfid {
 
         async fn handle_tag(tag: Tag, tx: &mut Sender<PlaybackRequest>) -> Fallible<()> {
             let mut tag_reader = tokio::task::spawn_blocking(move || tag.new_reader()).await?;
-            let request_string = tokio::task::spawn_blocking(move || tag_reader.read_string())
-                .await??;
+            let request_string =
+                tokio::task::spawn_blocking(move || tag_reader.read_string()).await??;
             let request_deserialized: PlaybackResource = match serde_json::from_str(&request_string)
             {
                 Ok(deserialized) => deserialized,

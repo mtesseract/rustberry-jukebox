@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use async_std::sync::RwLock;
 
@@ -9,7 +9,7 @@ use failure::Fallible;
 use slog_scope::info;
 
 use crate::config::Config;
-use crate::effects::{Interpreter, InterpreterFactory, DynInterpreter, DynInterpreterFactory};
+use crate::effects::{DynInterpreter, DynInterpreterFactory, Interpreter, InterpreterFactory};
 use crate::input_controller::{DynInputSourceFactory, InputSourceFactory};
 use crate::player::{PlaybackRequest, PlaybackResource};
 use futures::future::AbortHandle;
@@ -248,7 +248,13 @@ impl MetaApp {
                         AppMode::Starting => None,
                         AppMode::Jukebox => {
                             let config = self.config.clone();
-                            let app = App::new(config, &self.interpreter_factory, &self.input_source_factory).await.unwrap();
+                            let app = App::new(
+                                config,
+                                &self.interpreter_factory,
+                                &self.input_source_factory,
+                            )
+                            .await
+                            .unwrap();
                             let (f, abortable_handle) =
                                 futures::future::abortable(async move { app.run().await });
                             tokio::spawn(f);
