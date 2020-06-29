@@ -108,6 +108,8 @@ pub mod cdev_gpio {
         ) -> Fallible<()> {
             let mut n_received_during_shutdown_delay = 0;
             info!("Listening for GPIO events on line {}", line_id);
+            let mut ts: Option<std::time::Instant> = None;
+
             for event in line
                 .events(
                     LineRequestFlags::INPUT,
@@ -122,6 +124,15 @@ pub mod cdev_gpio {
                 })?
             {
                 info!("Received GPIO event {:?} on line {}", event, line_id);
+
+                if let Some(ref ts) = ts {
+                    let elapsed = ts.elapsed();
+                    if elapsed < std::time::Duration::from_millis(500) {
+                        info!("Ignoring GPIO event {:?} on line {} since the last event on this line arrived just {}ms ago", event, line_id, elapsed.as_millis());
+                        continue;
+                    }
+                }
+
                 if cmd == Command::Shutdown {
                     if let Some(start_time) = self.config.start_time {
                         let now = Instant::now();
@@ -147,6 +158,7 @@ pub mod cdev_gpio {
                     if let Err(err) = tx.send(cmd) {
                         error!("Failed to transmit GPIO event: {:?}", err);
                     }
+                    ts = Some(std::time::Instant::now());
                 } else {
                     warn!("Skpping transmitting of GPIO event since no receiver connected");
                 }

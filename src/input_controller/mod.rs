@@ -79,7 +79,7 @@ impl Drop for ProdInputSource {
 
 impl InputSourceFactory for ProdInputSourceFactory {
     fn consume(&self) -> Fallible<(Box<dyn InputSource + Sync + Send + 'static>, Receiver<Input>)> {
-        info!("Setting up Prod Input Source from Factor");
+        info!("Setting up Prod Input Source from Factory");
         let (tx, rx) = channel(2);
 
         let opt_buttons_handle = {

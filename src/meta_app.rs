@@ -130,8 +130,6 @@ impl MetaApp {
         meta_app_handle: MetaAppHandle,
         mode: AppMode,
     ) -> Result<impl warp::Reply, Infallible> {
-        info!("set_mode_jukebox()");
-
         let inner = |meta_app_handle: MetaAppHandle| async move {
             Ok(meta_app_handle.set_mode(mode).await?)
         };

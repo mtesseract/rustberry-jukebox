@@ -1,5 +1,4 @@
 use std::sync::{Arc, RwLock};
-use std::thread;
 
 use async_trait::async_trait;
 use slog_scope::{error, info};
@@ -45,8 +44,11 @@ pub mod external_command {
     impl Drop for ExternalCommand {
         fn drop(&mut self) {
             info!("Dropping ExternalCommand (Device ID Watcher and Supervisor)");
-            self.abort_handle_device_id_watcher.abort();
             self.abort_handle_supervisor.abort();
+            self.abort_handle_device_id_watcher.abort();
+            if let Err(err) = self.child.write().unwrap().kill() {
+                warn!("Failed to kill child process while dropping ExternaCommand: {}", err);
+            }
         }
     }
 
@@ -117,7 +119,7 @@ pub mod external_command {
         }
 
         async fn run_supervisor(supervised_cmd: SupervisedCommand) -> () {
-            Self::supervisor(supervised_cmd)
+            Self::supervisor(supervised_cmd).await
         }
 
         async fn run_device_id_watcher(supervised_cmd: SupervisedCommand) -> () {
@@ -126,10 +128,10 @@ pub mod external_command {
             let device_id = Arc::clone(&supervised_cmd.device_id);
             let child = Arc::clone(&supervised_cmd.child);
             tokio::time::delay_for(std::time::Duration::from_secs(2)).await;
-            Self::device_id_watcher(access_token_provider, device_name, device_id, child)
+            Self::device_id_watcher(access_token_provider, device_name, device_id, child).await
         }
 
-        fn device_id_watcher(
+        async fn device_id_watcher(
             access_token_provider: Arc<AccessTokenProvider>,
             device_name: String,
             device_id: Arc<RwLock<Option<String>>>,
@@ -169,11 +171,11 @@ pub mod external_command {
                         // fixme, what to do here for resilience?
                     }
                 }
-                thread::sleep(Duration::from_millis(10000));
+                tokio::time::delay_for(Duration::from_millis(10000)).await;
             }
         }
 
-        fn supervisor(mut self) -> () {
+        async fn supervisor(mut self) -> () {
             loop {
                 // info!("supervisor tick");
 
@@ -206,7 +208,7 @@ pub mod external_command {
                         // fixme, what to do for resilience?
                     }
                 }
-                thread::sleep(Duration::from_millis(2000));
+                tokio::time::delay_for(Duration::from_millis(2000)).await;
             }
         }
 

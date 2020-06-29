@@ -88,7 +88,6 @@ impl App {
             .await;
 
         loop {
-            warn!("app loop");
             let el = match rx.recv().await {
                 Err(tokio::sync::broadcast::RecvError::Lagged(_)) => {
                     warn!("Lagged while transmitting button events");
