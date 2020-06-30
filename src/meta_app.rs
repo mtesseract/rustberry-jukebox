@@ -112,21 +112,7 @@ impl MetaApp {
         warp::any().map(move || handle.clone())
     }
 
-    async fn set_mode_admin(
-        meta_app_handle: MetaAppHandle,
-    ) -> Result<impl warp::Reply, Infallible> {
-        info!("set_mode_admin()");
-        Self::set_mode(meta_app_handle, AppMode::Admin).await
-    }
-
-    async fn set_mode_jukebox(
-        meta_app_handle: MetaAppHandle,
-    ) -> Result<impl warp::Reply, Infallible> {
-        info!("set_mode_jukebox()");
-        Self::set_mode(meta_app_handle, AppMode::Jukebox).await
-    }
-
-    async fn set_mode(
+    async fn set_current_mode(
         meta_app_handle: MetaAppHandle,
         mode: AppMode,
     ) -> Result<impl warp::Reply, Infallible> {
@@ -171,18 +157,12 @@ impl MetaApp {
         let mut initial_mode = initial_mode;
         let routes = {
             let meta_app_handle = self.handle();
-            let hello = warp::path!("hello" / String).map(|name| format!("Hello, {}!", name));
-            let ep_mode = {
+            let ep_current_mode = {
                 let meta_app_handle = meta_app_handle.clone();
-                warp::path!("mode")
-                    .and(Self::with_meta_app_handle(meta_app_handle))
-                    .and_then(Self::get_current_mode)
-            };
-            let ep_mode_admin = {
-                let meta_app_handle = meta_app_handle.clone();
-                warp::path!("mode-admin")
-                    .and(Self::with_meta_app_handle(meta_app_handle))
-                    .and_then(Self::set_mode_admin)
+                warp::path!("current-mode")
+                    .and(
+                        (warp::get().and(Self::with_meta_app_handle(meta_app_handle.clone())).and_then(Self::get_current_mode))
+                        .or(warp::put().and(Self::with_meta_app_handle(meta_app_handle.clone())).and(warp::body::json::<AppMode>()).and_then(Self::set_current_mode)))
             };
             let eps_admin = {
                 warp::path!("rfid-tag").and(
@@ -196,13 +176,7 @@ impl MetaApp {
                     )),
                 )
             };
-            let ep_mode_jukebox = {
-                let meta_app_handle = meta_app_handle.clone();
-                warp::path!("mode-jukebox")
-                    .and(Self::with_meta_app_handle(meta_app_handle))
-                    .and_then(Self::set_mode_jukebox)
-            };
-            (warp::get().and(hello.or(ep_mode).or(ep_mode_admin).or(ep_mode_jukebox)))
+            (warp::get().and(ep_current_mode))
                 .or(warp::path!("admin" / ..).and(eps_admin))
         };
 

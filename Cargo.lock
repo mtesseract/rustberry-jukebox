@@ -474,9 +474,9 @@ dependencies = [
 
 [[package]]
 name = "dialoguer"
-version = "0.4.0"
+version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "116f66c4e7b19af0d52857aa4ff710cc3b4781d9c16616e31540bc55ec57ba8c"
+checksum = "f4aa86af7b19b40ef9cbef761ed411a49f0afa06b7b6dcd3dfe2f96a3c546138"
 dependencies = [
  "console",
  "lazy_static",

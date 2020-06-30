@@ -8,14 +8,12 @@ use tokio::stream::StreamExt;
 use futures_util::TryFutureExt;
 use rustberry::config::Config;
 use rustberry::effects::{
-    test::{TestInterpreter, TestInterpreterFactory},
-    DynInterpreter, DynInterpreterFactory, Interpreter, ProdInterpreter, ProdInterpreterFactory,
+    test::{TestInterpreterFactory},
+    DynInterpreterFactory, ProdInterpreterFactory,
 };
 use rustberry::input_controller::{
     button, mock, playback, InputSourceFactory, ProdInputSourceFactory,
 };
-
-use rustberry::led::{self, Blinker};
 
 use rustberry::meta_app::{AppMode, MetaApp};
 

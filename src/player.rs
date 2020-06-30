@@ -106,6 +106,22 @@ pub enum PlaybackResource {
     Http(String),
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum PlaybackBackend {
+    Spotify,
+    Http,
+}
+
+impl fmt::Display for PlaybackBackend {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use PlaybackBackend::*;
+        match self {
+            Spotify => write!(f, "Spotify"),
+            Http => write!(f, "HTTP"),
+        }
+    }
+}
+
 impl PlayerHandle {
     pub async fn playback(&self, req: PlaybackRequest) -> Fallible<()> {
         let (tx, mut rx) = channel(10);

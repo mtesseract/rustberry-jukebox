@@ -19,7 +19,7 @@ futures = "0.3.5"
 futures-util = "0.3.5"
 async-std = "1.6.1"
 mime = "0.3"
-dialoguer = "0.4.0"
+dialoguer = "0.6"
 tokio = {version = "0.2", features = ["full", "rt-threaded", "macros"]}
 reqwest = {version = "0.10.4", features = ["blocking", "json", "stream"]}
 rodio = "0.11"

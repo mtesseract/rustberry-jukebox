@@ -7,7 +7,7 @@ use url::Url;
 use clap::{App, Arg};
 
 use rustberry::meta_app::AppMode;
-use rustberry::player::PlaybackResource;
+use rustberry::player::{PlaybackBackend, PlaybackResource};
 
 use regex::Regex;
 
@@ -43,6 +43,7 @@ fn run_application() {
         .arg(
             Arg::with_name("url")
                 .long("url")
+                .required(true)
                 .value_name("URL")
                 .help("Specifies Rustberry Server")
                 .takes_value(true),
@@ -60,18 +61,43 @@ fn run_application() {
     let url_s = format!("{}/", matches.value_of("url").unwrap());
     let url = Url::parse(&url_s).unwrap();
 
-    let spotify_uri = Input::<String>::new()
-        .with_prompt("Spotify URI")
-        .interact()?;
-    let spotify_uri = derive_spotify_uri_from_url(&spotify_uri)?;
+    let playback_backends = vec![PlaybackBackend::Spotify, PlaybackBackend::Http];
+    let backend = match dialoguer::Select::with_theme(&dialoguer::theme::ColorfulTheme::default())
+        .items(&playback_backends)
+        .interact_opt()?
+    {
+        Some(choice) => playback_backends[choice].clone(),
+        None => return (),
+    };
 
-    let resource = PlaybackResource::SpotifyUri(spotify_uri);
+    let resource = match backend {
+        PlaybackBackend::Spotify => {
+            let spotify_uri = Input::<String>::new()
+                .with_prompt("Spotify URI")
+                .interact()?;
+            let spotify_uri = derive_spotify_uri_from_url(&spotify_uri)?;
 
-    let current_mode: AppMode = client.get(url.join("/mode").unwrap()).send()?.json()?;
+            PlaybackResource::SpotifyUri(spotify_uri)
+        }
+        PlaybackBackend::Http => {
+            let url = Input::<String>::new().with_prompt("HTTP URL").interact()?;
+            PlaybackResource::Http(url)
+        }
+    };
+
+    eprintln!("1");
+    let current_mode: AppMode = client
+        .get(url.join("/current-mode").unwrap())
+        .send()?
+        .json()?;
+    eprintln!("2");
     println!("current_mode = {:?}", current_mode);
 
     if current_mode != AppMode::Admin {
-        client.get(url.join("/mode-admin").unwrap()).send()?;
+        client
+            .put(url.join("/current-mode").unwrap())
+            .json(&AppMode::Admin)
+            .send()?;
     }
 
     client
@@ -80,11 +106,20 @@ fn run_application() {
         .send()?;
 
     if current_mode != AppMode::Admin {
-        client.get(url.join("/mode-jukebox").unwrap()).send()?;
+        client
+            .put(url.join("/current-mode").unwrap())
+            .json(&AppMode::Jukebox)
+            .send()?;
     }
 }
 
 #[throws(std::io::Error)]
 fn main() {
-    run_application()
+    match run_application() {
+        Ok(_) => println!("Success"),
+        Err(err) => {
+            eprintln!("Error: {}", err);
+            std::process::exit(1);
+        }
+    }
 }
