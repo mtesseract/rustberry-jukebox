@@ -181,7 +181,7 @@ impl SpotifyPlaybackHandle {
         pause_state: &Option<PauseState>,
     ) -> StartPlayback {
         let position_ms = pause_state.as_ref().map(|x| x.pos.as_millis());
-        if &spotify_uri[0..14] == "spotify:album:" {
+        if &spotify_uri[0..14] == "spotify:album:" || &spotify_uri[0..17] == "spotify:playlist:" {
             StartPlayback {
                 uris: None,
                 context_uri: Some(spotify_uri.clone().to_string()),
