@@ -72,7 +72,7 @@ impl PlaybackHandle for SpotifyPlaybackHandle {
             })?
             .error_for_status()
             .map(|_| ())
-            .map_err(|err| Error::HTTP(err).into())
+            .map_err(|err| Error::Http(err).into())
     }
     async fn is_complete(&self) -> Fallible<bool> {
         is_currently_playing(
@@ -82,35 +82,6 @@ impl PlaybackHandle for SpotifyPlaybackHandle {
         )
         .await
         .map(|x| !x)
-    }
-    async fn pause(&self) -> Fallible<()> {
-        let msg = "Failed to stop Spotify playback";
-        let access_token = self.access_token_provider.get_token()?;
-        let device_id = match self.spotify_connector.device_id() {
-            Some(device_id) => device_id,
-            None => return Err(Error::NoSpotifyDevice.into()),
-        };
-        self.http_client
-            .put("https://api.spotify.com/v1/me/player/pause")
-            .query(&[("device_id", &device_id)])
-            .body("")
-            .header(header::CONTENT_LENGTH, 0)
-            .header(AUTHORIZATION, format!("Bearer {}", access_token))
-            .send()
-            .await
-            .map_err(|err| {
-                error!("{}: Executing HTTP request failed: {}", msg, err);
-                err
-            })
-            .map(|rsp| {
-                if !rsp.status().is_success() {
-                    error!("{}: HTTP Failure {}", msg, rsp.status());
-                }
-                rsp
-            })?
-            .error_for_status()
-            .map(|_| ())
-            .map_err(|err| Error::HTTP(err).into())
     }
     async fn cont(&self, pause_state: PauseState) -> Fallible<()> {
         let msg = "Failed to start Spotify playback";
@@ -141,7 +112,7 @@ impl PlaybackHandle for SpotifyPlaybackHandle {
             })?
             .error_for_status()
             .map(|_| ())
-            .map_err(|err| Error::HTTP(err).into())
+            .map_err(|err| Error::Http(err).into())
     }
     async fn replay(&self) -> Fallible<()> {
         let msg = "Failed to start Spotify playback";
@@ -171,7 +142,7 @@ impl PlaybackHandle for SpotifyPlaybackHandle {
             })?
             .error_for_status()
             .map(|_| ())
-            .map_err(|err| Error::HTTP(err).into())
+            .map_err(|err| Error::Http(err).into())
     }
 }
 
@@ -184,12 +155,12 @@ impl SpotifyPlaybackHandle {
         if &spotify_uri[0..14] == "spotify:album:" || &spotify_uri[0..17] == "spotify:playlist:" {
             StartPlayback {
                 uris: None,
-                context_uri: Some(spotify_uri.clone().to_string()),
+                context_uri: Some(spotify_uri.to_string()),
                 position_ms,
             }
         } else {
             StartPlayback {
-                uris: Some(vec![spotify_uri.clone().to_string()]),
+                uris: Some(vec![spotify_uri.to_string()]),
                 context_uri: None,
                 position_ms,
             }
@@ -208,7 +179,7 @@ impl SpotifyPlayer {
         )?);
         let spotify_connector = Arc::new(Box::new(
             connect::external_command::ExternalCommand::new_from_env(
-                &access_token_provider.clone(),
+                &access_token_provider,
                 config.device_name.clone(),
             )
             .unwrap(),
@@ -238,13 +209,12 @@ impl SpotifyPlayer {
     pub async fn start_playback(
         &self,
         spotify_uri: &str,
-        pause_state: Option<PauseState>,
+        _pause_state: Option<PauseState>,
     ) -> Result<SpotifyPlaybackHandle, failure::Error> {
-        // let req = Self::derive_start_playback_payload_from_spotify_uri(spotify_uri, &pause_state);
         let handle = SpotifyPlaybackHandle {
             http_client: self.http_client.clone(),
             access_token_provider: self.access_token_provider.clone(),
-            uri: spotify_uri.to_string().clone(),
+            uri: spotify_uri.to_string(),
             spotify_connector: self.spotify_connector.clone(),
             device_name: self.device_name.clone(),
         };
@@ -260,7 +230,7 @@ pub mod err {
 
     #[derive(Debug)]
     pub enum Error {
-        HTTP(reqwest::Error),
+        Http(reqwest::Error),
         NoSpotifyDevice,
         NoToken,
     }
@@ -268,7 +238,7 @@ pub mod err {
     impl Display for Error {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             match self {
-                Error::HTTP(err) => write!(f, "Spotify HTTP Error {}", err),
+                Error::Http(err) => write!(f, "Spotify HTTP Error {}", err),
                 Error::NoSpotifyDevice => write!(f, "No Spotify Connect Device found"),
                 Error::NoToken => write!(
                     f,
@@ -280,7 +250,7 @@ pub mod err {
 
     impl From<reqwest::Error> for Error {
         fn from(err: reqwest::Error) -> Self {
-            Error::HTTP(err)
+            Error::Http(err)
         }
     }
 

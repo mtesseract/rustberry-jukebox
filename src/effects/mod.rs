@@ -79,14 +79,14 @@ impl Interpreter for ProdInterpreter {
                 .spotify_player
                 .start_playback(&uri, pause_state)
                 .await
-                .map(|x| Box::new(x) as DynPlaybackHandle)
-                .map_err(|err| err.into()),
+                .map(|x| Box::new(x) as DynPlaybackHandle),
+            // .map_err(|err| err.into()),
             Http(url) => self
                 .http_player
                 .start_playback(&url, pause_state)
                 .await
-                .map(|x| Box::new(x) as DynPlaybackHandle)
-                .map_err(|err| err.into()),
+                .map(|x| Box::new(x) as DynPlaybackHandle),
+            // .map_err(|err| err.into()),
         }
     }
 
@@ -172,10 +172,7 @@ pub mod test {
         async fn is_complete(&self) -> Fallible<bool> {
             Ok(true)
         }
-        async fn pause(&self) -> Fallible<()> {
-            Ok(())
-        }
-        async fn cont(&self, pause_state: PauseState) -> Fallible<()> {
+        async fn cont(&self, _pause_state: PauseState) -> Fallible<()> {
             Ok(())
         }
         async fn replay(&self) -> Fallible<()> {
@@ -192,17 +189,13 @@ pub mod test {
         async fn play(
             &self,
             res: PlaybackResource,
-            pause_state: Option<PauseState>,
+            _pause_state: Option<PauseState>,
         ) -> Fallible<DynPlaybackHandle> {
             use PlaybackResource::*;
 
             match res {
-                SpotifyUri(uri) => self.tx.send(PlaySpotify {
-                    spotify_uri: uri.to_string().clone(),
-                })?,
-                Http(url) => self.tx.send(PlayHttp {
-                    url: url.to_string().clone(),
-                })?,
+                SpotifyUri(uri) => self.tx.send(PlaySpotify { spotify_uri: uri })?,
+                Http(url) => self.tx.send(PlayHttp { url })?,
             }
             Ok(Box::new(DummyPlaybackHandle) as DynPlaybackHandle)
         }
@@ -216,9 +209,7 @@ pub mod test {
             Ok(())
         }
         fn generic_command(&self, cmd: String) -> Fallible<()> {
-            self.tx
-                .send(GenericCommand(cmd.to_string().clone()))
-                .unwrap();
+            self.tx.send(GenericCommand(cmd)).unwrap();
             Ok(())
         }
     }
