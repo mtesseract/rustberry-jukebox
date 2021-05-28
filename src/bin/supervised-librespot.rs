@@ -2,8 +2,8 @@ use rustberry::components::access_token_provider::AccessTokenProvider;
 use rustberry::config::Config;
 use rustberry::effects::spotify::connect::external_command::ExternalCommand;
 use slog::{self, o, Drain};
-use slog_async;
-use slog_term;
+// use slog_async;
+// use slog_term;
 
 fn main() {
     let decorator = slog_term::TermDecorator::new().build();
@@ -12,7 +12,7 @@ fn main() {
     let logger = slog::Logger::root(drain, o!());
     let _guard = slog_scope::set_global_logger(logger);
 
-    slog_scope::scope(&slog_scope::logger().new(o!()), || main_with_log())
+    slog_scope::scope(&slog_scope::logger().new(o!()), main_with_log)
 }
 
 fn main_with_log() {

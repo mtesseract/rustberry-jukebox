@@ -231,7 +231,7 @@ pub mod external_command {
             let rw_child = Arc::new(RwLock::new(child));
             let supervised_cmd = SupervisedCommand {
                 cmd,
-                device_name: device_name.to_string().clone(),
+                device_name: device_name.to_string(),
                 access_token_provider: access_token_provider.clone(),
                 child: Arc::clone(&rw_child),
                 device_id,
@@ -276,7 +276,7 @@ pub mod external_command {
         ) -> Fallible<Self> {
             let device_id = Arc::new(RwLock::new(None));
             let (supervised_cmd, rw_child) = SupervisedCommand::new(
-                cmd.to_string().clone(),
+                cmd,
                 &device_name,
                 librespot_cmd,
                 username,

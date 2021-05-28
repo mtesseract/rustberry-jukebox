@@ -61,7 +61,7 @@ impl AccessTokenProvider {
 
         match &*access_token {
             Some(token) => Ok(token.clone()),
-            None => Err(AtpError::NoTokenReceivedYet.into()),
+            None => Err(AtpError::NoTokenReceivedYet),
         }
     }
 
@@ -78,9 +78,9 @@ impl AccessTokenProvider {
 
         {
             let access_token_clone = Arc::clone(&access_token);
-            let client_id = client_id.clone().to_string();
-            let client_secret = client_secret.clone().to_string();
-            let refresh_token = refresh_token.clone().to_string();
+            let client_id = client_id.to_string();
+            let client_secret = client_secret.to_string();
+            let refresh_token = refresh_token.to_string();
 
             thread::Builder::new()
                 .name("access-token-provider".to_string())
@@ -95,9 +95,9 @@ impl AccessTokenProvider {
         }
 
         Ok(AccessTokenProvider {
-            client_id: client_id.clone().to_string(),
-            client_secret: client_secret.clone().to_string(),
-            refresh_token: refresh_token.clone().to_string(),
+            client_id: client_id.to_string(),
+            client_secret: client_secret.to_string(),
+            refresh_token: refresh_token.to_string(),
             access_token,
         })
     }
@@ -106,7 +106,6 @@ impl AccessTokenProvider {
 pub mod spotify_auth {
     use failure::Fallible;
     const TOKEN_REFRESH_URL: &str = "https://accounts.spotify.com/api/token";
-    use base64;
     use reqwest::header::AUTHORIZATION;
     use serde::Deserialize;
 

@@ -8,6 +8,7 @@ pub enum Command {
     Shutdown,
     VolumeUp,
     VolumeDown,
+    PauseContinue,
 }
 
 #[derive(Debug, Clone)]
@@ -15,6 +16,7 @@ pub struct Config {
     pub shutdown_pin: Option<u32>,
     pub volume_up_pin: Option<u32>,
     pub volume_down_pin: Option<u32>,
+    pub pause_pin: Option<u32>,
     pub start_time: Option<Instant>,
 }
 
@@ -52,6 +54,7 @@ pub mod cdev_gpio {
         shutdown_pin: Option<u32>,
         volume_up_pin: Option<u32>,
         volume_down_pin: Option<u32>,
+        pause_pin: Option<u32>,
     }
 
     impl From<EnvConfig> for Config {
@@ -61,6 +64,7 @@ pub mod cdev_gpio {
                 shutdown_pin: env_config.shutdown_pin,
                 volume_up_pin: env_config.volume_up_pin,
                 volume_down_pin: env_config.volume_down_pin,
+                pause_pin: env_config.pause_pin,
                 start_time,
             }
         }
@@ -90,6 +94,9 @@ pub mod cdev_gpio {
             if let Some(pin) = config.volume_down_pin {
                 map.insert(pin, Command::VolumeDown);
             }
+            if let Some(pin) = config.pause_pin {
+                map.insert(pin, Command::PauseContinue);
+            }
             let chip = Chip::new("/dev/gpiochip0")
                 .map_err(|err| Error::IO(format!("Failed to open Chip: {:?}", err)))?;
             let (tx, rx) = crossbeam_channel::bounded(1);
@@ -113,6 +120,8 @@ pub mod cdev_gpio {
             F: Fn(Command) -> Option<T> + 'static + Send,
         {
             let mut n_received_during_shutdown_delay = 0;
+            let mut ts = Instant::now();
+
             info!("Listening for GPIO events on line {}", line_id);
             for event in line
                 .events(
@@ -127,6 +136,12 @@ pub mod cdev_gpio {
                     ))
                 })?
             {
+                if ts.elapsed() < std::time::Duration::from_millis(500) {
+                    info!("Ignoring GPIO event {:?} on line {} since the last event on this line arrived just {}ms ago",
+                          event, line_id, ts.elapsed().as_millis());
+                    continue;
+                }
+
                 info!("Received GPIO event {:?} on line {}", event, line_id);
                 if cmd == Command::Shutdown {
                     if let Some(start_time) = self.config.start_time {
@@ -152,6 +167,7 @@ pub mod cdev_gpio {
                     if let Err(err) = self.tx.send(cmd) {
                         error!("Failed to transmit GPIO event: {}", err);
                     }
+                    ts = std::time::Instant::now();
                 } else {
                     info!("Dropped button command message: {:?}", cmd);
                 }

@@ -10,4 +10,5 @@ pub struct Config {
     pub shutdown_command: Option<String>,
     pub volume_up_command: Option<String>,
     pub volume_down_command: Option<String>,
+    pub trigger_only_mode: bool,
 }

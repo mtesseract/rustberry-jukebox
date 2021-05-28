@@ -1,5 +1,4 @@
 use failure::Fallible;
-use reqwest;
 use rodio::Sink;
 use slog_scope::{info, warn};
 use std::convert::From;
@@ -10,7 +9,7 @@ use std::sync::Arc;
 use std::thread::{Builder, JoinHandle};
 
 use async_trait::async_trait;
-use crossbeam_channel::{self, Receiver, Sender};
+use crossbeam_channel::{self, Sender};
 use tokio::runtime::Runtime;
 use tokio::task::spawn_blocking;
 
@@ -51,21 +50,15 @@ impl HttpPlaybackHandle {
 
 #[async_trait]
 impl PlaybackHandle for HttpPlaybackHandle {
-    async fn stop(&self) -> Fallible<()> {
-        // info!("Cancelling HTTP Player");
-        // self.tx.send(()).unwrap();
-        self.sink.stop();
-        Ok(())
-    }
     async fn is_complete(&self) -> Fallible<bool> {
         Ok(self.sink.empty())
     }
 
-    async fn pause(&self) -> Fallible<()> {
+    async fn stop(&self) -> Fallible<()> {
         self.sink.pause();
         Ok(())
     }
-    async fn cont(&self, pause_state: PauseState) -> Fallible<()> {
+    async fn cont(&self, _pause_state: PauseState) -> Fallible<()> {
         self.sink.play();
         Ok(())
     }
@@ -84,12 +77,10 @@ impl HttpPlayer {
         // let (tx, rx) = crossbeam_channel::bounded(1);
         let http_client = Arc::new(reqwest::Client::new());
         let basic_auth = {
-            let username: Option<String> = env::var("HTTP_PLAYER_USERNAME")
-                .map(|x| Some(x))
-                .unwrap_or(None);
-            let password: Option<String> = env::var("HTTP_PLAYER_PASSWORD")
-                .map(|x| Some(x))
-                .unwrap_or(None);
+            let username: Option<String> =
+                env::var("HTTP_PLAYER_USERNAME").map(Some).unwrap_or(None);
+            let password: Option<String> =
+                env::var("HTTP_PLAYER_PASSWORD").map(Some).unwrap_or(None);
             if let (Some(username), Some(password)) = (username, password) {
                 Some((username, password))
             } else {
@@ -114,12 +105,12 @@ impl HttpPlayer {
             warn!("Ignoring pause state: {:?}", pause_state);
         }
         let device = rodio::default_output_device().unwrap();
-        let url = url.clone().to_string();
+        let url = url.to_string();
         let http_client = self.http_client.clone();
         let basic_auth = self.basic_auth.clone();
         let (tx, rx) = crossbeam_channel::bounded(1);
         let sink = Arc::new(Sink::new(&device));
-        let sink_cp = sink.clone();
+        // let sink_cp = sink.clone();
         let _handle = Builder::new()
             .name("http-player".to_string())
             .spawn(move || {
@@ -136,7 +127,7 @@ impl HttpPlayer {
             sink,
             basic_auth,
             url,
-            http_client: self.http_client.clone(),
+            http_client,
         };
         handle.queue().await?;
         handle

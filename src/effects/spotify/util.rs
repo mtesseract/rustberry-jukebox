@@ -59,17 +59,12 @@ pub fn lookup_device_by_name(
         .header(AUTHORIZATION, &access_token)
         .send()?;
     let rsp: DevicesResponse = rsp.json()?;
-    let opt_dev = rsp
-        .devices
-        .into_iter()
-        .filter(|x| x.name == device_name)
-        .next();
+    let opt_dev = rsp.devices.into_iter().find(|x| x.name == device_name);
     match opt_dev {
         Some(dev) => Ok(dev),
-        None => Err((JukeboxError::DeviceNotFound {
-            device_name: device_name.clone().to_string(),
-        })
-        .into()),
+        None => Err(JukeboxError::DeviceNotFound {
+            device_name: device_name.to_string(),
+        }),
     }
 }
 
@@ -86,17 +81,12 @@ pub async fn async_lookup_device_by_name(
         .await?
         .json::<DevicesResponse>()
         .await?;
-    let opt_dev = rsp
-        .devices
-        .into_iter()
-        .filter(|x| x.name == device_name)
-        .next();
+    let opt_dev = rsp.devices.into_iter().find(|x| x.name == device_name);
     match opt_dev {
         Some(dev) => Ok(dev),
-        None => Err((JukeboxError::DeviceNotFound {
-            device_name: device_name.clone().to_string(),
-        })
-        .into()),
+        None => Err(JukeboxError::DeviceNotFound {
+            device_name: device_name.to_string(),
+        }),
     }
 }
 
