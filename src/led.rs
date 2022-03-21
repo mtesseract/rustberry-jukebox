@@ -28,7 +28,7 @@ pub enum Cmd {
 
 impl Blinker {
     pub fn new(
-        rt: runtime::Handle,
+        rt: &runtime::Handle,
         interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
     ) -> Fallible<Self> {
         let abort_handle = RefCell::new(None);
@@ -39,7 +39,7 @@ impl Blinker {
         let blinker = Self {
             interpreter,
             abort_handle,
-            rt,
+            rt: rt.clone(),
         };
         Ok(blinker)
     }

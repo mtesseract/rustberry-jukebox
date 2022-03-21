@@ -3,12 +3,29 @@ use std::time::{Duration, Instant};
 use crossbeam_channel::{self, Receiver, Sender};
 use failure::Fallible;
 
+use crate::player::PlaybackRequest;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
     Shutdown,
     VolumeUp,
     VolumeDown,
     PauseContinue,
+    LockPlayer,
+    UnlockPlayer,
+    Playback(PlaybackRequest),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ButtonEvent {
+    ShutdownPress,
+    ShutdownRelease,
+    VolumeUpPress,
+    VolumeUpRelease,
+    VolumeDownPress,
+    VolumeDownRelease,
+    PauseContinuePress,
+    PauseContinueRelease,
 }
 
 #[derive(Debug, Clone)]
@@ -35,7 +52,7 @@ pub mod cdev_gpio {
     use std::convert::From;
     use std::sync::{Arc, RwLock};
 
-    use gpio_cdev::{Chip, EventRequestFlags, Line, LineRequestFlags};
+    use gpio_cdev::{Chip, EventRequestFlags, EventType, Line, LineRequestFlags};
     use serde::Deserialize;
     use slog_scope::{error, info, warn};
 
@@ -43,7 +60,7 @@ pub mod cdev_gpio {
 
     #[derive(Debug, Clone)]
     pub struct CdevGpio<T: Clone> {
-        map: HashMap<u32, Command>,
+        map: HashMap<u32, (ButtonEvent, ButtonEvent)>,
         chip: Arc<RwLock<Chip>>,
         config: Config,
         tx: Sender<T>,
@@ -79,23 +96,38 @@ pub mod cdev_gpio {
     impl<T: Clone + Send + 'static> CdevGpio<T> {
         pub fn new_from_env<F>(msg_transformer: F) -> Fallible<Handle<T>>
         where
-            F: Fn(Command) -> Option<T> + 'static + Send + Sync,
+            F: Fn(ButtonEvent) -> Option<T> + 'static + Send + Sync,
         {
             info!("Using CdevGpio based in Button Controller");
             let env_config = EnvConfig::new_from_env()?;
             let config: Config = env_config.into();
             let mut map = HashMap::new();
             if let Some(shutdown_pin) = config.shutdown_pin {
-                map.insert(shutdown_pin, Command::Shutdown);
+                map.insert(
+                    shutdown_pin,
+                    (ButtonEvent::ShutdownPress, ButtonEvent::ShutdownRelease),
+                );
             }
             if let Some(pin) = config.volume_up_pin {
-                map.insert(pin, Command::VolumeUp);
+                map.insert(
+                    pin,
+                    (ButtonEvent::VolumeUpPress, ButtonEvent::VolumeUpRelease),
+                );
             }
             if let Some(pin) = config.volume_down_pin {
-                map.insert(pin, Command::VolumeDown);
+                map.insert(
+                    pin,
+                    (ButtonEvent::VolumeDownPress, ButtonEvent::VolumeDownRelease),
+                );
             }
             if let Some(pin) = config.pause_pin {
-                map.insert(pin, Command::PauseContinue);
+                map.insert(
+                    pin,
+                    (
+                        ButtonEvent::PauseContinuePress,
+                        ButtonEvent::PauseContinueRelease,
+                    ),
+                );
             }
             let chip = Chip::new("/dev/gpiochip0")
                 .map_err(|err| Error::IO(format!("Failed to open Chip: {:?}", err)))?;
@@ -113,11 +145,11 @@ pub mod cdev_gpio {
 
         fn run_single_event_listener<F>(
             self,
-            (line, line_id, cmd): (Line, u32, Command),
+            (line, line_id, (press_ev, release_ev)): (Line, u32, (ButtonEvent, ButtonEvent)),
             msg_transformer: Arc<F>,
         ) -> Fallible<()>
         where
-            F: Fn(Command) -> Option<T> + 'static + Send,
+            F: Fn(ButtonEvent) -> Option<T> + 'static + Send,
         {
             let mut n_received_during_shutdown_delay = 0;
             let mut ts = Instant::now();
@@ -126,7 +158,7 @@ pub mod cdev_gpio {
             for event in line
                 .events(
                     LineRequestFlags::INPUT,
-                    EventRequestFlags::FALLING_EDGE,
+                    EventRequestFlags::BOTH_EDGES,
                     "read-input",
                 )
                 .map_err(|err| {
@@ -136,6 +168,14 @@ pub mod cdev_gpio {
                     ))
                 })?
             {
+                let event = match event {
+                    Err(err) => {
+                        error!("Ignoring erronous event on line {}: {}", line_id, err);
+                        continue;
+                    }
+                    Ok(ev) => ev,
+                };
+
                 if ts.elapsed() < std::time::Duration::from_millis(500) {
                     info!("Ignoring GPIO event {:?} on line {} since the last event on this line arrived just {}ms ago",
                           event, line_id, ts.elapsed().as_millis());
@@ -143,7 +183,7 @@ pub mod cdev_gpio {
                 }
 
                 info!("Received GPIO event {:?} on line {}", event, line_id);
-                if cmd == Command::Shutdown {
+                if press_ev == ButtonEvent::ShutdownPress {
                     if let Some(start_time) = self.config.start_time {
                         let now = Instant::now();
                         let dt: Duration = now - start_time;
@@ -163,13 +203,19 @@ pub mod cdev_gpio {
                     }
                 }
 
-                if let Some(cmd) = msg_transformer(cmd.clone()) {
-                    if let Err(err) = self.tx.send(cmd) {
+                let ev = if event.event_type() == EventType::RisingEdge {
+                    press_ev.clone()
+                } else {
+                    release_ev.clone()
+                };
+
+                if let Some(ev) = msg_transformer(ev.clone()) {
+                    if let Err(err) = self.tx.send(ev) {
                         error!("Failed to transmit GPIO event: {}", err);
                     }
                     ts = std::time::Instant::now();
                 } else {
-                    info!("Dropped button command message: {:?}", cmd);
+                    info!("Dropped button event: {:?}", ev);
                 }
             }
             Ok(())
@@ -177,25 +223,31 @@ pub mod cdev_gpio {
 
         fn run<F>(&mut self, msg_transformer: F) -> Fallible<()>
         where
-            F: Fn(Command) -> Option<T> + 'static + Send + Sync,
+            F: Fn(ButtonEvent) -> Option<T> + 'static + Send + Sync,
         {
             let chip = &mut *(self.chip.write().unwrap());
             let msg_transformer = Arc::new(msg_transformer);
             // Spawn threads for requested GPIO lines.
-            for (line_id, cmd) in self.map.iter() {
-                info!("Listening for {:?} on GPIO line {}", cmd, line_id);
+            for (line_id, (press_ev, release_ev)) in self.map.iter() {
+                info!(
+                    "Listening for button events {:?}/{:?} on GPIO line {}",
+                    press_ev, release_ev, line_id
+                );
                 let line_id = *line_id as u32;
                 let line = chip
                     .get_line(line_id)
                     .map_err(|err| Error::IO(format!("Failed to get GPIO line: {:?}", err)))?;
-                let cmd = (*cmd).clone();
+                let press_ev = (*press_ev).clone();
+                let release_ev = (*release_ev).clone();
                 let clone = self.clone();
                 let msg_transformer = Arc::clone(&msg_transformer);
                 let _handle = std::thread::Builder::new()
                     .name(format!("button-controller-{}", line_id))
                     .spawn(move || {
-                        let res =
-                            clone.run_single_event_listener((line, line_id, cmd), msg_transformer);
+                        let res = clone.run_single_event_listener(
+                            (line, line_id, (press_ev, release_ev)),
+                            msg_transformer,
+                        );
                         error!("GPIO Listener loop terminated unexpectedly: {:?}", res);
                     })
                     .unwrap();

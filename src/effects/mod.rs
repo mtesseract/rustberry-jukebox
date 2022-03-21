@@ -39,6 +39,16 @@ pub enum Effects {
     GenericCommand(String),
 }
 
+impl Effects {
+    pub fn is_spotify_effect(&self) -> bool {
+        match self {
+            Effects::PlaySpotify { .. } => true,
+            Effects::StopSpotify { .. } => true,
+            _ => false,
+        }
+    }
+}
+
 pub struct ProdInterpreter {
     spotify_player: SpotifyPlayer,
     http_player: HttpPlayer,
@@ -162,11 +172,14 @@ pub mod test {
         }
     }
 
-    struct DummyPlaybackHandle;
+    struct DummyPlaybackHandle {
+        tx: Sender<Effects>,
+    }
 
     #[async_trait]
     impl PlaybackHandle for DummyPlaybackHandle {
         async fn stop(&self) -> Fallible<()> {
+            self.tx.send(StopSpotify).unwrap();
             Ok(())
         }
         async fn is_complete(&self) -> Fallible<bool> {
@@ -197,7 +210,10 @@ pub mod test {
                 SpotifyUri(uri) => self.tx.send(PlaySpotify { spotify_uri: uri })?,
                 Http(url) => self.tx.send(PlayHttp { url })?,
             }
-            Ok(Box::new(DummyPlaybackHandle) as DynPlaybackHandle)
+            let handle = DummyPlaybackHandle {
+                tx: self.tx.clone(),
+            };
+            Ok(Box::new(handle) as DynPlaybackHandle)
         }
 
         fn led_on(&self) -> Fallible<()> {
