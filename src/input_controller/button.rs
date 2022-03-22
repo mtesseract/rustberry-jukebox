@@ -52,9 +52,11 @@ pub mod cdev_gpio {
     use std::convert::From;
     use std::sync::{Arc, RwLock};
 
-    use gpio_cdev::{Chip, EventRequestFlags, EventType, Line, LineRequestFlags};
+    use gpio_cdev::{
+        Chip, EventRequestFlags, EventType, Line, LineEvent, LineEventHandle, LineRequestFlags,
+    };
     use serde::Deserialize;
-    use slog_scope::{error, info, warn};
+    use slog_scope::{debug, error, info, warn};
 
     use super::*;
 
@@ -72,6 +74,32 @@ pub mod cdev_gpio {
         volume_up_pin: Option<u32>,
         volume_down_pin: Option<u32>,
         pause_pin: Option<u32>,
+    }
+
+    struct BufferedLineEventHandle {
+        buffered: Vec<LineEvent>,
+        line_event_handle: LineEventHandle,
+    }
+
+    impl BufferedLineEventHandle {
+        pub fn unread(&mut self, event: LineEvent) {
+            self.buffered.push(event);
+        }
+        pub fn next(&mut self) -> Fallible<LineEvent> {
+            // if let Some(e) = self.buffered.first_mut() {
+            //     return Ok(*e);
+            // }
+            if !self.buffered.is_empty() {
+                return Ok(self.buffered.remove(0));
+            }
+            return Ok(self.line_event_handle.get_event()?);
+        }
+        pub fn new(leh: LineEventHandle) -> Self {
+            return Self {
+                buffered: Vec::new(),
+                line_event_handle: leh,
+            };
+        }
     }
 
     impl From<EnvConfig> for Config {
@@ -152,10 +180,12 @@ pub mod cdev_gpio {
             F: Fn(ButtonEvent) -> Option<T> + 'static + Send,
         {
             let mut n_received_during_shutdown_delay = 0;
-            let mut ts = Instant::now();
+            let mut ts = None;
+            let epsilon = Duration::from_millis(200);
 
             info!("Listening for GPIO events on line {}", line_id);
-            for event in line
+
+            let mut line_event_handle = line
                 .events(
                     LineRequestFlags::INPUT,
                     EventRequestFlags::BOTH_EDGES,
@@ -166,59 +196,84 @@ pub mod cdev_gpio {
                         "Failed to request events from GPIO line {}: {}",
                         line_id, err
                     ))
-                })?
-            {
-                let event = match event {
+                })
+                .map(|x| BufferedLineEventHandle::new(x))?;
+
+            loop {
+                std::thread::sleep(Duration::from_millis(50));
+                let event = match line_event_handle.next() {
                     Err(err) => {
                         error!("Ignoring erronous event on line {}: {}", line_id, err);
                         continue;
                     }
                     Ok(ev) => ev,
                 };
-
-                if ts.elapsed() < std::time::Duration::from_millis(500) {
-                    info!("Ignoring GPIO event {:?} on line {} since the last event on this line arrived just {}ms ago",
-                          event, line_id, ts.elapsed().as_millis());
-                    continue;
-                }
-
                 info!("Received GPIO event {:?} on line {}", event, line_id);
-                if press_ev == ButtonEvent::ShutdownPress {
-                    if let Some(start_time) = self.config.start_time {
-                        let now = Instant::now();
-                        let dt: Duration = now - start_time;
-                        if dt < DELAY_BEFORE_ACCEPTING_SHUTDOWN_COMMANDS {
-                            warn!(
-                                "Ignoring shutdown event (time elapsed since start: {:?})",
-                                dt
-                            );
-                            n_received_during_shutdown_delay += 1;
+
+                match event.event_type() {
+                    EventType::RisingEdge => {
+                        if ts.is_some() {
+                            // ignore, probably due to flickering.
+                            debug!("Ignoring button event: {:?}", press_ev);
+                        } else {
+                            ts = Some(std::time::Instant::now());
+                            if let Some(ev) = msg_transformer(press_ev) {
+                                if let Err(err) = self.tx.send(ev) {
+                                    error!(
+                                        "Failed to transmit GPIO event ... derived from {:?}: {}",
+                                        press_ev, err
+                                    );
+                                }
+                            }
+                        }
+                    }
+                    EventType::FallingEdge => {
+                        if let Some(tss) = ts {
+                            if tss.elapsed() < epsilon {
+                                // could be flickering!
+                                line_event_handle.unread(event);
+                                debug!("Delaying button event: {:?}", release_ev);
+                            } else {
+                                ts = None;
+                                if let Some(ev) = msg_transformer(release_ev) {
+                                    if let Err(err) = self.tx.send(ev) {
+                                        error!(
+                                            "Failed to transmit GPIO event ... derived from {:?}: {}",
+                                            release_ev, err
+                                        );
+                                    }
+                                }
+                            }
+                        } else {
+                            // should actually not happen, ignore it.
+                            // no timestamp saved yet.
+                            debug!("Ignoring button event {:?}", release_ev);
                             continue;
                         }
                     }
-
-                    if n_received_during_shutdown_delay > 10 {
-                        warn!("Received too many shutdown events right after startup, shutdown functionality has been disabled");
-                        continue;
-                    }
                 }
 
-                let ev = if event.event_type() == EventType::RisingEdge {
-                    press_ev.clone()
-                } else {
-                    release_ev.clone()
-                };
+                // if press_ev == ButtonEvent::ShutdownPress {
+                //     if let Some(start_time) = self.config.start_time {
+                //         let now = Instant::now();
+                //         let dt: Duration = now - start_time;
+                //         if dt < DELAY_BEFORE_ACCEPTING_SHUTDOWN_COMMANDS {
+                //             warn!(
+                //                 "Ignoring shutdown event (time elapsed since start: {:?})",
+                //                 dt
+                //             );
+                //             n_received_during_shutdown_delay += 1;
+                //             continue;
+                //         }
+                //     }
 
-                if let Some(ev) = msg_transformer(ev.clone()) {
-                    if let Err(err) = self.tx.send(ev) {
-                        error!("Failed to transmit GPIO event: {}", err);
-                    }
-                    ts = std::time::Instant::now();
-                } else {
-                    info!("Dropped button event: {:?}", ev);
-                }
+                //     if n_received_during_shutdown_delay > 10 {
+                //         warn!("Received too many shutdown events right after startup, shutdown functionality has been disabled");
+                //         continue;
+                //     }
+                // }
             }
-            Ok(())
+            // Ok(())
         }
 
         fn run<F>(&mut self, msg_transformer: F) -> Fallible<()>
