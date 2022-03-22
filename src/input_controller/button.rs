@@ -56,7 +56,7 @@ pub mod cdev_gpio {
         Chip, EventRequestFlags, EventType, Line, LineEvent, LineEventHandle, LineRequestFlags,
     };
     use serde::Deserialize;
-    use slog_scope::{debug, error, info, warn};
+    use slog_scope::{debug, error, info};
 
     use super::*;
 
@@ -179,9 +179,11 @@ pub mod cdev_gpio {
         where
             F: Fn(ButtonEvent) -> Option<T> + 'static + Send,
         {
-            let mut n_received_during_shutdown_delay = 0;
+            // let mut n_received_during_shutdown_delay = 0;
             let mut ts = None;
             let epsilon = Duration::from_millis(200);
+            const PRESS_EVENT_TYPE: EventType = EventType::FallingEdge;
+            const RELEASE_EVENT_TYPE: EventType = EventType::RisingEdge;
 
             info!("Listening for GPIO events on line {}", line_id);
 
@@ -210,46 +212,44 @@ pub mod cdev_gpio {
                 };
                 info!("Received GPIO event {:?} on line {}", event, line_id);
 
-                match event.event_type() {
-                    EventType::RisingEdge => {
-                        if ts.is_some() {
-                            // ignore, probably due to flickering.
-                            debug!("Ignoring button event: {:?}", press_ev);
+                let event_type = event.event_type();
+                if event_type == PRESS_EVENT_TYPE {
+                    if ts.is_some() {
+                        // ignore, probably due to flickering.
+                        debug!("Ignoring button event: {:?}", press_ev);
+                    } else {
+                        ts = Some(std::time::Instant::now());
+                        if let Some(ev) = msg_transformer(press_ev) {
+                            if let Err(err) = self.tx.send(ev) {
+                                error!(
+                                    "Failed to transmit GPIO event ... derived from {:?}: {}",
+                                    press_ev, err
+                                );
+                            }
+                        }
+                    }
+                } else if event_type == RELEASE_EVENT_TYPE {
+                    if let Some(tss) = ts {
+                        if tss.elapsed() < epsilon {
+                            // could be flickering!
+                            line_event_handle.unread(event);
+                            debug!("Delaying button event: {:?}", release_ev);
                         } else {
-                            ts = Some(std::time::Instant::now());
-                            if let Some(ev) = msg_transformer(press_ev) {
+                            ts = None;
+                            if let Some(ev) = msg_transformer(release_ev) {
                                 if let Err(err) = self.tx.send(ev) {
                                     error!(
                                         "Failed to transmit GPIO event ... derived from {:?}: {}",
-                                        press_ev, err
+                                        release_ev, err
                                     );
                                 }
                             }
                         }
-                    }
-                    EventType::FallingEdge => {
-                        if let Some(tss) = ts {
-                            if tss.elapsed() < epsilon {
-                                // could be flickering!
-                                line_event_handle.unread(event);
-                                debug!("Delaying button event: {:?}", release_ev);
-                            } else {
-                                ts = None;
-                                if let Some(ev) = msg_transformer(release_ev) {
-                                    if let Err(err) = self.tx.send(ev) {
-                                        error!(
-                                            "Failed to transmit GPIO event ... derived from {:?}: {}",
-                                            release_ev, err
-                                        );
-                                    }
-                                }
-                            }
-                        } else {
-                            // should actually not happen, ignore it.
-                            // no timestamp saved yet.
-                            debug!("Ignoring button event {:?}", release_ev);
-                            continue;
-                        }
+                    } else {
+                        // should actually not happen, ignore it.
+                        // no timestamp saved yet.
+                        debug!("Ignoring button event {:?}", release_ev);
+                        continue;
                     }
                 }
 
@@ -327,4 +327,4 @@ impl std::fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-const DELAY_BEFORE_ACCEPTING_SHUTDOWN_COMMANDS: Duration = Duration::from_secs(10);
+// const DELAY_BEFORE_ACCEPTING_SHUTDOWN_COMMANDS: Duration = Duration::from_secs(10);

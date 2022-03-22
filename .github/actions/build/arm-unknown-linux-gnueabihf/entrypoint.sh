@@ -12,10 +12,14 @@ rm -rf $CARGO_HOME/git
 ln -sf /github/home/caches/registry $CARGO_HOME/registry
 ln -sf /github/home/caches/git $CARGO_HOME/git
 
+mkdir _artifacts
+
 # Build it
 cargo build --release --bin jukeboxd --target=arm-unknown-linux-gnueabihf
-mkdir _artifacts
 cp target/arm-unknown-linux-gnueabihf/release/jukeboxd _artifacts
+
+cargo build --bin jukeboxd --target=arm-unknown-linux-gnueabihf
+cp target/arm-unknown-linux-gnueabihf/debug/jukeboxd _artifacts/jukeboxd-debug
 
 version=$(cargo pkgid | cut -d# -f2 | cut -d: -f2)
 echo "::set-output name=version::${version}"
