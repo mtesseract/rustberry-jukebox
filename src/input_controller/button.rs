@@ -180,7 +180,7 @@ pub mod cdev_gpio {
             F: Fn(ButtonEvent) -> Option<T> + 'static + Send,
         {
             // let mut n_received_during_shutdown_delay = 0;
-            let mut ts = None;
+            let mut ts = std::time::Instant::now();
             let epsilon = Duration::from_millis(200);
             const PRESS_EVENT_TYPE: EventType = EventType::FallingEdge;
             const RELEASE_EVENT_TYPE: EventType = EventType::RisingEdge;
@@ -198,27 +198,49 @@ pub mod cdev_gpio {
                         "Failed to request events from GPIO line {}: {}",
                         line_id, err
                     ))
-                })
-                .map(|x| BufferedLineEventHandle::new(x))?;
+                })?;
+            // .map(|x| BufferedLineEventHandle::new(x))?;
+
+            let mut pressed: bool = false;
 
             loop {
-                std::thread::sleep(Duration::from_millis(50));
-                let event = match line_event_handle.next() {
-                    Err(err) => {
-                        error!("Ignoring erronous event on line {}: {}", line_id, err);
+                std::thread::sleep(std::time::Duration::from_millis(10));
+
+                // before we block on reading events, we compare the last state (realized by emitting events) with the current state of the line
+                // to check if the inconsistency requires us to emit another event.
+                // this case occurs when the button is pressed very shortly, resulting in press- and release-event being emitted quickly after
+                // one another.
+                let current = match line_event_handle.get_value() {
+                    Err(_) => {
+                        std::thread::sleep(Duration::from_millis(50));
                         continue;
                     }
-                    Ok(ev) => ev,
+                    Ok(c) => c,
                 };
-                info!("Received GPIO event {:?} on line {}", event, line_id);
 
-                let event_type = event.event_type();
-                if event_type == PRESS_EVENT_TYPE {
-                    if ts.is_some() {
-                        // ignore, probably due to flickering.
-                        debug!("Ignoring button event: {:?}", press_ev);
+                if current == 0 {
+                    if pressed {
+                        // Inconsistency: Last state is pressed and the current value of the line is inactive.
+                        // Emit release event!
+                        debug!("Emitting release event on line {}", line_id);
+                        if let Some(ev) = msg_transformer(release_ev) {
+                            if let Err(err) = self.tx.send(ev) {
+                                error!(
+                                    "Failed to transmit GPIO event ... derived from {:?}: {}",
+                                    release_ev, err
+                                );
+                            }
+                        }
                     } else {
-                        ts = Some(std::time::Instant::now());
+                        // Nothing to do.
+                    }
+                } else {
+                    if pressed {
+                        // Nothing to do.
+                    } else {
+                        // Inconsistency: Last state is released and the current value of the line is active.
+                        // Emit press event.
+                        debug!("Emitting press event on line {}", line_id);
                         if let Some(ev) = msg_transformer(press_ev) {
                             if let Err(err) = self.tx.send(ev) {
                                 error!(
@@ -228,31 +250,56 @@ pub mod cdev_gpio {
                             }
                         }
                     }
-                } else if event_type == RELEASE_EVENT_TYPE {
-                    if let Some(tss) = ts {
-                        if tss.elapsed() < epsilon {
-                            // could be flickering!
-                            line_event_handle.unread(event);
-                            debug!("Delaying button event: {:?}", release_ev);
-                        } else {
-                            ts = None;
-                            if let Some(ev) = msg_transformer(release_ev) {
-                                if let Err(err) = self.tx.send(ev) {
-                                    error!(
-                                        "Failed to transmit GPIO event ... derived from {:?}: {}",
-                                        release_ev, err
-                                    );
-                                }
-                            }
-                        }
-                    } else {
-                        // should actually not happen, ignore it.
-                        // no timestamp saved yet.
-                        debug!("Ignoring button event {:?}", release_ev);
+                }
+
+                // Any inconsistencies resolved, retrieve next event in a blocking way.
+                // Ok to block here since the current state of the line reflects what has last been emitted as an event.
+                let event = match line_event_handle.get_event() {
+                    Err(err) => {
+                        error!("Ignoring erronous event on line {}: {}", line_id, err);
                         continue;
+                    }
+                    Ok(ev) => ev,
+                };
+                info!("Received GPIO event {:?} on line {}", event, line_id);
+
+                if ts.elapsed() < epsilon {
+                    // We have a timestamp already. This denotes the fact that we have received a "primary" event (at that timestamp) recently.
+                    //
+                    // another event occured very shortly after the last timestamp, this could be a noise event.
+                    // we do not emit any events for this
+                } else {
+                    // We are outside of an epsilon-timeframe around some "primary" event.
+                    // Regard the new event as being a new primary event.
+                    // Emit event for it.
+                    ts = std::time::Instant::now();
+
+                    let event_type = event.event_type();
+                    if event_type == PRESS_EVENT_TYPE {
+                        if let Some(ev) = msg_transformer(press_ev) {
+                            if let Err(err) = self.tx.send(ev) {
+                                error!(
+                                    "Failed to transmit GPIO event ... derived from {:?}: {}",
+                                    press_ev, err
+                                );
+                            }
+                            pressed = true;
+                        }
+                    } else if event_type == RELEASE_EVENT_TYPE {
+                        if let Some(ev) = msg_transformer(release_ev) {
+                            if let Err(err) = self.tx.send(ev) {
+                                error!(
+                                    "Failed to transmit GPIO event ... derived from {:?}: {}",
+                                    release_ev, err
+                                );
+                            }
+                            pressed = false;
+                        }
                     }
                 }
 
+                // TODO, reenable this logic:
+                //
                 // if press_ev == ButtonEvent::ShutdownPress {
                 //     if let Some(start_time) = self.config.start_time {
                 //         let now = Instant::now();
@@ -273,7 +320,6 @@ pub mod cdev_gpio {
                 //     }
                 // }
             }
-            // Ok(())
         }
 
         fn run<F>(&mut self, msg_transformer: F) -> Fallible<()>

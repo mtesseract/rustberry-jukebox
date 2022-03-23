@@ -206,8 +206,14 @@ impl App {
                         error!("Failed to execute pause_continue request: {}", err);
                     }
                 }
-                Command::LockPlayer => self.locked = !self.locked,
-                Command::UnlockPlayer => self.locked = !self.locked,
+                Command::LockPlayer => {
+                    info!("Locking Jukebox");
+                    self.locked = !self.locked
+                }
+                Command::UnlockPlayer => {
+                    info!("Unlocking Jukebox");
+                    self.locked = !self.locked
+                }
                 Command::Playback(request) => {
                     if self.locked {
                         continue;
