@@ -205,7 +205,6 @@ pub mod cdev_gpio {
 
             loop {
                 std::thread::sleep(std::time::Duration::from_millis(10));
-
                 // before we block on reading events, we compare the last state (realized by emitting events) with the current state of the line
                 // to check if the inconsistency requires us to emit another event.
                 // this case occurs when the button is pressed very shortly, resulting in press- and release-event being emitted quickly after
@@ -215,10 +214,10 @@ pub mod cdev_gpio {
                         std::thread::sleep(Duration::from_millis(50));
                         continue;
                     }
-                    Ok(c) => c,
+                    Ok(c) => c == 0,
                 };
 
-                if current == 0 {
+                if !current {
                     if pressed {
                         // Inconsistency: Last state is pressed and the current value of the line is inactive.
                         // Emit release event!
