@@ -181,7 +181,7 @@ pub mod cdev_gpio {
         {
             // let mut n_received_during_shutdown_delay = 0;
             let mut ts = std::time::Instant::now();
-            let epsilon = Duration::from_millis(200);
+            let epsilon = Duration::from_millis(500);
             const PRESS_EVENT_TYPE: EventType = EventType::FallingEdge;
             const RELEASE_EVENT_TYPE: EventType = EventType::RisingEdge;
 
@@ -203,7 +203,7 @@ pub mod cdev_gpio {
             let mut pressed: bool = false;
 
             loop {
-                std::thread::sleep(std::time::Duration::from_millis(100));
+                std::thread::sleep(epsilon);
                 // before we block on reading events, we compare the last state (realized by emitting events) with the current state of the line
                 // to check if the inconsistency requires us to emit another event.
                 // this case occurs when the button is pressed very shortly, resulting in press- and release-event being emitted quickly after
