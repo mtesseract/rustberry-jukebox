@@ -1,5 +1,7 @@
 #!/bin/sh -l
 
+set -e
+
 echo "Building inside container..."
 
 export PKG_CONFIG_ALLOW_CROSS=1

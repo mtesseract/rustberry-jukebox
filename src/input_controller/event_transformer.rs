@@ -8,6 +8,7 @@ pub struct EventTransformer {
     skip_volume_up_emitting: bool,
     volume_down_pressed: bool,
     skip_volume_down_emitting: bool,
+    locked: bool,
 }
 
 impl EventTransformer {
@@ -17,6 +18,7 @@ impl EventTransformer {
             volume_up_pressed: false,
             skip_volume_down_emitting: false,
             skip_volume_up_emitting: false,
+            locked: false,
         }
     }
     pub fn transform(&mut self, event: &Input) -> Vec<Command> {
@@ -28,7 +30,13 @@ impl EventTransformer {
                 if self.volume_down_pressed {
                     self.skip_volume_down_emitting = true;
                     self.skip_volume_up_emitting = true;
-                    vec![Command::LockPlayer]
+                    if self.locked {
+                        self.locked = false;
+                        vec![Command::UnlockPlayer]
+                    } else {
+                        self.locked = true;
+                        vec![Command::LockPlayer]
+                    }
                 } else {
                     vec![]
                 }
@@ -46,7 +54,13 @@ impl EventTransformer {
                 if self.volume_up_pressed {
                     self.skip_volume_down_emitting = true;
                     self.skip_volume_up_emitting = true;
-                    vec![Command::LockPlayer]
+                    if self.locked {
+                        self.locked = false;
+                        vec![Command::UnlockPlayer]
+                    } else {
+                        self.locked = true;
+                        vec![Command::LockPlayer]
+                    }
                 } else {
                     vec![]
                 }

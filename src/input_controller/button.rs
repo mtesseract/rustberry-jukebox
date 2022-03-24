@@ -199,19 +199,18 @@ pub mod cdev_gpio {
                         line_id, err
                     ))
                 })?;
-            // .map(|x| BufferedLineEventHandle::new(x))?;
 
             let mut pressed: bool = false;
 
             loop {
-                std::thread::sleep(std::time::Duration::from_millis(10));
+                std::thread::sleep(std::time::Duration::from_millis(100));
                 // before we block on reading events, we compare the last state (realized by emitting events) with the current state of the line
                 // to check if the inconsistency requires us to emit another event.
                 // this case occurs when the button is pressed very shortly, resulting in press- and release-event being emitted quickly after
                 // one another.
                 let current = match line_event_handle.get_value() {
-                    Err(_) => {
-                        std::thread::sleep(Duration::from_millis(50));
+                    Err(err) => {
+                        error!("Failed to get current value of line {}: {}", line_id, err);
                         continue;
                     }
                     Ok(c) => c == 0,
@@ -228,15 +227,13 @@ pub mod cdev_gpio {
                                     "Failed to transmit GPIO event ... derived from {:?}: {}",
                                     release_ev, err
                                 );
+                                continue;
                             }
+                            pressed = false;
                         }
-                    } else {
-                        // Nothing to do.
                     }
                 } else {
-                    if pressed {
-                        // Nothing to do.
-                    } else {
+                    if !pressed {
                         // Inconsistency: Last state is released and the current value of the line is active.
                         // Emit press event.
                         debug!("Emitting press event on line {}", line_id);
@@ -246,7 +243,9 @@ pub mod cdev_gpio {
                                     "Failed to transmit GPIO event ... derived from {:?}: {}",
                                     press_ev, err
                                 );
+                                continue;
                             }
+                            pressed = true;
                         }
                     }
                 }
@@ -260,14 +259,17 @@ pub mod cdev_gpio {
                     }
                     Ok(ev) => ev,
                 };
-                info!("Received GPIO event {:?} on line {}", event, line_id);
 
                 if ts.elapsed() < epsilon {
                     // We have a timestamp already. This denotes the fact that we have received a "primary" event (at that timestamp) recently.
                     //
                     // another event occured very shortly after the last timestamp, this could be a noise event.
                     // we do not emit any events for this
+                    debug!("Ignoring GPIO event {:?} on line {}", event, line_id);
+                    continue;
                 } else {
+                    debug!("Received GPIO event {:?} on line {}", event, line_id);
+
                     // We are outside of an epsilon-timeframe around some "primary" event.
                     // Regard the new event as being a new primary event.
                     // Emit event for it.

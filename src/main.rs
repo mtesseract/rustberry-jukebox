@@ -5,9 +5,7 @@ use tokio::runtime::{self, Runtime};
 use crossbeam_channel::{self, Receiver, Select};
 use failure::Fallible;
 use slog::{self, o, Drain};
-// use slog_async;
-use slog_scope::{error, info, warn};
-// use slog_term;
+use slog_scope::{debug, error, info, warn};
 
 use rustberry::config::Config;
 use rustberry::effects::{Interpreter, ProdInterpreter};
@@ -160,6 +158,7 @@ impl App {
         let commands = self.event_transformer.transform(input_event);
 
         for cmd in commands {
+            debug!("Handling command {:?}", cmd);
             match cmd {
                 Command::Shutdown => {
                     if let Err(err) = self.interpreter.generic_command(
