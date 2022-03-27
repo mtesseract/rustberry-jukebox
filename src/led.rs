@@ -102,7 +102,7 @@ impl Blinker {
                 state.is_on
             };
 
-            Self::run(interpreter, state, cmd).await;
+            Self::run(Arc::clone(&interpreter), Arc::clone(&state), cmd).await;
 
             let cmd = if is_on {
                 Cmd::On(Duration::from_millis(0))

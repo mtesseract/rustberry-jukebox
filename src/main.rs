@@ -209,7 +209,7 @@ impl App {
                     info!("Locking Jukebox");
                     let led_spec: Vec<led::Cmd> = (1..10)
                         .map(|x| x * 10)
-                        .map(|i| {
+                        .map(|_i| {
                             vec![
                                 led::Cmd::On(Duration::from_millis(100)),
                                 led::Cmd::Off(Duration::from_millis(50)),
@@ -224,7 +224,7 @@ impl App {
                     info!("Unlocking Jukebox");
                     let led_spec: Vec<led::Cmd> = (1..10)
                         .map(|x| (11 - x) * 10)
-                        .map(|i| {
+                        .map(|_i| {
                             vec![
                                 led::Cmd::On(Duration::from_millis(100)),
                                 led::Cmd::Off(Duration::from_millis(50)),

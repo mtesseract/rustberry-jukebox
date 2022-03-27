@@ -52,13 +52,150 @@ pub mod cdev_gpio {
     use std::convert::From;
     use std::sync::{Arc, RwLock};
 
-    use gpio_cdev::{
-        Chip, EventRequestFlags, EventType, Line, LineEvent, LineEventHandle, LineRequestFlags,
-    };
+    use gpio_cdev::{Chip, EventRequestFlags, EventType, Line, LineEvent, LineRequestFlags};
     use serde::Deserialize;
     use slog_scope::{debug, error, info};
 
     use super::*;
+
+    struct EventEmitter<T> {
+        last: Option<EventType>,
+        msg_transformer: Arc<dyn Fn(ButtonEvent) -> Option<T> + 'static + Send>,
+        tx: Sender<T>,
+        ev_pressed: ButtonEvent,
+        ev_released: ButtonEvent,
+    }
+
+    impl<T: std::fmt::Debug> EventEmitter<T> {
+        pub fn new<F>(
+            msg_transformer: Arc<F>,
+            ev_pressed: ButtonEvent,
+            ev_released: ButtonEvent,
+            tx: Sender<T>,
+        ) -> Self
+        where
+            F: Fn(ButtonEvent) -> Option<T> + 'static + Send,
+        {
+            Self {
+                last: None,
+                msg_transformer,
+                tx,
+                ev_pressed,
+                ev_released,
+            }
+        }
+
+        pub fn emit(&mut self, event: &LineEvent) -> Fallible<()> {
+            match (event.event_type(), self.last) {
+                (a, Some(b)) if a == b => {
+                    debug!("EventEmitter: ignoring duplicate event {:?}", a);
+                    Ok(())
+                }
+                (a, _) => {
+                    self.last = Some(a);
+                    let aa = if a == EventType::FallingEdge {
+                        self.ev_pressed
+                    } else {
+                        self.ev_released
+                    };
+                    let t = (self.msg_transformer)(aa);
+                    if t.is_none() {
+                        debug!("EventEmitter: message transformer skips event {:?}", aa);
+                        return Ok(());
+                    }
+                    let t = t.unwrap();
+                    debug!("EventEmitter: emitting event {:?}", t);
+                    self.tx.send(t).unwrap();
+                    Ok(())
+                }
+            }
+        }
+    }
+
+    struct EventReader {
+        events: Arc<RwLock<Vec<LineEvent>>>,
+        notif: Arc<RwLock<Option<Sender<()>>>>,
+        last: Option<LineEvent>,
+    }
+
+    impl EventReader {
+        pub fn new(line: Line, line_id: u32) -> Fallible<Self> {
+            let events = Arc::new(RwLock::new(Vec::new()));
+            let events_cp = Arc::clone(&events);
+            let notif: Arc<RwLock<Option<Sender<()>>>> = Arc::new(RwLock::new(None));
+            let notif_cp = Arc::clone(&notif);
+            let mut line_event_handle = line
+                .events(
+                    LineRequestFlags::INPUT,
+                    EventRequestFlags::BOTH_EDGES,
+                    "read-input",
+                )
+                .map_err(|err| {
+                    Error::IO(format!(
+                        "Failed to request events from GPIO line {}: {}",
+                        line_id, err
+                    ))
+                })?;
+
+            let f = move || loop {
+                let event = match line_event_handle.get_event() {
+                    Err(err) => {
+                        error!("Ignoring erronous event on line {}: {}", line_id, err);
+                        continue;
+                    }
+                    Ok(ev) => ev,
+                };
+                debug!(
+                    "EventReader: received event {:?} on line {}",
+                    event.event_type(),
+                    line_id,
+                );
+                {
+                    let mut w_events = events_cp.write().unwrap();
+                    w_events.push(event);
+                }
+                {
+                    // Try to send notification.
+                    let mut w_notif = notif_cp.write().unwrap();
+                    if let Some(tx) = &*w_notif {
+                        let _ = tx.send(()); // Fine to fail due to channel not being connected anymore.
+                        *w_notif = None;
+                    }
+                }
+            };
+            std::thread::spawn(f);
+            let last = None;
+            Ok(Self {
+                events,
+                notif,
+                last,
+            })
+        }
+
+        pub fn next(&self) -> Fallible<LineEvent> {
+            let (tx, rx) = crossbeam_channel::bounded(1);
+            {
+                // Register channel for being notified about new events.
+                let mut w_notif = self.notif.write().unwrap();
+                *w_notif = Some(tx);
+            }
+            let mut w_events = self.events.write().unwrap();
+            if w_events.is_empty() {
+                let _ = rx.recv().unwrap();
+            }
+            Ok(w_events.remove(0))
+        }
+
+        pub fn last(&mut self) -> Option<LineEvent> {
+            let last = self.last.take();
+            return last;
+        }
+
+        pub fn skip_past(&self) {
+            let mut w_events = self.events.write().unwrap();
+            w_events.clear();
+        }
+    }
 
     #[derive(Debug, Clone)]
     pub struct CdevGpio<T: Clone> {
@@ -74,32 +211,6 @@ pub mod cdev_gpio {
         volume_up_pin: Option<u32>,
         volume_down_pin: Option<u32>,
         pause_pin: Option<u32>,
-    }
-
-    struct BufferedLineEventHandle {
-        buffered: Vec<LineEvent>,
-        line_event_handle: LineEventHandle,
-    }
-
-    impl BufferedLineEventHandle {
-        pub fn unread(&mut self, event: LineEvent) {
-            self.buffered.push(event);
-        }
-        pub fn next(&mut self) -> Fallible<LineEvent> {
-            // if let Some(e) = self.buffered.first_mut() {
-            //     return Ok(*e);
-            // }
-            if !self.buffered.is_empty() {
-                return Ok(self.buffered.remove(0));
-            }
-            return Ok(self.line_event_handle.get_event()?);
-        }
-        pub fn new(leh: LineEventHandle) -> Self {
-            return Self {
-                buffered: Vec::new(),
-                line_event_handle: leh,
-            };
-        }
     }
 
     impl From<EnvConfig> for Config {
@@ -121,7 +232,7 @@ pub mod cdev_gpio {
         }
     }
 
-    impl<T: Clone + Send + 'static> CdevGpio<T> {
+    impl<T: std::fmt::Debug + Clone + Send + 'static> CdevGpio<T> {
         pub fn new_from_env<F>(msg_transformer: F) -> Fallible<Handle<T>>
         where
             F: Fn(ButtonEvent) -> Option<T> + 'static + Send + Sync,
@@ -179,147 +290,50 @@ pub mod cdev_gpio {
         where
             F: Fn(ButtonEvent) -> Option<T> + 'static + Send,
         {
-            // let mut n_received_during_shutdown_delay = 0;
-            let mut ts = std::time::Instant::now();
-            let epsilon = Duration::from_millis(500);
-            const PRESS_EVENT_TYPE: EventType = EventType::FallingEdge;
-            const RELEASE_EVENT_TYPE: EventType = EventType::RisingEdge;
-
-            info!("Listening for GPIO events on line {}", line_id);
-
-            let mut line_event_handle = line
-                .events(
-                    LineRequestFlags::INPUT,
-                    EventRequestFlags::BOTH_EDGES,
-                    "read-input",
-                )
-                .map_err(|err| {
-                    Error::IO(format!(
-                        "Failed to request events from GPIO line {}: {}",
-                        line_id, err
-                    ))
-                })?;
-
-            let mut pressed: bool = false;
+            let mut er = EventReader::new(line, line_id)?;
+            let mut ee = EventEmitter::new(msg_transformer, press_ev, release_ev, self.tx.clone());
+            let mut skip = false;
+            let epsilon = Duration::from_millis(100);
 
             loop {
-                // before we block on reading events, we compare the last state (realized by emitting events) with the current state of the line
-                // to check if the inconsistency requires us to emit another event.
-                // this case occurs when the button is pressed very shortly, resulting in press- and release-event being emitted quickly after
-                // one another.
-                let current = match line_event_handle.get_value() {
-                    Err(err) => {
-                        error!("Failed to get current value of line {}: {}", line_id, err);
-                        continue;
-                    }
-                    Ok(c) => c == 0,
-                };
-
-                if !current {
-                    if pressed {
-                        // Inconsistency: Last state is pressed and the current value of the line is inactive.
-                        // Emit release event!
-                        debug!("Emitting release event on line {}", line_id);
-                        if let Some(ev) = msg_transformer(release_ev) {
-                            if let Err(err) = self.tx.send(ev) {
-                                error!(
-                                    "Failed to transmit GPIO event ... derived from {:?}: {}",
-                                    release_ev, err
-                                );
-                                continue;
-                            }
-                            pressed = false;
-                        }
-                    }
+                let ev = if skip {
+                    debug!("run_single_event_listener: skip=true");
+                    skip = false;
+                    std::thread::sleep(epsilon);
+                    er.skip_past();
+                    er.last().unwrap()
                 } else {
-                    if !pressed {
-                        // Inconsistency: Last state is released and the current value of the line is active.
-                        // Emit press event.
-                        debug!("Emitting press event on line {}", line_id);
-                        if let Some(ev) = msg_transformer(press_ev) {
-                            if let Err(err) = self.tx.send(ev) {
-                                error!(
-                                    "Failed to transmit GPIO event ... derived from {:?}: {}",
-                                    press_ev, err
-                                );
-                                continue;
-                            }
-                            pressed = true;
-                        }
-                    }
-                }
-
-                // Any inconsistencies resolved, retrieve next event in a blocking way.
-                // Ok to block here since the current state of the line reflects what has last been emitted as an event.
-                let event = match line_event_handle.get_event() {
-                    Err(err) => {
-                        error!("Ignoring erronous event on line {}: {}", line_id, err);
-                        continue;
-                    }
-                    Ok(ev) => ev,
+                    debug!("run_single_event_listener: skip=false");
+                    skip = true;
+                    er.next().unwrap()
                 };
-
-                if ts.elapsed() < epsilon {
-                    // We have a timestamp already. This denotes the fact that we have received a "primary" event (at that timestamp) recently.
-                    //
-                    // another event occured very shortly after the last timestamp, this could be a noise event.
-                    // we do not emit any events for this
-                    debug!("Ignoring GPIO event {:?} on line {}", event, line_id);
-                    continue;
-                } else {
-                    debug!("Received GPIO event {:?} on line {}", event, line_id);
-
-                    // We are outside of an epsilon-timeframe around some "primary" event.
-                    // Regard the new event as being a new primary event.
-                    // Emit event for it.
-                    ts = std::time::Instant::now();
-
-                    let event_type = event.event_type();
-                    if event_type == PRESS_EVENT_TYPE {
-                        if let Some(ev) = msg_transformer(press_ev) {
-                            if let Err(err) = self.tx.send(ev) {
-                                error!(
-                                    "Failed to transmit GPIO event ... derived from {:?}: {}",
-                                    press_ev, err
-                                );
-                            }
-                            pressed = true;
-                        }
-                    } else if event_type == RELEASE_EVENT_TYPE {
-                        if let Some(ev) = msg_transformer(release_ev) {
-                            if let Err(err) = self.tx.send(ev) {
-                                error!(
-                                    "Failed to transmit GPIO event ... derived from {:?}: {}",
-                                    release_ev, err
-                                );
-                            }
-                            pressed = false;
-                        }
-                    }
+                debug!("Event to emit: {:?}", ev);
+                if let Err(err) = ee.emit(&ev) {
+                    error!("Failed to emit event {:?}: {}", ev, err);
                 }
-
-                // TODO, reenable this logic:
-                //
-                // if press_ev == ButtonEvent::ShutdownPress {
-                //     if let Some(start_time) = self.config.start_time {
-                //         let now = Instant::now();
-                //         let dt: Duration = now - start_time;
-                //         if dt < DELAY_BEFORE_ACCEPTING_SHUTDOWN_COMMANDS {
-                //             warn!(
-                //                 "Ignoring shutdown event (time elapsed since start: {:?})",
-                //                 dt
-                //             );
-                //             n_received_during_shutdown_delay += 1;
-                //             continue;
-                //         }
-                //     }
-
-                //     if n_received_during_shutdown_delay > 10 {
-                //         warn!("Received too many shutdown events right after startup, shutdown functionality has been disabled");
-                //         continue;
-                //     }
-                // }
             }
+
+            // TODO, reenable this logic:
+            //
+            // if press_ev == ButtonEvent::ShutdownPress {
+            //     if let Some(start_time) = self.config.start_time {
+            //         let now = Instant::now();
+            //         let dt: Duration = now - start_time;
+            //         if dt < DELAY_BEFORE_ACCEPTING_SHUTDOWN_COMMANDS {
+            //             warn!(
+            //                 "Ignoring shutdown event (time elapsed since start: {:?})",
+            //                 dt
+            //             );
+            //             n_received_during_shutdown_delay += 1;
+            //             continue;
+            //         }
+            //     }
+
+            //     if n_received_during_shutdown_delay > 10 {
+            //         warn!("Received too many shutdown events right after startup, shutdown functionality has been disabled");
+            //         continue;
+            //     }
+            // }
         }
 
         fn run<F>(&mut self, msg_transformer: F) -> Fallible<()>
