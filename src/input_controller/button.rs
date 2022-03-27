@@ -85,8 +85,8 @@ pub mod cdev_gpio {
             }
         }
 
-        pub fn emit(&mut self, event: &LineEvent) -> Fallible<()> {
-            match (event.event_type(), self.last) {
+        pub fn emit(&mut self, event: EventType) -> Fallible<()> {
+            match (event, self.last) {
                 (a, Some(b)) if a == b => {
                     debug!("EventEmitter: ignoring duplicate event {:?}", a);
                     Ok(())
@@ -115,7 +115,7 @@ pub mod cdev_gpio {
     struct EventReader {
         events: Arc<RwLock<Vec<LineEvent>>>,
         notif: Arc<RwLock<Option<Sender<()>>>>,
-        last: Option<LineEvent>,
+        last: Arc<RwLock<Option<EventType>>>,
     }
 
     impl EventReader {
@@ -124,6 +124,8 @@ pub mod cdev_gpio {
             let events_cp = Arc::clone(&events);
             let notif: Arc<RwLock<Option<Sender<()>>>> = Arc::new(RwLock::new(None));
             let notif_cp = Arc::clone(&notif);
+            let last = Arc::new(RwLock::new(None));
+            let last_cp = Arc::clone(&last);
             let mut line_event_handle = line
                 .events(
                     LineRequestFlags::INPUT,
@@ -150,9 +152,14 @@ pub mod cdev_gpio {
                     event.event_type(),
                     line_id,
                 );
+                let et = event.event_type();
                 {
                     let mut w_events = events_cp.write().unwrap();
                     w_events.push(event);
+                }
+                {
+                    let mut w_last = last_cp.write().unwrap();
+                    *w_last = Some(et);
                 }
                 {
                     // Try to send notification.
@@ -164,7 +171,6 @@ pub mod cdev_gpio {
                 }
             };
             std::thread::spawn(f);
-            let last = None;
             Ok(Self {
                 events,
                 notif,
@@ -172,7 +178,7 @@ pub mod cdev_gpio {
             })
         }
 
-        pub fn next(&self) -> Fallible<LineEvent> {
+        pub fn next(&self) -> Fallible<EventType> {
             let (tx, rx) = crossbeam_channel::bounded(1);
             {
                 // Register channel for being notified about new events.
@@ -190,13 +196,14 @@ pub mod cdev_gpio {
 
             {
                 let mut w_events = self.events.write().unwrap();
-                Ok(w_events.remove(0))
+                let ev = w_events.remove(0);
+                Ok(ev.event_type())
             }
         }
 
-        pub fn last(&mut self) -> Option<LineEvent> {
-            let last = self.last.take();
-            return last;
+        pub fn last(&mut self) -> Option<EventType> {
+            let mut w_last = self.last.write().unwrap();
+            w_last.take()
         }
 
         pub fn skip_past(&self) {
@@ -316,7 +323,7 @@ pub mod cdev_gpio {
                     er.next().unwrap()
                 };
                 debug!("Event to emit: {:?}", ev);
-                if let Err(err) = ee.emit(&ev) {
+                if let Err(err) = ee.emit(ev) {
                     error!("Failed to emit event {:?}: {}", ev, err);
                 }
             }
