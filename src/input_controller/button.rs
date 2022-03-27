@@ -179,11 +179,19 @@ pub mod cdev_gpio {
                 let mut w_notif = self.notif.write().unwrap();
                 *w_notif = Some(tx);
             }
-            let mut w_events = self.events.write().unwrap();
-            if w_events.is_empty() {
+            let is_empty = {
+                let r_events = self.events.read().unwrap();
+                r_events.is_empty()
+            };
+
+            if is_empty {
                 let _ = rx.recv().unwrap();
             }
-            Ok(w_events.remove(0))
+
+            {
+                let mut w_events = self.events.write().unwrap();
+                Ok(w_events.remove(0))
+            }
         }
 
         pub fn last(&mut self) -> Option<LineEvent> {
