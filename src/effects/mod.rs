@@ -22,7 +22,7 @@ use async_trait::async_trait;
 use failure::Fallible;
 use http_player::HttpPlayer;
 use led::{Led, LedController};
-use slog_scope::{info, warn};
+use slog_scope::{debug, info, warn};
 use spotify::player::SpotifyPlayer;
 use std::process::Command;
 
@@ -104,15 +104,15 @@ impl Interpreter for ProdInterpreter {
     // }
 
     fn led_on(&self) -> Fallible<()> {
-        info!("Switching LED on");
+        debug!("Switching LED on");
         self.led_controller.switch_on(Led::Playback)
     }
     fn led_off(&self) -> Fallible<()> {
-        info!("Switching LED off");
+        debug!("Switching LED off");
         self.led_controller.switch_off(Led::Playback)
     }
     fn generic_command(&self, cmd: String) -> Fallible<()> {
-        info!("Executing command '{}'", &cmd);
+        debug!("Executing command '{}'", &cmd);
         let res = Command::new("/bin/sh").arg("-c").arg(&cmd).status();
         match res {
             Ok(exit_status) => {

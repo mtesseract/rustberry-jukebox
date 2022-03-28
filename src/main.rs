@@ -86,7 +86,6 @@ impl App {
         config: Config,
         interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>>,
         blinker: Blinker,
-        // inputs: &[Receiver<Input>],
     ) -> Fallible<Self> {
         let player_config = player::Config {
             trigger_only_mode: config.trigger_only_mode,
@@ -100,7 +99,6 @@ impl App {
         let event_transformer = EventTransformer::new();
         let app = Self {
             config,
-            // inputs: inputs.to_vec(),
             player,
             interpreter,
             blinker,
@@ -109,7 +107,6 @@ impl App {
             event_transformer: event_transformer,
         };
 
-        // info!("Running in {} mode", if app.config.trigger_only_mode { "trigger-only" } else { "traditional" });
         Ok(app)
     }
 

@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use crossbeam_channel::{Receiver, Sender};
 use failure::Fallible;
 use serde::{Deserialize, Serialize};
-use slog_scope::{error, info};
+use slog_scope::{debug, error, info};
 use tokio::runtime;
 
 use crate::effects::Interpreter;
@@ -429,7 +429,7 @@ impl Player {
                             }
                         } else {
                             let pause_state = PauseState { pos: at };
-                            info!(
+                            debug!(
                                 "Same resource, not completed, continuing with pause state {:?}",
                                 &pause_state
                             );
@@ -578,7 +578,7 @@ impl Player {
                     err, &state
                 );
             } else {
-                info!("Player State Transition: {} -> {}", player.state, state);
+                debug!("Player State Transition: {} -> {}", player.state, state);
             }
             player.state = state;
         }

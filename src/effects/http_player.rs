@@ -25,7 +25,7 @@ pub struct HttpPlayer {
 }
 
 pub struct HttpPlaybackHandle {
-    tx: Sender<()>,
+    _tx: Sender<()>,
     sink: Arc<Sink>,
     basic_auth: Option<(String, String)>,
     url: String,
@@ -123,7 +123,7 @@ impl HttpPlayer {
             .unwrap();
 
         let handle = HttpPlaybackHandle {
-            tx,
+            _tx: tx,
             sink,
             basic_auth,
             url,

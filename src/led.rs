@@ -8,7 +8,7 @@ use tokio::runtime;
 use crate::effects::Interpreter;
 use failure::Fallible;
 use futures::future::AbortHandle;
-use slog_scope::info;
+use slog_scope::debug;
 
 struct State {
     is_on: bool,
@@ -54,7 +54,7 @@ impl Blinker {
         Box::pin(async move {
             match cmd {
                 Cmd::On(duration) => {
-                    info!("Blinker switches on");
+                    debug!("Blinker switches on");
                     let _ = interpreter.led_on();
                     {
                         let mut state = state.write().unwrap();
@@ -64,7 +64,7 @@ impl Blinker {
                     tokio::time::delay_for(duration).await;
                 }
                 Cmd::Off(duration) => {
-                    info!("Blinker switches off");
+                    debug!("Blinker switches off");
                     let _ = interpreter.led_off();
                     {
                         let mut state = state.write().unwrap();
@@ -73,13 +73,13 @@ impl Blinker {
                     tokio::time::delay_for(duration).await;
                 }
                 Cmd::Many(cmds) => {
-                    info!("Blinker processes Many");
+                    debug!("Blinker processes Many");
                     for cmd in &cmds {
                         Self::run(interpreter.clone(), Arc::clone(&state), cmd.clone()).await;
                     }
                 }
                 Cmd::Repeat(n, cmd) => {
-                    info!("Blinker processes Repeat (n = {})", n);
+                    debug!("Blinker processes Repeat (n = {})", n);
                     for _i in 0..n {
                         Self::run(interpreter.clone(), Arc::clone(&state), (*cmd).clone()).await;
                     }
@@ -116,16 +116,16 @@ impl Blinker {
     pub fn stop(&self) {
         let mut opt_abort_handle = self.abort_handle.borrow_mut();
         if let Some(ref abort_handle) = *opt_abort_handle {
-            info!("Terminating current blinking task");
+            debug!("Terminating current blinking task");
             abort_handle.abort();
             *opt_abort_handle = None;
         }
     }
 
     pub fn run_async(&self, spec: Cmd) {
-        info!("Blinker run_async()");
+        debug!("Blinker run_async()");
         if let Some(ref abort_handle) = *(self.abort_handle.borrow()) {
-            info!("Terminating current blinking task");
+            debug!("Terminating current blinking task");
             abort_handle.abort();
         }
         let interpreter = self.interpreter.clone();
@@ -134,7 +134,7 @@ impl Blinker {
             Self::run_and_reset(interpreter, state, spec).await
         });
         let _join_handle = self.rt.spawn(f);
-        info!("Created new blinking task");
+        debug!("Created new blinking task");
         *(self.abort_handle.borrow_mut()) = Some(handle);
     }
 }
