@@ -23,5 +23,8 @@ cp target/arm-unknown-linux-gnueabihf/release/jukeboxd _artifacts
 cargo build --bin jukeboxd --target=arm-unknown-linux-gnueabihf
 cp target/arm-unknown-linux-gnueabihf/debug/jukeboxd _artifacts/jukeboxd-debug
 
+cargo build --release --bin rustberry-write-spotify-uri --target=arm-unknown-linux-gnueabihf
+cp target/arm-unknown-linux-gnueabihf/release/rustberry-write-spotify-uri _artifacts/
+
 version=$(cargo pkgid | cut -d# -f2 | cut -d: -f2)
 echo "::set-output name=version::${version}"
