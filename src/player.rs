@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use crossbeam_channel::{Receiver, Sender};
 use failure::Fallible;
 use serde::{Deserialize, Serialize};
-use slog_scope::{error, info};
+use slog_scope::{debug, error, info};
 use tokio::runtime;
 
 use crate::effects::Interpreter;
@@ -429,7 +429,7 @@ impl Player {
                             }
                         } else {
                             let pause_state = PauseState { pos: at };
-                            info!(
+                            debug!(
                                 "Same resource, not completed, continuing with pause state {:?}",
                                 &pause_state
                             );
@@ -557,7 +557,13 @@ impl Player {
     async fn player_loop(mut player: Player) {
         let config = Arc::new(player.config.clone());
         loop {
-            let command = player.rx.recv().unwrap();
+            let res = player.rx.recv();
+            if res.is_err() {
+                info!("Terminating player loop");
+                break;
+            }
+
+            let command = res.unwrap();
             let mut state = player.state.clone();
             let res = Self::handle_command(
                 player.interpreter.clone(),
@@ -572,7 +578,7 @@ impl Player {
                     err, &state
                 );
             } else {
-                info!("Player State Transition: {} -> {}", player.state, state);
+                debug!("Player State Transition: {} -> {}", player.state, state);
             }
             player.state = state;
         }
@@ -650,7 +656,8 @@ mod test {
 
     #[test]
     fn player_plays_resource_on_playback_request() -> Fallible<()> {
-        let runtime = runtime::Builder::new_multi_thread()
+        let runtime = runtime::Builder::new()
+            .threaded_scheduler()
             .enable_all()
             .build()
             .unwrap();
@@ -679,6 +686,7 @@ mod test {
         for req in playback_requests.iter() {
             player_handle.playback(req.clone()).unwrap();
         }
+        drop(player_handle);
         let produced_effects: Vec<_> = effects_rx
             .iter()
             .filter(|x| x.is_spotify_effect())

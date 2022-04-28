@@ -56,8 +56,7 @@ jobs:
         id: package
         run: |
           cd _artifacts
-          tar czvf '../rustberry-jukebox-${{ steps.build-arm-unknown-linux-gnueabihf.outputs.version }}-${{ matrix.arch }}.tar.gz' \
-            jukeboxd
+          tar czvf '../rustberry-jukebox-${{ steps.build-arm-unknown-linux-gnueabihf.outputs.version }}-${{ matrix.arch }}.tar.gz' .
       - name: Create Release
         id: create_release
         uses: actions/create-release@v1
@@ -87,4 +86,4 @@ jobs:
         uses: actions/upload-artifact@v1
         with:
           name: rustberry-jukeboxd
-          path: _artifacts/jukeboxd
+          path: _artifacts

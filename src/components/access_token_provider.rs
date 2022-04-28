@@ -2,8 +2,7 @@ use std::sync::{Arc, RwLock};
 use std::thread;
 
 use failure::Fallible;
-// use gotham_derive::StateData;
-use slog_scope::{info, warn};
+use slog_scope::{debug, warn};
 
 use spotify_auth::request_fresh_token;
 
@@ -29,7 +28,7 @@ fn token_refresh_thread(
                 .map(|x| x.access_token)
             {
                 Ok(token) => {
-                    info!("Retrieved fresh access token"; "access_token" => &token);
+                    debug!("Retrieved fresh access token"; "access_token" => &token);
                     let mut access_token_write = access_token.write().unwrap();
                     *access_token_write = Some(token);
                 }

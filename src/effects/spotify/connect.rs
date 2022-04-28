@@ -2,7 +2,7 @@ use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
 
-use slog_scope::{error, info};
+use slog_scope::{debug, error, info};
 
 use crate::components::access_token_provider::AccessTokenProvider;
 
@@ -195,7 +195,7 @@ pub mod external_command {
                             error!("Failed to respawn Spotify Connector: {}", err);
                         } else {
                             let pid = self.child.read().unwrap().id();
-                            info!("Respawned new Spotify Connector (PID {})", pid);
+                            debug!("Respawned new Spotify Connector (PID {})", pid);
                         }
                     }
                     Ok(None) => {}
