@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+
+set -e
+
+locate_lib() {
+	lib="$1"
+	cat /etc/ld.so.conf.d/arm-linux-gnueabihf.conf | while read dir; do
+		if [[ -e "${dir}/${lib}" ]]; then
+			echo "${dir}/${lib}"
+			break
+		fi
+	done
+}
+
+copy_dyn_libs() {
+	binary="$1"
+	out="$2"
+	local lib_path=""
+	arm-linux-gnueabihf-objdump -x "${binary}" | grep NEEDED | awk '{ print $2 }' | while read lib; do
+		lib_path=$(locate_lib "${lib}")
+		if [[ -n "${lib_path}" ]]; then
+			cp "${lib_path}" "${out}"
+		else
+			echo "ERROR: ${lib} not found"
+		fi
+	done
+}
+
+copy_dyn_libs "$@"
+
