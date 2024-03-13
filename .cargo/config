@@ -1,0 +1,8 @@
+[build]
+
+[target.armv7-unknown-linux-gnueabihf]
+linker = "arm-linux-gnueabihf-gcc"
+
+[target.armv7-unknown-linux-gnueabihf.libasound2]
+rustc-link-lib = ["libasound2"]
+rustc-link-search = ["/usr/lib/arm-linux-gnueabihf"]
