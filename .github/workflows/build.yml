@@ -1,6 +1,9 @@
 name: build
 run-name: Build Jukeboxd
-on: [push]
+on:
+  push:
+    branches:
+      - master
 jobs:
   build-image: 
     runs-on: ubuntu-latest
