@@ -10,7 +10,7 @@ RUN cargo chef prepare --recipe-path recipe.json
 FROM --platform=$BUILDPLATFORM rust:1.74 AS builder
 RUN rustup target add aarch64-unknown-linux-gnu
 RUN cargo install cargo-chef
-RUN dpkg --add-architecture aarch64 && apt-get update
+RUN dpkg --add-architecture arm64 && apt-get update
 RUN apt-get update && \
 	apt-get -y install \
 		binutils-aarch64-linux-gnu \
@@ -18,8 +18,8 @@ RUN apt-get update && \
 		curl \
 		vim \
 		build-essential \
-		libasound2-dev:aarch64 \
-		pkg-config:aarch64
+		libasound2-dev:arm64 \
+		pkg-config:arm64
 ENV PKG_CONFIG_PATH="/usr/lib/aarch64-linux-gnu/pkgconfig"
 ENV PKG_CONFIG_ALLOW_CROSS="true"
 WORKDIR /proj
