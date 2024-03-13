@@ -1,0 +1,8 @@
+name: build
+run-name: Build Jukeboxd
+on: [push]
+jobs:
+  build-image: 
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
