@@ -4,7 +4,7 @@ set -e
 
 locate_lib() {
 	lib="$1"
-	cat /etc/ld.so.conf.d/arm-linux-gnueabihf.conf | while read dir; do
+	cat /etc/ld.so.conf.d/aarch64-linux-gnu.conf | while read dir; do
 		if [[ -e "${dir}/${lib}" ]]; then
 			echo "${dir}/${lib}"
 			break
