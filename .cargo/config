@@ -1,8 +1,16 @@
 [build]
 
+[target.aarch64-unknown-linux-gnu]
+linker = "aarcch64-linux-gnu-gcc"
+
 [target.armv7-unknown-linux-gnueabihf]
 linker = "arm-linux-gnueabihf-gcc"
 
 [target.armv7-unknown-linux-gnueabihf.libasound2]
 rustc-link-lib = ["libasound2"]
 rustc-link-search = ["/usr/lib/arm-linux-gnueabihf"]
+
+
+[target.aarch64-linux-gnu.libasound2]
+rustc-link-lib = ["libasound2"]
+rustc-link-search = ["/usr/lib/aarch64-linux-gnu"]
