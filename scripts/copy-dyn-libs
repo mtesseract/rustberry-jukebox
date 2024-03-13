@@ -16,7 +16,7 @@ copy_dyn_libs() {
 	binary="$1"
 	out="$2"
 	local lib_path=""
-	arm-linux-gnueabihf-objdump -x "${binary}" | grep NEEDED | awk '{ print $2 }' | while read lib; do
+	aarch64-linux-gnu-objdump -x "${binary}" | grep NEEDED | awk '{ print $2 }' | while read lib; do
 		lib_path=$(locate_lib "${lib}")
 		if [[ -n "${lib_path}" ]]; then
 			cp "${lib_path}" "${out}"
