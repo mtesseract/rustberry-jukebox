@@ -1,5 +1,6 @@
 use rustberry::components::access_token_provider::AccessTokenProvider;
 use rustberry::config::Config;
+use rustberry::effects::spotify::player::SpotifyConfig;
 use rustberry::effects::spotify::connect::external_command::ExternalCommand;
 use slog::{self, o, Drain};
 // use slog_async;
@@ -16,7 +17,7 @@ fn main() {
 }
 
 fn main_with_log() {
-    let config = envy::from_env::<Config>().unwrap();
+    let config = envy::from_env::<SpotifyConfig>().unwrap();
     let access_token_provider = AccessTokenProvider::new(
         &config.client_id,
         &config.client_secret,

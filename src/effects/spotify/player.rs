@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use failure::Fallible;
 use http::header::{self, AUTHORIZATION};
 use reqwest::Client;
-use serde::Serialize;
+use serde::{Deserialize,Serialize};
 use slog_scope::{error, info};
 
 use crate::components::access_token_provider::{self, AccessTokenProvider};
@@ -23,6 +23,14 @@ pub struct SpotifyPlayer {
     access_token_provider: Arc<AccessTokenProvider>,
     spotify_connector: Arc<Box<dyn SpotifyConnector + 'static + Sync + Send>>,
     device_name: Arc<String>,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct SpotifyConfig {
+   pub device_name: String,
+   pub client_id: String,
+   pub client_secret: String,
+   pub refresh_token: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -169,7 +177,8 @@ impl SpotifyPlaybackHandle {
 }
 
 impl SpotifyPlayer {
-    pub fn new(config: &Config) -> Fallible<Self> {
+    pub fn newFromEnv() -> Fallible<Self> {
+        let config = envy::from_env::<SpotifyConfig>()?;
         let http_client = Arc::new(Client::new());
         // Create Access Token Provider
         let access_token_provider = Arc::new(access_token_provider::AccessTokenProvider::new(
