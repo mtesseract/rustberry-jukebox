@@ -1,6 +1,9 @@
 name: build
 run-name: Build Jukeboxd
 on:
+  pull_request:
+    branches:
+      - master
   push:
     branches:
       - master
