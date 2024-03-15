@@ -19,6 +19,7 @@ spec:
       - name: jukeboxd 
         image: mtesseract/jukeboxd:pr-15
         imagePullPolicy: Always
+        command: ["sleep", "10m"]
         securityContext:
           privileged: true
         env:

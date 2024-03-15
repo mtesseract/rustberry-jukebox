@@ -138,7 +138,7 @@ impl App {
                         // If the operation turns out not to be ready, retry.
                         continue;
                     } else {
-                        error!("Failed to receive input event: {}", err);
+                        error!("Failed to receive input event on channel {}: {}", index, err);
                     }
                 }
                 Ok(input) => {
