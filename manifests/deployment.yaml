@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jukeboxd
+  namespace: koffer
+  labels:
+    app: jukeboxd
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jukeboxd
+  template:
+    metadata:
+      labels:
+        app: jukeboxd
+    spec:
+      containers:
+      - name: jukeboxd 
+        image: mtesseract/jukeboxd:pr-15
+        imagePullPolicy: Always
+        securityContext:
+          privileged: true
+        env:
+        - name: ENABLE_SPOTIFY
+          valueFrom:
+            configMapKeyRef:
+              name: jukeboxd
+              key: enable_spotify
+        - name: REFRESH_TOKEN
+          valueFrom:
+            configMapKeyRef:
+              name: jukeboxd
+              key: refresh_token
+        - name: TRIGGER_ONLY_MODE
+          valueFrom:
+            configMapKeyRef:
+              name: jukeboxd
+              key: trigger_only_mode
