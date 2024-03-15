@@ -16,10 +16,10 @@ pub struct Config {
     pub trigger_only_mode: bool,
 }
 
-func trigger_only_mode_default() -> bool {
+fn trigger_only_mode_default() -> bool {
     true
 }
 
-func enable_spotify_default() -> bool {
+fn enable_spotify_default() -> bool {
     false
 }
