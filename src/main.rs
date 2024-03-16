@@ -139,6 +139,9 @@ impl App {
                         continue;
                     } else {
                         error!("Failed to receive input event on channel {}: {}", index, err);
+                        // remove the channel.
+                        warn!("Not watching input channel {} any longer", index);
+                        sel.remove(index);
                     }
                 }
                 Ok(input) => {
