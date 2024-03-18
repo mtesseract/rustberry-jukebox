@@ -38,3 +38,10 @@ spec:
             configMapKeyRef:
               name: jukeboxd
               key: trigger_only_mode
+        volumeMounts:
+          - mountPath: /mnt/jukebox-drive
+            name: jukebox-drive
+      volumes:
+        - name: jukebox-drive
+          persistentVolumeClaim:
+            claimName: jukebox-drive
