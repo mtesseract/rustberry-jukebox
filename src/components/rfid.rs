@@ -4,7 +4,8 @@ use spidev::{SpiModeFlags, Spidev, SpidevOptions};
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 
-use rfid_rs::{picc, Uid, MFRC522};
+// use rfid_rs::{picc, Uid, MFRC522};
+use mfrc522::{picc, Uid, MFRC522};
 
 #[derive(Clone)]
 pub struct RfidController {
@@ -16,29 +17,13 @@ pub struct Tag {
     pub mfrc522: Arc<Mutex<MFRC522>>,
 }
 
-// impl Drop for TagReader {
-//     fn drop(&mut self) {
-//         let mut mfrc522 = self.mfrc522.lock().unwrap();
-//         if let Err(err) = mfrc522.halt_a() {
-//             error!("Could not halt MFRC522: {:?}", err);
-//         }
-//         if let Err(err) = mfrc522.stop_crypto1() {
-//             error!("Could not stop crypto1 for MFRC522: {:?}", err);
-//         }
-//     }
-// }
+impl Tag {
+    pub fn pretty_uid(&self) -> String {
+        let uid = self.uid.bytes
 
-// impl Drop for TagWriter {
-//     fn drop(&mut self) {
-//         let mut mfrc522 = self.mfrc522.lock().unwrap();
-//         if let Err(err) = mfrc522.halt_a() {
-//             error!("Could not halt MFRC522: {:?}", err);
-//         }
-//         if let Err(err) = mfrc522.stop_crypto1() {
-//             error!("Could not stop crypto1 for MFRC522: {:?}", err);
-//         }
-//     }
-// }
+
+    }
+}
 
 pub struct TagReader {
     pub uid: Arc<Uid>,
