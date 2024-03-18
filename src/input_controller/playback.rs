@@ -79,6 +79,7 @@ pub mod rfid {
                         let current_uid = format!("{:?}", tag.uid);
                         if last_uid != Some(current_uid.clone()) {
                             // new tag!
+                            info!("Seen RFID Tag {}", current_uid);
                             if let Err(err) = Self::handle_tag(&tag, &msg_transformer, &self.tx) {
                                 error!("Failed to handle tag: {}", err);
                                 std::thread::sleep(std::time::Duration::from_millis(80));
