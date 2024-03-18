@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jukeboxd
+  namespace: koffer
+data:
+  enable_spotify: "false"
+  refresh_token: ""
+  client_id: ""
+  client_secret: ""
+  device_name: ""
+  post_init_command: ""
+  shutdown_command: ""
+  volume_up_command: ""
+  volume_down_command: ""
+  trigger_only_mode: ""
+

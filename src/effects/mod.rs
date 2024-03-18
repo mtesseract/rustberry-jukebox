@@ -40,7 +40,7 @@ pub enum Effects {
 }
 
 pub struct ProdInterpreter {
-    spotify_player: SpotifyPlayer,
+    spotify_player: Option<SpotifyPlayer>,
     http_player: HttpPlayer,
     led_controller: Arc<Box<dyn LedController + 'static + Send + Sync>>,
     _config: Config,
@@ -64,7 +64,9 @@ pub trait Interpreter {
 #[async_trait]
 impl Interpreter for ProdInterpreter {
     fn wait_until_ready(&self) -> Fallible<()> {
-        self.spotify_player.wait_until_ready()?;
+        if let Some(ref spotify_player) = self.spotify_player {
+            spotify_player.wait_until_ready()?;
+        }
         Ok(())
     }
 
@@ -75,12 +77,15 @@ impl Interpreter for ProdInterpreter {
     ) -> Fallible<DynPlaybackHandle> {
         use PlaybackResource::*;
         match res {
-            SpotifyUri(uri) => self
-                .spotify_player
-                .start_playback(&uri, pause_state)
+            SpotifyUri(uri) => {
+                if let Some(ref spotify_player) = self.spotify_player {
+                spotify_player.start_playback(&uri, pause_state)
                 .await
-                .map(|x| Box::new(x) as DynPlaybackHandle),
-            // .map_err(|err| err.into()),
+                .map(|x| Box::new(x) as DynPlaybackHandle)
+                } else {
+                    Err(failure::err_msg("Spotify Player not available"))
+                }
+            }
             Http(url) => self
                 .http_player
                 .start_playback(&url, pause_state)
@@ -133,7 +138,10 @@ impl ProdInterpreter {
         let config = config.clone();
         let led_controller = Arc::new(Box::new(led::gpio_cdev::GpioCdev::new()?)
             as Box<dyn LedController + 'static + Send + Sync>);
-        let spotify_player = SpotifyPlayer::new(&config)?;
+        let mut spotify_player: Option<SpotifyPlayer> = None;
+        if config.enable_spotify {
+            spotify_player = Some(SpotifyPlayer::newFromEnv()?);
+        }
         let http_player = HttpPlayer::new()?;
         Ok(ProdInterpreter {
             spotify_player,

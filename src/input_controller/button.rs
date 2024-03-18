@@ -81,7 +81,7 @@ pub mod cdev_gpio {
         where
             F: Fn(Command) -> Option<T> + 'static + Send + Sync,
         {
-            info!("Using CdevGpio based in Button Controller");
+            info!("Using CdevGpio based Button Controller");
             let env_config = EnvConfig::new_from_env()?;
             let config: Config = env_config.into();
             let mut map = HashMap::new();

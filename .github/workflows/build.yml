@@ -1,6 +1,9 @@
 name: build
 run-name: Build Jukeboxd
 on:
+  pull_request:
+    branches:
+      - master
   push:
     branches:
       - master
@@ -34,6 +37,6 @@ jobs:
         with:
           context: .
           platforms: linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
+          push: true # ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

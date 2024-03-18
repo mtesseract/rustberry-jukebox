@@ -27,7 +27,7 @@ fn main() -> Fallible<()> {
 
 fn main_with_log() -> Fallible<()> {
     let config = envy::from_env::<Config>()?;
-    info!("Configuration"; o!("device_name" => &config.device_name));
+    // info!("Configuration"; o!("device_name" => &config.device_name));
 
     let runtime = runtime::Builder::new()
         .threaded_scheduler()
@@ -138,7 +138,10 @@ impl App {
                         // If the operation turns out not to be ready, retry.
                         continue;
                     } else {
-                        error!("Failed to receive input event: {}", err);
+                        error!("Failed to receive input event on channel {}: {}", index, err);
+                        // remove the channel.
+                        warn!("Not watching input channel {} any longer", index);
+                        sel.remove(index);
                     }
                 }
                 Ok(input) => {
@@ -209,9 +212,9 @@ mod test {
         let (_effects_tx, effects_rx) = crossbeam_channel::bounded(10);
         let config: Config = Config {
             refresh_token: "token".to_string(),
-            client_id: "client".to_string(),
-            client_secret: "secret".to_string(),
-            device_name: "device".to_string(),
+            client_id: Some("client".to_string()),
+            client_secret: Some("secret".to_string()),
+            device_name: Some("device".to_string()),
             post_init_command: None,
             shutdown_command: None,
             volume_up_command: None,
