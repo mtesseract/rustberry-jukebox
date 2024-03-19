@@ -36,8 +36,12 @@ RUN rm -rf out && \
 	./scripts/copy-dyn-libs target/aarch64-unknown-linux-gnu/debug/jukeboxd out/lib && \
 	aarch64-linux-gnu-strip out/bin/jukeboxd
 
+FROM --platform=linux/arm64/v8 alpine:3.16.9 AS pre-runtime
+RUN apk add alsa-utils
+
 FROM --platform=linux/arm64/v8 alpine:3.16.9 AS runtime
 COPY --from=builder /proj/out/ /usr/local
 COPY --from=builder /lib/ld-linux-aarch64.so* /lib
+COPY --from=pre-runtime /usr/bin/amixer /usr/local/bin
 ENV LD_LIBRARY_PATH=/usr/local/lib
 ENTRYPOINT ["/usr/local/bin/jukeboxd"]
