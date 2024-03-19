@@ -5,9 +5,7 @@ use tokio::runtime::{self, Runtime};
 use crossbeam_channel::{self, Receiver, Select};
 use failure::Fallible;
 use slog::{self, o, Drain};
-// use slog_async;
 use slog_scope::{error, info, warn};
-// use slog_term;
 
 use rustberry::config::Config;
 use rustberry::effects::{Interpreter, ProdInterpreter};
