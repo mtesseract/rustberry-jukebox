@@ -23,6 +23,11 @@ spec:
         securityContext:
           privileged: true
         env:
+        - name: TAG_MAPPER_CONFIGURATION_FILE:
+          valueFrom:
+            configMapKeyRef:
+              name: jukeboxd
+              key: tag_mapper_configuration_file
         - name: ENABLE_SPOTIFY
           valueFrom:
             configMapKeyRef:

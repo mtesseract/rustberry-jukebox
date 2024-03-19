@@ -52,7 +52,6 @@ impl RfidController {
         let itf = SpiInterface::new(spi);
         let mut mfrc522: Mfrc522<SpiInterface<ExclusiveDevice<SpidevBus, SysfsPin, Delay>, mfrc522::comm::blocking::spi::DummyDelay>, Initialized> = Mfrc522::new(itf).init()?;
 
-        // let f: Result<u8, mfrc522::error::Error<DeviceError<hal::SPIError, hal::SysfsPinError>>> = mfrc522.version;
         let vers = mfrc522.version()?;
 
         info!("mfrc522 version: 0x{:x}", vers);

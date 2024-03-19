@@ -14,6 +14,7 @@ pub struct Config {
     pub volume_down_command: Option<String>,
     #[serde(default = "trigger_only_mode_default")]
     pub trigger_only_mode: bool,
+    pub tag_mapper_configuration_file: String,
 }
 
 fn trigger_only_mode_default() -> bool {

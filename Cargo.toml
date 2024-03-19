@@ -16,6 +16,7 @@ linux-embedded-hal = "0.4.0"
 embedded-hal-bus = "0.1.0"
 embedded-error = "0.6.0"
 anyhow = "1.0.81"
+serde_yaml = "0.9.33"
 
 http = "0.2.1"
 gotham = "0.4.0"

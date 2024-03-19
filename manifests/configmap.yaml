@@ -14,4 +14,4 @@ data:
   volume_up_command: ""
   volume_down_command: ""
   trigger_only_mode: ""
-
+  tag_mapper_configuration_file: "/mnt/jukebox-drive/conf/tag-mapper.yaml"
