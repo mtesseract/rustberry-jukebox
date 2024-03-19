@@ -177,7 +177,7 @@ impl SpotifyPlaybackHandle {
 }
 
 impl SpotifyPlayer {
-    pub fn newFromEnv() -> Fallible<Self> {
+    pub fn new_from_env() -> Fallible<Self> {
         let config = envy::from_env::<SpotifyConfig>()?;
         let http_client = Arc::new(Client::new());
         // Create Access Token Provider

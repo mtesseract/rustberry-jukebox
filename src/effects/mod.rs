@@ -141,7 +141,7 @@ impl ProdInterpreter {
             as Box<dyn LedController + 'static + Send + Sync>);
         let mut spotify_player: Option<SpotifyPlayer> = None;
         if config.enable_spotify {
-            spotify_player = Some(SpotifyPlayer::newFromEnv()?);
+            spotify_player = Some(SpotifyPlayer::new_from_env()?);
         }
         let http_player = HttpPlayer::new()?;
         Ok(ProdInterpreter {
