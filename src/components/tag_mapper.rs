@@ -1,9 +1,9 @@
-use std::fs;
-use std::collections::HashMap;
-use serde::Deserialize;
 use failure::Fallible;
-use std::sync::{Arc,RwLock};
+use serde::Deserialize;
 use slog_scope::info;
+use std::collections::HashMap;
+use std::fs;
+use std::sync::{Arc, RwLock};
 
 type TagID = String;
 type FilePath = String;
@@ -20,15 +20,13 @@ pub struct TagMapper {
 
 #[derive(Debug, Deserialize)]
 pub struct TagMapperConfiguration {
-    mappings: HashMap<TagID, TagConf>
+    mappings: HashMap<TagID, TagConf>,
 }
 
 impl TagMapperConfiguration {
-    fn new()-> Self {
+    fn new() -> Self {
         let mappings = HashMap::new();
-        TagMapperConfiguration {
-            mappings,
-        }
+        TagMapperConfiguration { mappings }
     }
 
     fn debug_dump(&self) {
@@ -71,7 +69,7 @@ impl TagMapper {
 
     pub fn lookup(&self, tag_id: &TagID) -> Option<TagConf> {
         let r = self.conf.read().unwrap();
-        return r.mappings.get(tag_id).cloned()
+        return r.mappings.get(tag_id).cloned();
     }
 
     pub fn debug_dump(&self) {

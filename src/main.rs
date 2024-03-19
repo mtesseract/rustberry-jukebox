@@ -7,12 +7,12 @@ use failure::Fallible;
 use slog::{self, o, Drain};
 use slog_scope::{error, info, warn};
 
+use rustberry::components::tag_mapper::TagMapper;
 use rustberry::config::Config;
 use rustberry::effects::{Interpreter, ProdInterpreter};
 use rustberry::input_controller::{button, playback, Input};
 use rustberry::led::{self, Blinker};
 use rustberry::player::{self, PlaybackRequest, Player};
-use rustberry::components::tag_mapper::TagMapper;
 
 fn main() -> Fallible<()> {
     let decorator = slog_term::TermDecorator::new().build();
@@ -57,7 +57,7 @@ fn main_with_log() -> Fallible<()> {
 
     let tag_mapper = TagMapper::new_initialized(&config.tag_mapper_configuration_file)?;
     tag_mapper.debug_dump();
-    
+
     // Execute Application Logic, producing Effects.
     let application = App::new(
         runtime,

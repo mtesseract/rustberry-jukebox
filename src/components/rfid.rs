@@ -6,8 +6,8 @@ use std::sync::{Arc, Mutex};
 use embedded_hal_1 as embedded_hal;
 use linux_embedded_hal as hal;
 
-use embedded_hal::spi::Error as SPIError;
 use embedded_hal::delay::DelayNs;
+use embedded_hal::spi::Error as SPIError;
 use embedded_hal_bus::spi::{DeviceError, ExclusiveDevice};
 use hal::spidev::{SpiModeFlags, SpidevOptions};
 use hal::{Delay, SpidevBus, SysfsPin};
@@ -52,6 +52,13 @@ impl RfidController {
         let itf = SpiInterface::new(spi);
         let mut mfrc522: Mfrc522<SpiInterface<ExclusiveDevice<SpidevBus, SysfsPin, Delay>, mfrc522::comm::blocking::spi::DummyDelay>, Initialized> = Mfrc522::new(itf).init()?;
 
+        // // Use your HAL to create an SPI device that implements the embedded-hal `SpiDevice` trait.
+        // // This device manages the SPI bus and CS pin.
+        // let spi = spi::Spi;
+
+        // let itf = SpiInterface::new(spi);
+        // let mut mfrc522 = Mfrc522::new(itf).init().unwrap();
+
         let vers = mfrc522.version()?;
 
         info!("mfrc522 version: 0x{:x}", vers);
@@ -76,4 +83,3 @@ impl RfidController {
         }
     }
 }
-
