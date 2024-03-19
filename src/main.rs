@@ -138,7 +138,10 @@ impl App {
                         // If the operation turns out not to be ready, retry.
                         continue;
                     } else {
-                        error!("Failed to receive input event on channel {}: {}", index, err);
+                        error!(
+                            "Failed to receive input event on channel {}: {}",
+                            index, err
+                        );
                         // remove the channel.
                         warn!("Not watching input channel {} any longer", index);
                         sel.remove(index);

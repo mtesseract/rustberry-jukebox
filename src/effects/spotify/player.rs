@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use failure::Fallible;
 use http::header::{self, AUTHORIZATION};
 use reqwest::Client;
-use serde::{Deserialize,Serialize};
+use serde::{Deserialize, Serialize};
 use slog_scope::{error, info};
 
 use crate::components::access_token_provider::{self, AccessTokenProvider};
@@ -27,10 +27,10 @@ pub struct SpotifyPlayer {
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct SpotifyConfig {
-   pub device_name: String,
-   pub client_id: String,
-   pub client_secret: String,
-   pub refresh_token: String,
+    pub device_name: String,
+    pub client_id: String,
+    pub client_secret: String,
+    pub refresh_token: String,
 }
 
 #[derive(Debug, Clone, Serialize)]

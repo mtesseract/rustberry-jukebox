@@ -10,6 +10,13 @@ name = "rustberry"
 path = "src/lib.rs"
 
 [dependencies]
+embedded-hal-02 = { package = "embedded-hal", version = "0.2", optional = true }
+embedded-hal-1 = { package = "embedded-hal", version = "1.0" }
+linux-embedded-hal = "0.4.0"
+embedded-hal-bus = "0.1.0"
+embedded-error = "0.6.0"
+anyhow = "1.0.81"
+
 http = "0.2.1"
 gotham = "0.4.0"
 gotham_derive = "0.4"
@@ -28,7 +35,7 @@ failure = "0.1.8"
 failure_derive = "0.1.8"
 base64 = "0.10.1"
 # rfid-rs = { git = "https://gitlab.com/mclasmeier/rfid-rs" }
-mfrc522 = "0.7.0"
+mfrc522 = { version = "0.7.0", features = ["std"] }
 regex = "1.0"
 spidev = "0.4.0"
 envy = "0.4.0"

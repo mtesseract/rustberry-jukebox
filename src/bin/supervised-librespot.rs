@@ -1,7 +1,7 @@
 use rustberry::components::access_token_provider::AccessTokenProvider;
 use rustberry::config::Config;
-use rustberry::effects::spotify::player::SpotifyConfig;
 use rustberry::effects::spotify::connect::external_command::ExternalCommand;
+use rustberry::effects::spotify::player::SpotifyConfig;
 use slog::{self, o, Drain};
 // use slog_async;
 // use slog_term;

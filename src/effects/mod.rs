@@ -79,9 +79,10 @@ impl Interpreter for ProdInterpreter {
         match res {
             SpotifyUri(uri) => {
                 if let Some(ref spotify_player) = self.spotify_player {
-                spotify_player.start_playback(&uri, pause_state)
-                .await
-                .map(|x| Box::new(x) as DynPlaybackHandle)
+                    spotify_player
+                        .start_playback(&uri, pause_state)
+                        .await
+                        .map(|x| Box::new(x) as DynPlaybackHandle)
                 } else {
                     Err(failure::err_msg("Spotify Player not available"))
                 }

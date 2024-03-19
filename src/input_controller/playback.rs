@@ -76,7 +76,7 @@ pub mod rfid {
                         }
                     }
                     Ok(Some(tag)) => {
-                        let current_uid = format!("{:?}", tag.uid);
+                        let current_uid = format!("{:?}", tag.uid.as_bytes());
                         if last_uid != Some(current_uid.clone()) {
                             // new tag!
                             info!("Seen RFID Tag {}", current_uid);
@@ -88,16 +88,17 @@ pub mod rfid {
                             last_uid = Some(current_uid);
                         }
 
+                        std::thread::sleep(std::time::Duration::from_millis(80));
                         // wait for card status change
-                        loop {
-                            let mut reader = tag.new_reader();
-                            if let Err(_err) = reader.tag_still_readable() {
-                                std::thread::sleep(std::time::Duration::from_millis(80));
-                                break;
-                            } else {
-                                std::thread::sleep(std::time::Duration::from_millis(80));
-                            }
-                        }
+                        // loop {
+                        //     let mut reader = tag.new_reader();
+                        //     if let Err(_err) = reader.tag_still_readable() {
+                        //         std::thread::sleep(std::time::Duration::from_millis(80));
+                        //         break;
+                        //     } else {
+                        //         std::thread::sleep(std::time::Duration::from_millis(80));
+                        //     }
+                        // }
                     }
                 }
             }
@@ -107,26 +108,27 @@ pub mod rfid {
         where
             F: Fn(PlaybackRequest) -> Option<T> + 'static + Send,
         {
-            let mut tag_reader = tag.new_reader();
-            let request_string = tag_reader.read_string()?;
-            let request_deserialized: PlaybackResource = match serde_json::from_str(&request_string)
-            {
-                Ok(deserialized) => deserialized,
-                Err(err) => {
-                    error!(
-                        "Failed to deserialize RFID tag string `{}`: {}",
-                        request_string, err
-                    );
-                    return Err(err.into());
-                }
-            };
-            if let Some(req_transformed) =
-                msg_transformer(PlaybackRequest::Start(request_deserialized.clone()))
-            {
-                tx.send(req_transformed)?;
-            } else {
-                info!("Dropping playback request '{:?}'", &request_deserialized);
-            }
+            // let mut tag_reader = tag.new_reader();
+            // let request_string = tag_reader.read_string()?;
+            // let request_deserialized: PlaybackResource = match serde_json::from_str(&request_string)
+            // {
+            //     Ok(deserialized) => deserialized,
+            //     Err(err) => {
+            //         error!(
+            //             "Failed to deserialize RFID tag string `{}`: {}",
+            //             request_string, err
+            //         );
+            //         return Err(err.into());
+            //     }
+            // };
+            // if let Some(req_transformed) =
+            //     msg_transformer(PlaybackRequest::Start(request_deserialized.clone()))
+            // {
+            //     tx.send(req_transformed)?;
+            // } else {
+            //     info!("Dropping playback request '{:?}'", &request_deserialized);
+            // }
+            warn!("TagMapper not implemented yet");
             Ok(())
         }
     }
