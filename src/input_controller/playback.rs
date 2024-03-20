@@ -1,9 +1,10 @@
-use anyhow::{Context,Result};
+use anyhow::{Context, Result};
 use crossbeam_channel::{self, Receiver, Sender};
 use slog_scope::{error, info, warn};
 use std::{thread, time::Duration};
 
 use crate::player::{PlaybackRequest, PlaybackResource};
+use crate::components::rfid::Uid;
 
 // #[cfg(test)]
 // mod test {
@@ -58,7 +59,7 @@ pub mod rfid {
         where
             F: Fn(PlaybackRequest) -> Option<T> + 'static + Send,
         {
-            let mut last_uid: Option<String> = None;
+            let mut last_uid: Option<Uid> = None;
             info!("PlaybackRequestTransmitterRfid loop running");
 
             loop {
@@ -81,11 +82,13 @@ pub mod rfid {
                         }
                     }
                     Ok(Some(tag)) => {
-                        let current_uid = format!("{:?}", tag.uid.as_bytes());
+                            let tagclone = tag.clone();
+
+                        let current_uid = tag.uid;
                         if last_uid != Some(current_uid.clone()) {
                             // new tag!
                             info!("Seen RFID Tag {}", current_uid);
-                            if let Err(err) = Self::handle_tag(&tag, &msg_transformer, &self.tx) {
+                            if let Err(err) = Self::handle_tag(&tagclone, &msg_transformer, &self.tx) {
                                 error!("Failed to handle tag: {}", err);
                                 thread::sleep(Duration::from_millis(80));
                                 continue;
@@ -133,7 +136,9 @@ pub mod rfid {
             // } else {
             //     info!("Dropping playback request '{:?}'", &request_deserialized);
             // }
-            warn!("TagMapper not implemented yet");
+            // warn!("TagMapper not implemented yet");
+            let uid = tag.uid.clone();
+            tx.send(uid).context("Sending Uid to Playback")?;
             Ok(())
         }
     }

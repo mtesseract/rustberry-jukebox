@@ -1,0 +1,11 @@
+#!/bin/bash
+set -x
+
+POD_NAME="$1"
+IMGREF="$2"
+
+CONTAINER_ID=$(docker create "${IMGREF}")
+docker cp "${CONTAINER_ID}:/usr/local/bin/jukeboxd" - | kubectl exec -i "${POD_NAME}" -- tar xf - -C /usr/local/bin
+docker stop "${CONTAINER_ID}"
+docker rm -v "${CONTAINER_ID}" || false
+

@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-use anyhow::{Context,Result};
+use anyhow::{Context, Result};
 use crossbeam_channel::{self, Receiver, Sender};
 
 #[derive(Debug, Clone, PartialEq, Eq)]

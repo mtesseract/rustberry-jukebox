@@ -1,7 +1,9 @@
-use anyhow::{Context,Result};
+use anyhow::{Context, Result};
 use slog_scope::{error, info};
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
+use std::error::Error as StdError;
+use std::fmt;
 
 use embedded_hal_1 as embedded_hal;
 use linux_embedded_hal as hal;
@@ -15,24 +17,45 @@ use mfrc522::comm::{
     blocking::spi::{DummyDelay, SpiInterface},
     Interface,
 };
-use mfrc522::{self, Initialized, Mfrc522, Uid};
+use mfrc522::{self, Initialized, Mfrc522};
+
+type Mfrc522Error = mfrc522::error::Error<SPIError>;
+
+
 
 #[derive(Clone)]
 pub struct RfidController {
     pub mfrc522: Arc<Mutex<Mfrc522<SpiInterface<SpidevDevice, DummyDelay>, Initialized>>>,
 }
-
+#[derive(Debug, Clone, PartialEq)]
+pub struct Uid(String);
+#[derive(Debug, Clone, PartialEq)]
 pub struct Tag {
     pub uid: Uid,
 }
 
+impl fmt::Display for Uid {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl Uid {
+    pub fn from_bytes(bs: &[u8]) -> Uid {
+        return Uid(hex::encode(bs))
+    }
+}
+// enum Error {
+//     Timeout,
+//     Other(Mfrc522Error),
+// }
 impl RfidController {
     pub fn new() -> Result<Self> {
         let mut spi =
             SpidevDevice::open("/dev/spidev0.0").context("Opening SPI device /dev/spidev0.0")?;
         let options = SpidevOptions::new()
             .max_speed_hz(1_000_000)
-            .mode(SpiModeFlags::SPI_MODE_0 | SpiModeFlags::SPI_NO_CS)
+            .mode(SpiModeFlags::SPI_MODE_0)
             .build();
         spi.configure(&options).context("Configuring SPI device")?;
 
@@ -52,23 +75,15 @@ impl RfidController {
         })
     }
 
-    pub fn try_open_tag(&mut self) -> Result<Tag> {
-        info!("try_open_tag()");
-        let mut mfrc522 = self.mfrc522.lock().unwrap();
-        info!("try_open_tag() 1");
-        let atqa = mfrc522.new_card_present()?;
-        info!("try_open_tag() 2");
-        let uid = mfrc522.select(&atqa)?;
-        info!("try_open_tag() 3");
-        Ok(Tag { uid })
-    }
-
     pub fn open_tag(&mut self) -> Result<Option<Tag>> {
-        match self.try_open_tag() {
-            Ok(tag) => Ok(Some(tag)),
-            // Err(Mfrc522Error::Timeout) => Ok(None),
-            // Err(err) => Err(err.into()),
-            Err(err) => Err(err),
-        }
+        let mut mfrc522 = self.mfrc522.lock().unwrap();
+        let atqa = match mfrc522.new_card_present() {
+            Err(mfrc522::error::Error::Timeout) => return Ok(None),
+            Err(err) => return Err(err.into()),
+            Ok(atqa) => atqa,
+        };
+        let uid = mfrc522.select(&atqa)?;
+        let uid = Uid::from_bytes(uid.as_bytes());
+        Ok(Some(Tag { uid }))
     }
 }
