@@ -37,7 +37,6 @@ pub trait Interpreter {
         res: PlaybackResource,
         pause_state: Option<PauseState>,
     ) -> Result<DynPlaybackHandle>;
-    // fn stop(&self, handle: DynPlaybackHandle) -> Result<()>;
     fn led_on(&self) -> Result<()>;
     fn led_off(&self) -> Result<()>;
     fn generic_command(&self, cmd: String) -> Result<()>;
@@ -61,12 +60,8 @@ impl Interpreter for ProdInterpreter {
                 .start_playback(&url, pause_state)
                 .await
                 .map(|x| Box::new(x) as DynPlaybackHandle),
-            // .map_err(|err| err.into()),
         }
     }
-
-    // fn stop(&self, handle: DynPlaybackHandle) -> Result<()> {
-    // }
 
     fn led_on(&self) -> Result<()> {
         info!("Switching LED on");

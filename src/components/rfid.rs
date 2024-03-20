@@ -7,7 +7,6 @@ use std::fmt;
 
 use embedded_hal_1 as embedded_hal;
 use linux_embedded_hal as hal;
-
 use embedded_hal::delay::DelayNs;
 use embedded_hal::spi::Error as SPIError;
 use embedded_hal_bus::spi::{DeviceError, ExclusiveDevice};
@@ -20,8 +19,6 @@ use mfrc522::comm::{
 use mfrc522::{self, Initialized, Mfrc522};
 
 type Mfrc522Error = mfrc522::error::Error<SPIError>;
-
-
 
 #[derive(Clone)]
 pub struct RfidController {
@@ -45,10 +42,7 @@ impl Uid {
         return Uid(hex::encode(bs))
     }
 }
-// enum Error {
-//     Timeout,
-//     Other(Mfrc522Error),
-// }
+
 impl RfidController {
     pub fn new() -> Result<Self> {
         let mut spi =

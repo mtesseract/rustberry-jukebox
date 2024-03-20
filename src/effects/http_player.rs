@@ -74,7 +74,6 @@ impl PlaybackHandle for HttpPlaybackHandle {
 impl HttpPlayer {
     pub fn new() -> Result<Self> {
         info!("Creating new HttpPlayer...");
-        // let (tx, rx) = crossbeam_channel::bounded(1);
         let http_client = Arc::new(reqwest::Client::new());
         let basic_auth = {
             let username: Option<String> =
@@ -110,7 +109,6 @@ impl HttpPlayer {
         let basic_auth = self.basic_auth.clone();
         let (tx, rx) = crossbeam_channel::bounded(1);
         let sink = Arc::new(Sink::new(&device));
-        // let sink_cp = sink.clone();
         let _handle = Builder::new()
             .name("http-player".to_string())
             .spawn(move || {
