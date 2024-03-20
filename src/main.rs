@@ -33,6 +33,13 @@ fn main_with_log() -> Result<()> {
         .enable_all()
         .build()
         .unwrap();
+
+    info!("Creating TagMapper");
+    let tag_mapper = TagMapper::new_initialized(&config.tag_mapper_configuration_file)
+        .context("Creating tag_mapper")?;
+    let tag_mapper_handle = tag_mapper.handle();
+    tag_mapper_handle.debug_dump();
+
     // Create Effects Channel and Interpreter.
     let interpreter = ProdInterpreter::new(&config).context("Creating production interpreter")?;
     let interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>> =
@@ -51,18 +58,12 @@ fn main_with_log() -> Result<()> {
 
     // Prepare individual input channels.
     info!("Creating Button Controller");
-    let button_controller_handle =
-        button::cdev_gpio::CdevGpio::new_from_env(|cmd| Some(Input::Button(cmd)))
-            .context("Creating button controller")?;
+    let button_controller_handle: button::Handle<Input> =
+        button::cdev_gpio::CdevGpio::new_from_env() .context("Creating button controller")?;
     info!("Creating PlayBackRequestTransmitter");
-    let playback_controller_handle =
-        playback::rfid::PlaybackRequestTransmitterRfid::new(|req| Some(Input::Playback(req)))
+    let playback_controller_handle: playback::Handle<Input> =
+        playback::rfid::PlaybackRequestTransmitterRfid::new()
             .context("Creating playback controller")?;
-
-    info!("Creating TagMapper");
-    let tag_mapper = TagMapper::new_initialized(&config.tag_mapper_configuration_file)
-        .context("Creating tag_mapper")?;
-    tag_mapper.debug_dump();
 
     // Execute Application Logic, producing Effects.
     let application = App::new(

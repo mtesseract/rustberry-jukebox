@@ -3,8 +3,7 @@ use crossbeam_channel::{self, Receiver, Sender};
 use slog_scope::{error, info, warn};
 use std::{thread, time::Duration};
 
-use crate::player::{PlaybackRequest, PlaybackResource};
-use crate::components::rfid::Uid;
+use crate::player::{PlaybackRequest};
 
 // #[cfg(test)]
 // mod test {
@@ -37,11 +36,9 @@ pub mod rfid {
         tx: Sender<T>,
     }
 
-    impl<T: 'static + Send + Sync + Clone + std::fmt::Debug> PlaybackRequestTransmitterRfid<T> {
-        pub fn new<F>(msg_transformer: F) -> Result<Handle<T>>
-        where
-            F: Fn(PlaybackRequest) -> Option<T> + 'static + Send + Sync,
-        {
+    impl<T: 'static + Send + Sync + Clone + std::fmt::Debug> PlaybackRequestTransmitterRfid<T>
+        where T: From<PlaybackRequest> {
+        pub fn new() -> Result<Handle<T>> {
             let (tx, rx) = crossbeam_channel::bounded(10);
             let picc = RfidController::new().context("Creating RfidController")?;
             let transmitter = Self { picc, tx };
@@ -49,16 +46,13 @@ pub mod rfid {
                 .name("playback-transmitter".to_string())
                 .spawn(move || {
                     info!("Running PlaybackTransmitter");
-                    transmitter.run(msg_transformer).unwrap()
+                    transmitter.run().unwrap()
                 })
                 .context("Spawning PlaybackRequestTransmitterRfid")?;
             Ok(Handle { channel: rx })
         }
 
-        fn run<F>(mut self, msg_transformer: F) -> Result<()>
-        where
-            F: Fn(PlaybackRequest) -> Option<T> + 'static + Send,
-        {
+        fn run(mut self) -> Result<()> {
             let mut last_uid: Option<Uid> = None;
             info!("PlaybackRequestTransmitterRfid loop running");
 
@@ -73,73 +67,30 @@ pub mod rfid {
                         if last_uid.is_some() {
                             info!("RFID Tag gone");
                             last_uid = None;
-                            if let Some(msg_transformed) = msg_transformer(PlaybackRequest::Stop) {
-                                if let Err(err) = self.tx.send(msg_transformed) {
-                                    error!("Failed to transmit User Request: {}", err);
-                                }
+                            if let Err(err) = self.tx.send(PlaybackRequest::Stop.into()) {
+                                error!("Failed to transmit User Request: {}", err);
                             }
                             thread::sleep(Duration::from_millis(80));
                         }
                     }
                     Ok(Some(tag)) => {
-                            let tagclone = tag.clone();
+                        let tagclone = tag.clone();
 
                         let current_uid = tag.uid;
                         if last_uid != Some(current_uid.clone()) {
                             // new tag!
-                            info!("Seen RFID Tag {}", current_uid);
-                            if let Err(err) = Self::handle_tag(&tagclone, &msg_transformer, &self.tx) {
+                            info!("Seen new tag {}", current_uid);
+                            if let Err(err) = self.tx.send(PlaybackRequest::Start(tagclone).into()) {
                                 error!("Failed to handle tag: {}", err);
                                 thread::sleep(Duration::from_millis(80));
                                 continue;
                             }
                             last_uid = Some(current_uid);
                         }
-
                         thread::sleep(Duration::from_millis(80));
-                        // wait for card status change
-                        // loop {
-                        //     let mut reader = tag.new_reader();
-                        //     if let Err(_err) = reader.tag_still_readable() {
-                        //         std::thread::sleep(std::time::Duration::from_millis(80));
-                        //         break;
-                        //     } else {
-                        //         std::thread::sleep(std::time::Duration::from_millis(80));
-                        //     }
-                        // }
                     }
                 }
             }
-        }
-
-        fn handle_tag<F>(tag: &Tag, msg_transformer: &F, tx: &Sender<T>) -> Result<()>
-        where
-            F: Fn(PlaybackRequest) -> Option<T> + 'static + Send,
-        {
-            // let mut tag_reader = tag.new_reader();
-            // let request_string = tag_reader.read_string()?;
-            // let request_deserialized: PlaybackResource = match serde_json::from_str(&request_string)
-            // {
-            //     Ok(deserialized) => deserialized,
-            //     Err(err) => {
-            //         error!(
-            //             "Failed to deserialize RFID tag string `{}`: {}",
-            //             request_string, err
-            //         );
-            //         return Err(err.into());
-            //     }
-            // };
-            // if let Some(req_transformed) =
-            //     msg_transformer(PlaybackRequest::Start(request_deserialized.clone()))
-            // {
-            //     tx.send(req_transformed)?;
-            // } else {
-            //     info!("Dropping playback request '{:?}'", &request_deserialized);
-            // }
-            // warn!("TagMapper not implemented yet");
-            let uid = tag.uid.clone();
-            tx.send(uid).context("Sending Uid to Playback")?;
-            Ok(())
         }
     }
 }

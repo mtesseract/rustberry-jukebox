@@ -11,12 +11,12 @@ use led::{Led, LedController};
 use slog_scope::{info, warn};
 use std::process::Command;
 
-use crate::player::{DynPlaybackHandle, PauseState, PlaybackHandle, PlaybackResource};
+use crate::player::{DynPlaybackHandle, PauseState};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Effects {
-    PlayHttp { url: String },
-    StopHttp,
+    Play { uri: String },
+    Stop,
     LedOn,
     LedOff,
     GenericCommand(String),
@@ -34,7 +34,7 @@ pub trait Interpreter {
     fn wait_until_ready(&self) -> Result<()>;
     async fn play(
         &self,
-        res: PlaybackResource,
+        tag_conf: TagConf,
         pause_state: Option<PauseState>,
     ) -> Result<DynPlaybackHandle>;
     fn led_on(&self) -> Result<()>;
@@ -48,19 +48,12 @@ impl Interpreter for ProdInterpreter {
         Ok(())
     }
 
-    async fn play(
-        &self,
-        res: PlaybackResource,
-        pause_state: Option<PauseState>,
-    ) -> Result<DynPlaybackHandle> {
-        use PlaybackResource::*;
-        match res {
-            Http(url) => self
+    async fn play( &self, tag_conf: TagConf, pause_state: Option<PauseState>) -> Result<DynPlaybackHandle> {
+            self
                 .http_player
-                .start_playback(&url, pause_state)
+                .start_playback(&tag_conf.uris, pause_state)
                 .await
-                .map(|x| Box::new(x) as DynPlaybackHandle),
-        }
+                .map(|x| Box::new(x) as DynPlaybackHandle)
     }
 
     fn led_on(&self) -> Result<()> {
@@ -112,72 +105,70 @@ impl ProdInterpreter {
     }
 }
 
-pub mod test {
-    use super::*;
-    use async_trait::async_trait;
-    use crossbeam_channel::{self, Receiver, Sender};
-    use Effects::*;
+// pub mod test {
+//     use super::*;
+//     use async_trait::async_trait;
+//     use crossbeam_channel::{self, Receiver, Sender};
+//     use Effects::*;
 
-    pub struct TestInterpreter {
-        tx: Sender<Effects>,
-    }
+//     pub struct TestInterpreter {
+//         tx: Sender<Effects>,
+//     }
 
-    impl TestInterpreter {
-        pub fn new() -> (TestInterpreter, Receiver<Effects>) {
-            let (tx, rx) = crossbeam_channel::unbounded();
-            let interpreter = TestInterpreter { tx };
-            (interpreter, rx)
-        }
-    }
+//     impl TestInterpreter {
+//         pub fn new() -> (TestInterpreter, Receiver<Effects>) {
+//             let (tx, rx) = crossbeam_channel::unbounded();
+//             let interpreter = TestInterpreter { tx };
+//             (interpreter, rx)
+//         }
+//     }
 
-    struct DummyPlaybackHandle;
+//     struct DummyPlaybackHandle;
 
-    #[async_trait]
-    impl PlaybackHandle for DummyPlaybackHandle {
-        async fn stop(&self) -> Result<()> {
-            Ok(())
-        }
-        async fn is_complete(&self) -> Result<bool> {
-            Ok(true)
-        }
-        async fn cont(&self, _pause_state: PauseState) -> Result<()> {
-            Ok(())
-        }
-        async fn replay(&self) -> Result<()> {
-            Ok(())
-        }
-    }
+//     #[async_trait]
+//     impl PlaybackHandle for DummyPlaybackHandle {
+//         async fn stop(&self) -> Result<()> {
+//             Ok(())
+//         }
+//         async fn is_complete(&self) -> Result<bool> {
+//             Ok(true)
+//         }
+//         async fn cont(&self, _pause_state: PauseState) -> Result<()> {
+//             Ok(())
+//         }
+//         async fn replay(&self) -> Result<()> {
+//             Ok(())
+//         }
+//     }
 
-    #[async_trait]
-    impl Interpreter for TestInterpreter {
-        fn wait_until_ready(&self) -> Result<()> {
-            Ok(())
-        }
+//     #[async_trait]
+//     impl Interpreter for TestInterpreter {
+//         fn wait_until_ready(&self) -> Result<()> {
+//             Ok(())
+//         }
 
-        async fn play(
-            &self,
-            res: PlaybackResource,
-            _pause_state: Option<PauseState>,
-        ) -> Result<DynPlaybackHandle> {
-            use PlaybackResource::*;
+//         async fn play(
+//             &self,
+//             res: PlaybackResource,
+//             _pause_state: Option<PauseState>,
+//         ) -> Result<DynPlaybackHandle> {
+//             use PlaybackResource::*;
 
-            match res {
-                Http(url) => self.tx.send(PlayHttp { url })?,
-            }
-            Ok(Box::new(DummyPlaybackHandle) as DynPlaybackHandle)
-        }
+//             self.tx.send(Play { uri: res.uid.0 })?;
+//             Ok(Box::new(DummyPlaybackHandle) as DynPlaybackHandle)
+//         }
 
-        fn led_on(&self) -> Result<()> {
-            self.tx.send(LedOn).unwrap();
-            Ok(())
-        }
-        fn led_off(&self) -> Result<()> {
-            self.tx.send(LedOff).unwrap();
-            Ok(())
-        }
-        fn generic_command(&self, cmd: String) -> Result<()> {
-            self.tx.send(GenericCommand(cmd)).unwrap();
-            Ok(())
-        }
-    }
-}
+//         fn led_on(&self) -> Result<()> {
+//             self.tx.send(LedOn).unwrap();
+//             Ok(())
+//         }
+//         fn led_off(&self) -> Result<()> {
+//             self.tx.send(LedOff).unwrap();
+//             Ok(())
+//         }
+//         fn generic_command(&self, cmd: String) -> Result<()> {
+//             self.tx.send(GenericCommand(cmd)).unwrap();
+//             Ok(())
+//         }
+//     }
+// }

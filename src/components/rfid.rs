@@ -1,32 +1,26 @@
 use anyhow::{Context, Result};
-use slog_scope::{error, info};
-use std::io::{Read, Write};
+use slog_scope::{info};
 use std::sync::{Arc, Mutex};
-use std::error::Error as StdError;
 use std::fmt;
+use serde::{Deserialize, Serialize};
 
 use embedded_hal_1 as embedded_hal;
 use linux_embedded_hal as hal;
-use embedded_hal::delay::DelayNs;
 use embedded_hal::spi::Error as SPIError;
-use embedded_hal_bus::spi::{DeviceError, ExclusiveDevice};
 use hal::spidev::{SpiModeFlags, SpidevOptions};
-use hal::{Delay, SpidevBus, SpidevDevice};
-use mfrc522::comm::{
-    blocking::spi::{DummyDelay, SpiInterface},
-    Interface,
-};
+use hal::SpidevDevice;
+use mfrc522::comm:: blocking::spi::{DummyDelay, SpiInterface};
 use mfrc522::{self, Initialized, Mfrc522};
 
-type Mfrc522Error = mfrc522::error::Error<SPIError>;
+type Mfrc522Error = mfrc522::error::Error<dyn SPIError>;
 
 #[derive(Clone)]
 pub struct RfidController {
     pub mfrc522: Arc<Mutex<Mfrc522<SpiInterface<SpidevDevice, DummyDelay>, Initialized>>>,
 }
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone,Deserialize, Serialize, PartialEq, Eq)]
 pub struct Uid(String);
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct Tag {
     pub uid: Uid,
 }

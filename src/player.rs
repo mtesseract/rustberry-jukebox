@@ -10,6 +10,8 @@ use serde::{Deserialize, Serialize};
 use slog_scope::{error, info};
 use tokio::runtime;
 
+use crate::components::rfid::Tag;
+use crate::components::tag_mapper::{TagConf,TagMapperHandle};
 use crate::effects::Interpreter;
 use crate::led::Blinker;
 
@@ -46,18 +48,18 @@ impl fmt::Display for PlayerState {
         match self {
             PlayerState::Idle => write!(f, "Idle"),
             PlayerState::Playing {
-                resource, offset, ..
+                tag_conf, offset, ..
             } => write!(
                 f,
-                "Playing {{ resource = {:?}, offset = {:?} }}",
-                resource, offset
+                "Playing {{ tag_conf = {:?}, offset = {:?} }}",
+                tag_conf, offset
             ),
             PlayerState::Paused {
-                at, prev_resource, ..
+                at, prev_tag_conf, ..
             } => write!(
                 f,
-                "Paused {{ prev_resource = {:?}, at = {:?} }}",
-                prev_resource, at
+                "Paused {{ prev_tag_conf = {:?}, at = {:?} }}",
+                prev_tag_conf, at
             ),
         }
     }
@@ -67,7 +69,7 @@ impl fmt::Display for PlayerState {
 enum PlayerState {
     Idle,
     Playing {
-        resource: PlaybackResource,
+        tag_conf: TagConf,
         playing_since: std::time::Instant,
         offset: Duration,
         handle: Arc<DynPlaybackHandle>,
@@ -75,7 +77,7 @@ enum PlayerState {
     Paused {
         handle: Arc<DynPlaybackHandle>,
         at: std::time::Duration,
-        prev_resource: PlaybackResource,
+        prev_tag_conf: TagConf,
     },
 }
 
@@ -85,6 +87,7 @@ pub struct Player {
     state: PlayerState,
     rx: Receiver<PlayerCommand>,
     config: Config,
+    tag_mapper: TagMapperHandle,
 }
 
 #[derive(Debug, Clone)]
@@ -106,14 +109,11 @@ pub struct PlayerHandle {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum PlaybackRequest {
-    Start(PlaybackResource),
+    Start(Tag),
     Stop,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum PlaybackResource {
-    Http(String),
-}
+pub type PlaybackResource = Tag;
 
 impl PlayerHandle {
     pub fn playback(&self, request: PlaybackRequest) -> Result<bool> {
@@ -136,12 +136,12 @@ impl PlayerHandle {
 impl Player {
     async fn play_resource(
         interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
-        resource: &PlaybackResource,
+        tag_conf: &TagConf,
         pause_state: Option<PauseState>,
     ) -> Result<Arc<DynPlaybackHandle>, anyhow::Error> {
         let interpreter = interpreter.clone();
         interpreter
-            .play(resource.clone(), pause_state)
+            .play(tag_conf.clone(), pause_state)
             .await
             .map(Arc::new)
     }
@@ -189,7 +189,7 @@ impl Player {
             Paused {
                 handle,
                 at,
-                prev_resource,
+                prev_tag_conf,
             } => {
                 let pause_state = PauseState { pos: at };
 
@@ -202,7 +202,7 @@ impl Player {
                     playing_since: Instant::now(),
                     offset: at,
                     handle,
-                    resource: prev_resource,
+                    tag_conf: prev_tag_conf,
                 };
                 is_playing = true;
             }
@@ -210,7 +210,7 @@ impl Player {
             Playing {
                 playing_since,
                 offset,
-                resource,
+                tag_conf,
                 handle,
             } => {
                 if handle.is_complete().await.unwrap_or(true) {
@@ -222,7 +222,7 @@ impl Player {
                     }
 
                     drop(handle);
-                    match Self::play_resource(interpreter.clone(), &resource, None).await {
+                    match Self::play_resource(interpreter.clone(), &tag_conf, None).await {
                         Err(err) => {
                             error!("Failed to initiate new playback: {}", err);
                             *state = Idle;
@@ -233,7 +233,7 @@ impl Player {
                                 playing_since: Instant::now(),
                                 handle,
                                 offset: Duration::from_secs(0),
-                                resource,
+                                tag_conf,
                             };
                             is_playing = true;
                         }
@@ -248,7 +248,7 @@ impl Player {
                     }
 
                     *state = Paused {
-                        prev_resource: resource.clone(),
+                        prev_tag_conf: tag_conf.clone(),
                         at: played_pos,
                         handle,
                     };
@@ -283,11 +283,13 @@ impl Player {
         use PlayerState::*;
 
         match request {
-            Start(resource) => {
+            Start(tag) => {
+                let tag_conf = tag_mapper.lookup(&tag).unwrap_or_default();
+
                 match state.clone() {
                     Idle => {
                         let offset = Duration::from_secs(0);
-                        match Self::play_resource(interpreter.clone(), &resource, None).await {
+                        match Self::play_resource(interpreter.clone(), &tag_conf, None).await {
                             Err(err) => {
                                 error!("Failed to initiate new playback: {}", err);
                                 return Err(err);
@@ -297,7 +299,7 @@ impl Player {
                                     playing_since: Instant::now(),
                                     offset,
                                     handle,
-                                    resource,
+                                    tag_conf,
                                 };
                                 is_playing = true;
                             }
@@ -320,7 +322,7 @@ impl Player {
                         }
                         drop(handle);
 
-                        match Self::play_resource(interpreter.clone(), &resource, None).await {
+                        match Self::play_resource(interpreter.clone(), &tag_conf, None).await {
                             Err(err) => {
                                 error!("Failed to initiate new playback: {}", err);
                                 *state = Idle;
@@ -331,7 +333,7 @@ impl Player {
                                     playing_since: Instant::now(),
                                     handle,
                                     offset,
-                                    resource,
+                                    tag_conf,
                                 };
                                 is_playing = true;
                             }
@@ -339,10 +341,10 @@ impl Player {
                     }
 
                     Playing {
-                        resource: current_resource,
+                        current_tag_conf,
                         handle,
                         ..
-                    } if config.trigger_only_mode && current_resource != resource => {
+                    } if config.trigger_only_mode && current_tag_conf != tag_conf => {
                         // Different RFID tag presented, replace playback.
 
                         if let Err(err) = handle.stop().await {
@@ -351,7 +353,7 @@ impl Player {
                         }
 
                         drop(handle);
-                        match Self::play_resource(interpreter.clone(), &resource, None).await {
+                        match Self::play_resource(interpreter.clone(), &tag_conf, None).await {
                             Err(err) => {
                                 error!("Failed to initiate new playback: {}", err);
                                 *state = Idle;
@@ -362,7 +364,7 @@ impl Player {
                                     playing_since: Instant::now(),
                                     handle,
                                     offset: Duration::from_secs(0),
-                                    resource,
+                                    tag_conf,
                                 };
                                 is_playing = true;
                             }
@@ -371,7 +373,7 @@ impl Player {
 
                     Playing { handle, .. } => {
                         // Same resource presented while playing already, trigger playback if already completed,
-                        // otherwise do nothing.unimplemented!
+                        // otherwise do nothing.
 
                         if handle.is_complete().await.unwrap_or(true) {
                             if let Err(err) = handle.stop().await {
@@ -380,7 +382,7 @@ impl Player {
                             }
 
                             drop(handle);
-                            match Self::play_resource(interpreter.clone(), &resource, None).await {
+                            match Self::play_resource(interpreter.clone(), &tag_conf, None).await {
                                 Err(err) => {
                                     error!("Failed to initiate new playback: {}", err);
                                     *state = Idle;
@@ -391,7 +393,7 @@ impl Player {
                                         playing_since: Instant::now(),
                                         handle,
                                         offset: Duration::from_secs(0),
-                                        resource,
+                                        tag_conf,
                                     };
                                 }
                             }
@@ -402,8 +404,8 @@ impl Player {
                     Paused {
                         handle,
                         at,
-                        prev_resource,
-                    } if resource == prev_resource => {
+                        prev_tag_conf,
+                    } if tag_conf == prev_tag_conf => {
                         // Currently paused, last resource is presented again, continue playing.
                         if handle.is_complete().await.unwrap_or(true) {
                             if let Err(err) = handle.stop().await {
@@ -411,7 +413,7 @@ impl Player {
                                 return Err(err);
                             }
                             drop(handle);
-                            match Self::play_resource(interpreter.clone(), &resource, None).await {
+                            match Self::play_resource(interpreter.clone(), &tag_conf, None).await {
                                 Err(err) => {
                                     error!("Failed to initiate new playback: {}", err);
                                     *state = Idle;
@@ -422,7 +424,7 @@ impl Player {
                                         playing_since: Instant::now(),
                                         handle,
                                         offset: Duration::from_secs(0),
-                                        resource,
+                                        tag_conf,
                                     };
                                 }
                             }
@@ -437,7 +439,7 @@ impl Player {
                                 *state = Paused {
                                     handle,
                                     at,
-                                    prev_resource,
+                                    prev_tag_conf,
                                 };
                                 return Err(err);
                             }
@@ -445,7 +447,7 @@ impl Player {
                                 playing_since: Instant::now(),
                                 offset: at,
                                 handle,
-                                resource,
+                                tag_conf,
                             };
                         }
                         is_playing = true;
@@ -454,7 +456,7 @@ impl Player {
                     Paused {
                         handle,
                         at,
-                        prev_resource,
+                        prev_tag_conf,
                     } => {
                         // new resource
                         info!("New resource, playing from beginning");
@@ -463,13 +465,13 @@ impl Player {
                             *state = Paused {
                                 handle,
                                 at,
-                                prev_resource,
+                                prev_tag_conf,
                             };
                             return Err(err);
                         }
 
                         drop(handle);
-                        match Self::play_resource(interpreter.clone(), &resource, None).await {
+                        match Self::play_resource(interpreter.clone(), &tag_conf, None).await {
                             Err(err) => {
                                 error!("Failed to initiate new playback: {}", err);
                                 *state = Idle;
@@ -480,7 +482,7 @@ impl Player {
                                     playing_since: Instant::now(),
                                     handle,
                                     offset: Duration::from_secs(0),
-                                    resource,
+                                    tag_conf,
                                 };
                                 is_playing = true;
                             }
@@ -500,7 +502,7 @@ impl Player {
                     Playing {
                         playing_since,
                         offset,
-                        resource,
+                        tag_conf,
                         handle,
                     } => {
                         if config.trigger_only_mode {
@@ -519,7 +521,7 @@ impl Player {
                                 *state = Idle;
                             } else {
                                 *state = Paused {
-                                    prev_resource: resource.clone(),
+                                    prev_tag_conf: tag_conf.clone(),
                                     at: played_pos,
                                     handle,
                                 };
@@ -582,6 +584,7 @@ impl Player {
         runtime: &runtime::Handle,
         interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
         config: Config,
+        tag_mapper: TagMapperHandle,
     ) -> Result<PlayerHandle> {
         let (tx, rx) = crossbeam_channel::bounded(1);
 
@@ -591,6 +594,7 @@ impl Player {
             state: PlayerState::Idle,
             rx,
             config,
+            tag_mapper,
         };
 
         runtime.spawn(Self::player_loop(player));

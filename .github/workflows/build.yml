@@ -20,7 +20,7 @@ jobs:
           images: |
             mtesseract/jukeboxd
           tags: |
-            type=raw,value=latest
+            type=raw,value=latest,enable=true
             type=ref,event=branch
             type=ref,event=pr
             type=sha

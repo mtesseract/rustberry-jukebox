@@ -8,13 +8,23 @@ use std::sync::{Arc, RwLock};
 type TagID = String;
 type FilePath = String;
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Default,Debug, Deserialize, Clone)]
 pub struct TagConf {
-    files: Vec<FilePath>,
+    uris: Vec<String>,
 }
 
-pub struct TagMapper {
+impl TagConf {
+    pub fn is_empty(&self) -> bool {
+        self.uris.is_empty()
+    }
+}
+
+struct TagMapper {
     file: String,
+    conf: Arc<RwLock<TagMapperConfiguration>>,
+}
+
+pub struct TagMapperHandle {
     conf: Arc<RwLock<TagMapperConfiguration>>,
 }
 
@@ -38,7 +48,7 @@ impl TagMapperConfiguration {
 
 // mappings:
 //   12345:
-//     files:
+//     uris:
 //       - foo.ogg
 //       - bar.ogg
 //
@@ -58,6 +68,11 @@ impl TagMapper {
         Ok(())
     }
 
+    fn handle(&self) -> TagMapperHandle {
+        let conf = self.conf.clone();
+        TagMapperHandle { conf }
+    }
+
     pub fn new(filename: &str) -> Self {
         let empty_conf = Arc::new(RwLock::new(TagMapperConfiguration::new()));
         let tag_mapper = TagMapper {
@@ -67,13 +82,15 @@ impl TagMapper {
         tag_mapper
     }
 
-    pub fn new_initialized(filename: &str) -> Result<Self> {
+    pub fn new_initialized(filename: &str) -> Result<TagMapperHandle> {
         let mut tag_mapper = Self::new(filename);
         tag_mapper.refresh()?;
-        Ok(tag_mapper)
+        Ok(tag_mapper.handle())
     }
+}
 
-    pub fn lookup(&self, tag_id: &TagID) -> Option<TagConf> {
+impl TagMapperHandle {
+    pub fn lookup(&self, tag_id: &Tag) -> Option<TagConf> {
         let r = self.conf.read().unwrap();
         return r.mappings.get(tag_id).cloned();
     }

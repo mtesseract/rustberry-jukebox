@@ -97,14 +97,17 @@ impl HttpPlayer {
 
     pub async fn start_playback(
         &self,
-        url: &str,
+        uris: &[TagConf],
         pause_state: Option<PauseState>,
     ) -> Result<HttpPlaybackHandle, anyhow::Error> {
         if let Some(pause_state) = pause_state {
             warn!("Ignoring pause state: {:?}", pause_state);
         }
         let device = rodio::default_output_device().unwrap();
-        let url = url.to_string();
+        let url = match uris.first().cloned() {
+            Some(uri) => uri,
+            None => return Err(anyhow::Error::msg("TagConf empty")),
+        };
         let http_client = self.http_client.clone();
         let basic_auth = self.basic_auth.clone();
         let (tx, rx) = crossbeam_channel::bounded(1);
