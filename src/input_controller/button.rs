@@ -1,7 +1,7 @@
 use std::time::{Duration, Instant};
 
+use anyhow::{Context,Result};
 use crossbeam_channel::{self, Receiver, Sender};
-use anyhow::Result;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
@@ -82,7 +82,8 @@ pub mod cdev_gpio {
             F: Fn(Command) -> Option<T> + 'static + Send + Sync,
         {
             info!("Using CdevGpio based Button Controller");
-            let env_config = EnvConfig::new_from_env()?;
+            let env_config =
+                EnvConfig::new_from_env().context("Creating CdevGpio based button controller")?;
             let config: Config = env_config.into();
             let mut map = HashMap::new();
             if let Some(shutdown_pin) = config.shutdown_pin {

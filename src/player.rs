@@ -3,9 +3,9 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use anyhow::Result;
 use async_trait::async_trait;
 use crossbeam_channel::{Receiver, Sender};
-use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use slog_scope::{error, info};
 use tokio::runtime;

@@ -4,8 +4,8 @@ pub mod led;
 use std::sync::Arc;
 
 use crate::config::Config;
-use async_trait::async_trait;
 use anyhow::Result;
+use async_trait::async_trait;
 use http_player::HttpPlayer;
 use led::{Led, LedController};
 use slog_scope::{info, warn};

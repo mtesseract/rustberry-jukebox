@@ -2,8 +2,8 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::runtime::{self, Runtime};
 
+use anyhow::{Context, Result};
 use crossbeam_channel::{self, Receiver, Select};
-use anyhow::Result;
 use slog::{self, o, Drain};
 use slog_scope::{error, info, warn};
 
@@ -26,7 +26,7 @@ fn main() -> Result<()> {
 
 fn main_with_log() -> Result<()> {
     let config = envy::from_env::<Config>()?;
-    // info!("Configuration"; o!("device_name" => &config.device_name));
+    info!("Starting application");
 
     let runtime = runtime::Builder::new()
         .threaded_scheduler()
@@ -34,28 +34,34 @@ fn main_with_log() -> Result<()> {
         .build()
         .unwrap();
     // Create Effects Channel and Interpreter.
-    let interpreter = ProdInterpreter::new(&config).unwrap();
+    let interpreter = ProdInterpreter::new(&config).context("Creating production interpreter")?;
     let interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>> =
         Arc::new(Box::new(interpreter));
 
-    let blinker = Blinker::new(runtime.handle().clone(), interpreter.clone()).unwrap();
+    let blinker =
+        Blinker::new(runtime.handle().clone(), interpreter.clone()).context("Creating blinker")?;
     blinker.run_async(led::Cmd::Loop(Box::new(led::Cmd::Many(vec![
         led::Cmd::On(Duration::from_millis(100)),
         led::Cmd::Off(Duration::from_millis(100)),
     ]))));
 
-    interpreter.wait_until_ready().map_err(|err| {
-        error!("Failed to wait for interpreter readiness: {}", err);
-        err
-    })?;
+    interpreter
+        .wait_until_ready()
+        .context("Waiting for interpreter readiness")?;
 
     // Prepare individual input channels.
+    info!("Creating Button Controller");
     let button_controller_handle =
-        button::cdev_gpio::CdevGpio::new_from_env(|cmd| Some(Input::Button(cmd)))?;
+        button::cdev_gpio::CdevGpio::new_from_env(|cmd| Some(Input::Button(cmd)))
+            .context("Creating button controller")?;
+    info!("Creating PlayBackRequestTransmitter");
     let playback_controller_handle =
-        playback::rfid::PlaybackRequestTransmitterRfid::new(|req| Some(Input::Playback(req)))?;
+        playback::rfid::PlaybackRequestTransmitterRfid::new(|req| Some(Input::Playback(req)))
+            .context("Creating playback controller")?;
 
-    let tag_mapper = TagMapper::new_initialized(&config.tag_mapper_configuration_file)?;
+    info!("Creating TagMapper");
+    let tag_mapper = TagMapper::new_initialized(&config.tag_mapper_configuration_file)
+        .context("Creating tag_mapper")?;
     tag_mapper.debug_dump();
 
     // Execute Application Logic, producing Effects.
@@ -70,11 +76,11 @@ fn main_with_log() -> Result<()> {
         ],
         tag_mapper,
     )
-    .unwrap();
-    application.run().map_err(|err| {
-        warn!("Jukebox loop terminated, terminating application: {}", err);
-        err
-    })?;
+    .context("Creating application object")?;
+    info!("Running application");
+    application
+        .run()
+        .context("Jukebox loop terminated, terminating application")?;
     unreachable!();
 }
 

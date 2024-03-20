@@ -1,6 +1,7 @@
+use anyhow::{Context,Result};
 use crossbeam_channel::{self, Receiver, Sender};
-use anyhow::Result;
 use slog_scope::{error, info, warn};
+use std::{thread, time::Duration};
 
 use crate::player::{PlaybackRequest, PlaybackResource};
 
@@ -17,7 +18,6 @@ use crate::player::{PlaybackRequest, PlaybackResource};
 
 pub struct Handle<T> {
     channel: Receiver<T>,
-    // thread: Arc<JoinHandle<()>>,
 }
 
 impl<T> Handle<T> {
@@ -41,12 +41,16 @@ pub mod rfid {
         where
             F: Fn(PlaybackRequest) -> Option<T> + 'static + Send + Sync,
         {
-            let (tx, rx) = crossbeam_channel::bounded(1);
-            let picc = RfidController::new()?;
+            let (tx, rx) = crossbeam_channel::bounded(10);
+            let picc = RfidController::new().context("Creating RfidController")?;
             let transmitter = Self { picc, tx };
-            std::thread::Builder::new()
+            thread::Builder::new()
                 .name("playback-transmitter".to_string())
-                .spawn(move || transmitter.run(msg_transformer).unwrap())?;
+                .spawn(move || {
+                    info!("Running PlaybackTransmitter");
+                    transmitter.run(msg_transformer).unwrap()
+                })
+                .context("Spawning PlaybackRequestTransmitterRfid")?;
             Ok(Handle { channel: rx })
         }
 
@@ -55,13 +59,14 @@ pub mod rfid {
             F: Fn(PlaybackRequest) -> Option<T> + 'static + Send,
         {
             let mut last_uid: Option<String> = None;
+            info!("PlaybackRequestTransmitterRfid loop running");
 
             loop {
                 match self.picc.open_tag() {
                     Err(err) => {
                         // Do not change playback state in this case.
                         warn!("Failed to open RFID tag: {}", err);
-                        std::thread::sleep(std::time::Duration::from_millis(80));
+                        thread::sleep(Duration::from_millis(80));
                     }
                     Ok(None) => {
                         if last_uid.is_some() {
@@ -72,7 +77,7 @@ pub mod rfid {
                                     error!("Failed to transmit User Request: {}", err);
                                 }
                             }
-                            std::thread::sleep(std::time::Duration::from_millis(80));
+                            thread::sleep(Duration::from_millis(80));
                         }
                     }
                     Ok(Some(tag)) => {
@@ -82,13 +87,13 @@ pub mod rfid {
                             info!("Seen RFID Tag {}", current_uid);
                             if let Err(err) = Self::handle_tag(&tag, &msg_transformer, &self.tx) {
                                 error!("Failed to handle tag: {}", err);
-                                std::thread::sleep(std::time::Duration::from_millis(80));
+                                thread::sleep(Duration::from_millis(80));
                                 continue;
                             }
                             last_uid = Some(current_uid);
                         }
 
-                        std::thread::sleep(std::time::Duration::from_millis(80));
+                        thread::sleep(Duration::from_millis(80));
                         // wait for card status change
                         // loop {
                         //     let mut reader = tag.new_reader();

@@ -32,10 +32,6 @@ impl Blinker {
         interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
     ) -> Result<Self> {
         let abort_handle = RefCell::new(None);
-        // let runtime = runtime::Builder::new()
-        //     .threaded_scheduler()
-        //     .enable_all()
-        //     .build()?;
         let blinker = Self {
             interpreter,
             abort_handle,
