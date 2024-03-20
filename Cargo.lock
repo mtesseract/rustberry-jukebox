@@ -2003,8 +2003,6 @@ dependencies = [
  "embedded-hal 1.0.0",
  "embedded-hal-bus",
  "envy",
- "failure",
- "failure_derive",
  "futures 0.3.30",
  "gotham",
  "gotham_derive",

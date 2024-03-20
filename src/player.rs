@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use crossbeam_channel::{Receiver, Sender};
-use failure::Fallible;
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use slog_scope::{error, info};
 use tokio::runtime;
@@ -17,10 +17,10 @@ pub use err::*;
 
 #[async_trait]
 pub trait PlaybackHandle {
-    async fn stop(&self) -> Fallible<()>;
-    async fn is_complete(&self) -> Fallible<bool>;
-    async fn cont(&self, pause_state: PauseState) -> Fallible<()>;
-    async fn replay(&self) -> Fallible<()>;
+    async fn stop(&self) -> Result<()>;
+    async fn is_complete(&self) -> Result<bool>;
+    async fn cont(&self, pause_state: PauseState) -> Result<()>;
+    async fn replay(&self) -> Result<()>;
 }
 #[derive(Debug, Clone)]
 pub struct PauseState {
@@ -30,15 +30,15 @@ pub struct PauseState {
 #[derive(Debug, Clone)]
 pub enum PlayerCommand {
     PlaybackCommand {
-        tx: Sender<Result<bool, failure::Error>>,
+        tx: Sender<Result<bool, anyhow::Error>>,
         request: PlaybackRequest,
     },
     PauseContinue {
-        tx: Sender<Result<bool, failure::Error>>,
+        tx: Sender<Result<bool, anyhow::Error>>,
     },
 }
 
-// type StopPlayEffect = Box<dyn Fn() -> Result<(), failure::Error>>;
+// type StopPlayEffect = Box<dyn Fn() -> Result<(), anyhow::Error>>;
 pub type DynPlaybackHandle = Box<dyn PlaybackHandle + Send + Sync + 'static>;
 
 impl fmt::Display for PlayerState {
@@ -112,12 +112,11 @@ pub enum PlaybackRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum PlaybackResource {
-    SpotifyUri(String),
     Http(String),
 }
 
 impl PlayerHandle {
-    pub fn playback(&self, request: PlaybackRequest) -> Fallible<bool> {
+    pub fn playback(&self, request: PlaybackRequest) -> Result<bool> {
         let (tx, rx) = crossbeam_channel::bounded(1);
 
         self.tx
@@ -126,7 +125,7 @@ impl PlayerHandle {
         rx.recv()?
     }
 
-    pub fn pause_continue(&self) -> Fallible<bool> {
+    pub fn pause_continue(&self) -> Result<bool> {
         let (tx, rx) = crossbeam_channel::bounded(1);
 
         self.tx.send(PlayerCommand::PauseContinue { tx }).unwrap();
@@ -139,7 +138,7 @@ impl Player {
         interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
         resource: &PlaybackResource,
         pause_state: Option<PauseState>,
-    ) -> Result<Arc<DynPlaybackHandle>, failure::Error> {
+    ) -> Result<Arc<DynPlaybackHandle>, anyhow::Error> {
         let interpreter = interpreter.clone();
         interpreter
             .play(resource.clone(), pause_state)
@@ -167,10 +166,10 @@ impl Player {
 
     async fn handle_pause_continue_command_tx(
         interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
-        tx: Sender<Result<bool, failure::Error>>,
+        tx: Sender<Result<bool, anyhow::Error>>,
         state: &mut PlayerState,
         config: Arc<Config>,
-    ) -> Fallible<()> {
+    ) -> Result<()> {
         let res = Self::handle_pause_continue_command(interpreter, state, config).await;
         tx.send(res)?;
         Ok(())
@@ -180,7 +179,7 @@ impl Player {
         interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
         state: &mut PlayerState,
         _config: Arc<Config>,
-    ) -> Fallible<bool> {
+    ) -> Result<bool> {
         let mut is_playing = false;
         use PlayerState::*;
 
@@ -264,10 +263,10 @@ impl Player {
     async fn handle_playback_command_tx(
         interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
         request: PlaybackRequest,
-        tx: Sender<Result<bool, failure::Error>>,
+        tx: Sender<Result<bool, anyhow::Error>>,
         state: &mut PlayerState,
         config: Arc<Config>,
-    ) -> Fallible<()> {
+    ) -> Result<()> {
         let res = Self::handle_playback_command(interpreter, request, state, config).await;
         tx.send(res)?;
         Ok(())
@@ -278,7 +277,7 @@ impl Player {
         request: PlaybackRequest,
         state: &mut PlayerState,
         config: Arc<Config>,
-    ) -> Fallible<bool> {
+    ) -> Result<bool> {
         let mut is_playing = false;
         use PlaybackRequest::*;
         use PlayerState::*;
@@ -540,7 +539,7 @@ impl Player {
         cmd: PlayerCommand,
         state: &mut PlayerState,
         config: Arc<Config>,
-    ) -> Fallible<()> {
+    ) -> Result<()> {
         use PlayerCommand::*;
 
         match cmd {
@@ -583,7 +582,7 @@ impl Player {
         runtime: &runtime::Handle,
         interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
         config: Config,
-    ) -> Fallible<PlayerHandle> {
+    ) -> Result<PlayerHandle> {
         let (tx, rx) = crossbeam_channel::bounded(1);
 
         let player = Player {
@@ -608,15 +607,13 @@ pub mod err {
 
     #[derive(Debug)]
     pub enum Error {
-        Spotify(failure::Error),
-        Http(failure::Error),
+        Http(anyhow::Error),
         SendError(String),
     }
 
     impl Display for Error {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             match self {
-                Error::Spotify(err) => write!(f, "Spotify Error {}", err),
                 Error::Http(err) => write!(f, "HTTP Error {}", err),
                 Error::SendError(err) => {
                     write!(f, "Failed to transmit command via channel: {}", err)
@@ -639,53 +636,53 @@ pub mod err {
     impl std::error::Error for Error {}
 }
 
-#[cfg(test)]
-mod test {
-    use failure::Fallible;
-    use tokio::runtime::Runtime;
+// #[cfg(test)]
+// mod test {
+//     use anyhow::Result;
+//     use tokio::runtime::Runtime;
 
-    use super::*;
-    use crate::effects::{test::TestInterpreter, Effects};
-    use crate::player;
+//     use super::*;
+//     use crate::effects::{test::TestInterpreter, Effects};
+//     use crate::player;
 
-    #[test]
-    fn player_plays_resource_on_playback_request() -> Fallible<()> {
-        let runtime = runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()
-            .unwrap();
-        let (interpreter, effects_rx) = TestInterpreter::new();
-        let interpreter =
-            Arc::new(Box::new(interpreter) as Box<dyn Interpreter + Send + Sync + 'static>);
-        let player_handle = Player::new(
-            None,
-            &runtime.handle(),
-            interpreter,
-            player::Config::default(),
-        )
-        .unwrap();
-        let playback_requests = vec![
-            PlaybackRequest::Start(PlaybackResource::SpotifyUri(
-                "spotify:track:5j6ZZwA9BnxZi5Bk0Ng4jB".to_string(),
-            )),
-            PlaybackRequest::Stop,
-        ];
-        let effects_expected = vec![
-            Effects::PlaySpotify {
-                spotify_uri: "spotify:track:5j6ZZwA9BnxZi5Bk0Ng4jB".to_string(),
-            },
-            Effects::StopSpotify,
-        ];
-        for req in playback_requests.iter() {
-            player_handle.playback(req.clone()).unwrap();
-        }
-        let produced_effects: Vec<_> = effects_rx
-            .iter()
-            .filter(|x| x.is_spotify_effect())
-            .take(2)
-            .collect();
+//     #[test]
+//     fn player_plays_resource_on_playback_request() -> Result<()> {
+//         let runtime = runtime::Builder::new_multi_thread()
+//             .enable_all()
+//             .build()
+//             .unwrap();
+//         let (interpreter, effects_rx) = TestInterpreter::new();
+//         let interpreter =
+//             Arc::new(Box::new(interpreter) as Box<dyn Interpreter + Send + Sync + 'static>);
+//         let player_handle = Player::new(
+//             None,
+//             &runtime.handle(),
+//             interpreter,
+//             player::Config::default(),
+//         )
+//         .unwrap();
+//         let playback_requests = vec![
+//             PlaybackRequest::Start(PlaybackResource::SpotifyUri(
+//                 "spotify:track:5j6ZZwA9BnxZi5Bk0Ng4jB".to_string(),
+//             )),
+//             PlaybackRequest::Stop,
+//         ];
+//         let effects_expected = vec![
+//             Effects::PlaySpotify {
+//                 spotify_uri: "spotify:track:5j6ZZwA9BnxZi5Bk0Ng4jB".to_string(),
+//             },
+//             Effects::StopSpotify,
+//         ];
+//         for req in playback_requests.iter() {
+//             player_handle.playback(req.clone()).unwrap();
+//         }
+//         let produced_effects: Vec<_> = effects_rx
+//             .iter()
+//             .filter(|x| x.is_spotify_effect())
+//             .take(2)
+//             .collect();
 
-        assert_eq!(produced_effects, effects_expected);
-        Ok(())
-    }
-}
+//         assert_eq!(produced_effects, effects_expected);
+//         Ok(())
+//     }
+// }

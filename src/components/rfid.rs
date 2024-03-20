@@ -1,4 +1,4 @@
-use failure::{self, Fallible};
+use anyhow::Result;
 use slog_scope::{error, info};
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
@@ -24,7 +24,7 @@ pub struct Tag {
 }
 
 impl RfidController {
-    pub fn new() -> Fallible<Self> {
+    pub fn new() -> Result<Self> {
         let mut delay = Delay;
         let mut delay = Delay;
 
@@ -47,14 +47,14 @@ impl RfidController {
         })
     }
 
-    pub fn try_open_tag(&mut self) -> Fallible<Tag> {
+    pub fn try_open_tag(&mut self) -> Result<Tag> {
         let mut mfrc522 = self.mfrc522.lock().unwrap();
-        let atqa = mfrc522.new_card_present().map_err(|err| failure::Error::from_boxed_compat(Box::new(err)))?;
-        let uid = mfrc522.select(&atqa).map_err(|err| failure::Error::from_boxed_compat(Box::new(err)))?;
+        let atqa = mfrc522.new_card_present()?;
+        let uid = mfrc522.select(&atqa)?;
         Ok(Tag { uid })
     }
 
-    pub fn open_tag(&mut self) -> Fallible<Option<Tag>> {
+    pub fn open_tag(&mut self) -> Result<Option<Tag>> {
         match self.try_open_tag() {
             Ok(tag) => Ok(Some(tag)),
             // Err(Mfrc522Error::Timeout) => Ok(None),

@@ -1,19 +1,19 @@
 use crossbeam_channel::{self, Receiver, Sender};
-use failure::Fallible;
+use anyhow::Result;
 use slog_scope::{error, info, warn};
 
 use crate::player::{PlaybackRequest, PlaybackResource};
 
-#[cfg(test)]
-mod test {
-    use super::*;
-    #[test]
-    fn test_user_request_spotify_uri_serialization() {
-        let user_req = PlaybackResource::SpotifyUri("foo".to_string());
-        let serialized = serde_json::to_string(&user_req).unwrap();
-        assert_eq!(serialized, "{\"SpotifyUri\":\"foo\"}".to_string());
-    }
-}
+// #[cfg(test)]
+// mod test {
+//     use super::*;
+//     #[test]
+//     fn test_user_request_spotify_uri_serialization() {
+//         let user_req = PlaybackResource::SpotifyUri("foo".to_string());
+//         let serialized = serde_json::to_string(&user_req).unwrap();
+//         assert_eq!(serialized, "{\"SpotifyUri\":\"foo\"}".to_string());
+//     }
+// }
 
 pub struct Handle<T> {
     channel: Receiver<T>,
@@ -37,7 +37,7 @@ pub mod rfid {
     }
 
     impl<T: 'static + Send + Sync + Clone + std::fmt::Debug> PlaybackRequestTransmitterRfid<T> {
-        pub fn new<F>(msg_transformer: F) -> Fallible<Handle<T>>
+        pub fn new<F>(msg_transformer: F) -> Result<Handle<T>>
         where
             F: Fn(PlaybackRequest) -> Option<T> + 'static + Send + Sync,
         {
@@ -50,7 +50,7 @@ pub mod rfid {
             Ok(Handle { channel: rx })
         }
 
-        fn run<F>(mut self, msg_transformer: F) -> Fallible<()>
+        fn run<F>(mut self, msg_transformer: F) -> Result<()>
         where
             F: Fn(PlaybackRequest) -> Option<T> + 'static + Send,
         {
@@ -104,7 +104,7 @@ pub mod rfid {
             }
         }
 
-        fn handle_tag<F>(tag: &Tag, msg_transformer: &F, tx: &Sender<T>) -> Fallible<()>
+        fn handle_tag<F>(tag: &Tag, msg_transformer: &F, tx: &Sender<T>) -> Result<()>
         where
             F: Fn(PlaybackRequest) -> Option<T> + 'static + Send,
         {
@@ -142,7 +142,7 @@ pub mod rfid {
 //     }
 
 //     impl<T: DeserializeOwned + Clone + std::fmt::Debug + PartialEq> PlaybackRequestTransmitterStdin<T> {
-//         pub fn new<F>(msg_transformer: F) -> Fallible<Handle<T>>
+//         pub fn new<F>(msg_transformer: F) -> Result<Handle<T>>
 //         where
 //             F: Fn(PlaybackRequest) -> Option<T> + 'static + Send + Sync,
 //         {
@@ -152,7 +152,7 @@ pub mod rfid {
 //             Ok(Handle { channel: rx })
 //         }
 
-//         fn run<F>(&self, msg_transformer: F) -> Fallible<()>
+//         fn run<F>(&self, msg_transformer: F) -> Result<()>
 //         where
 //             F: Fn(PlaybackRequest) -> Option<T> + 'static + Send,
 //         {

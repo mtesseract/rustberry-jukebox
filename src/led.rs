@@ -6,7 +6,7 @@ use std::time::Duration;
 use tokio::runtime;
 
 use crate::effects::Interpreter;
-use failure::Fallible;
+use anyhow::Result;
 use futures::future::AbortHandle;
 use slog_scope::info;
 
@@ -30,7 +30,7 @@ impl Blinker {
     pub fn new(
         rt: runtime::Handle,
         interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
-    ) -> Fallible<Self> {
+    ) -> Result<Self> {
         let abort_handle = RefCell::new(None);
         // let runtime = runtime::Builder::new()
         //     .threaded_scheduler()

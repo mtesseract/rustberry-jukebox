@@ -3,7 +3,7 @@ use std::time::Duration;
 use tokio::runtime::{self, Runtime};
 
 use crossbeam_channel::{self, Receiver, Select};
-use failure::Fallible;
+use anyhow::Result;
 use slog::{self, o, Drain};
 use slog_scope::{error, info, warn};
 
@@ -14,7 +14,7 @@ use rustberry::input_controller::{button, playback, Input};
 use rustberry::led::{self, Blinker};
 use rustberry::player::{self, PlaybackRequest, Player};
 
-fn main() -> Fallible<()> {
+fn main() -> Result<()> {
     let decorator = slog_term::TermDecorator::new().build();
     let drain = slog_term::FullFormat::new(decorator).build().fuse();
     let drain = slog_async::Async::new(drain).build().fuse();
@@ -24,7 +24,7 @@ fn main() -> Fallible<()> {
     slog_scope::scope(&slog_scope::logger().new(o!()), main_with_log)
 }
 
-fn main_with_log() -> Fallible<()> {
+fn main_with_log() -> Result<()> {
     let config = envy::from_env::<Config>()?;
     // info!("Configuration"; o!("device_name" => &config.device_name));
 
@@ -96,7 +96,7 @@ impl App {
         blinker: Blinker,
         inputs: &[Receiver<Input>],
         tag_mapper: TagMapper,
-    ) -> Fallible<Self> {
+    ) -> Result<Self> {
         let player_config = player::Config {
             trigger_only_mode: config.trigger_only_mode,
         };
@@ -120,7 +120,7 @@ impl App {
         Ok(app)
     }
 
-    pub fn run(self) -> Fallible<()> {
+    pub fn run(self) -> Result<()> {
         self.blinker.run_async(led::Cmd::Repeat(
             1,
             Box::new(led::Cmd::Many(vec![

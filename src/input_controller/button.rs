@@ -1,7 +1,7 @@
 use std::time::{Duration, Instant};
 
 use crossbeam_channel::{self, Receiver, Sender};
-use failure::Fallible;
+use anyhow::Result;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
@@ -71,13 +71,13 @@ pub mod cdev_gpio {
     }
 
     impl EnvConfig {
-        pub fn new_from_env() -> Fallible<Self> {
+        pub fn new_from_env() -> Result<Self> {
             Ok(envy::from_env::<EnvConfig>()?)
         }
     }
 
     impl<T: Clone + Send + 'static> CdevGpio<T> {
-        pub fn new_from_env<F>(msg_transformer: F) -> Fallible<Handle<T>>
+        pub fn new_from_env<F>(msg_transformer: F) -> Result<Handle<T>>
         where
             F: Fn(Command) -> Option<T> + 'static + Send + Sync,
         {
@@ -115,7 +115,7 @@ pub mod cdev_gpio {
             self,
             (line, line_id, cmd): (Line, u32, Command),
             msg_transformer: Arc<F>,
-        ) -> Fallible<()>
+        ) -> Result<()>
         where
             F: Fn(Command) -> Option<T> + 'static + Send,
         {
@@ -175,7 +175,7 @@ pub mod cdev_gpio {
             Ok(())
         }
 
-        fn run<F>(&mut self, msg_transformer: F) -> Fallible<()>
+        fn run<F>(&mut self, msg_transformer: F) -> Result<()>
         where
             F: Fn(Command) -> Option<T> + 'static + Send + Sync,
         {

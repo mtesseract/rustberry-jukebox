@@ -1,4 +1,4 @@
-use failure::Fallible;
+use anyhow::{Context,Result};
 use serde::Deserialize;
 use slog_scope::info;
 use std::collections::HashMap;
@@ -44,8 +44,8 @@ impl TagMapperConfiguration {
 //
 
 impl TagMapper {
-    fn refresh(&mut self) -> Fallible<()> {
-        let content = fs::read_to_string(&self.file)?;
+    fn refresh(&mut self) -> Result<()> {
+        let content = fs::read_to_string(&self.file).with_context(|| format!("Reading tag_mapper configuration at {}", self.file))?;
         let conf: TagMapperConfiguration = serde_yaml::from_str(&content)?;
         let mut w = self.conf.write().unwrap();
         *w = conf;
@@ -61,7 +61,7 @@ impl TagMapper {
         tag_mapper
     }
 
-    pub fn new_initialized(filename: &str) -> Fallible<Self> {
+    pub fn new_initialized(filename: &str) -> Result<Self> {
         let mut tag_mapper = Self::new(filename);
         tag_mapper.refresh()?;
         Ok(tag_mapper)
