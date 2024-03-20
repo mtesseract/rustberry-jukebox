@@ -33,8 +33,9 @@ RUN cargo build --target aarch64-unknown-linux-gnu
 RUN rm -rf out && \
 	mkdir -p out/bin out/lib && \
 	cp target/aarch64-unknown-linux-gnu/debug/jukeboxd out/bin && \
-	./scripts/copy-dyn-libs target/aarch64-unknown-linux-gnu/debug/jukeboxd out/lib && \
-	aarch64-linux-gnu-strip out/bin/jukeboxd
+	./scripts/copy-dyn-libs target/aarch64-unknown-linux-gnu/debug/jukeboxd out/lib
+
+#	aarch64-linux-gnu-strip out/bin/jukeboxd
 
 FROM --platform=linux/arm64/v8 alpine:3.16.9 AS pre-runtime
 RUN apk add alsa-utils
