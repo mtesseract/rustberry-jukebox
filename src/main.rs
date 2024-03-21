@@ -12,7 +12,7 @@ use rustberry::config::Config;
 use rustberry::effects::{Interpreter, ProdInterpreter};
 use rustberry::input_controller::{button, playback, Input};
 use rustberry::led::{self, Blinker};
-use rustberry::player::{self, PlaybackRequest, Player};
+use rustberry::player::{self, Player};
 
 fn main() -> Result<()> {
     let decorator = slog_term::TermDecorator::new().build();
@@ -112,6 +112,7 @@ impl App {
             runtime.handle(),
             interpreter.clone(),
             player_config,
+            tag_mapper.handle(),
         )?;
         let app = Self {
             config,

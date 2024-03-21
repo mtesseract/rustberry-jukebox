@@ -131,8 +131,7 @@ pub mod cdev_gpio {
                         "Failed to request events from GPIO line {}: {}",
                         line_id, err
                     ))
-                })?
-            {
+                })? {
                 if ts.elapsed() < std::time::Duration::from_millis(500) {
                     info!("Ignoring GPIO event {:?} on line {} since the last event on this line arrived just {}ms ago",
                           event, line_id, ts.elapsed().as_millis());
@@ -159,11 +158,10 @@ pub mod cdev_gpio {
                         continue;
                     }
                 }
-
-                    if let Err(err) = self.tx.send(cmd.into()) {
-                        error!("Failed to transmit GPIO event: {}", err);
-                    }
-                    ts = Instant::now();
+                if let Err(err) = self.tx.send(cmd.clone().into()) {
+                    error!("Failed to transmit GPIO event: {}", err);
+                }
+                ts = Instant::now();
             }
             Ok(())
         }

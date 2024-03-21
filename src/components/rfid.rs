@@ -12,8 +12,6 @@ use hal::SpidevDevice;
 use mfrc522::comm:: blocking::spi::{DummyDelay, SpiInterface};
 use mfrc522::{self, Initialized, Mfrc522};
 
-type Mfrc522Error = mfrc522::error::Error<dyn SPIError>;
-
 #[derive(Clone)]
 pub struct RfidController {
     pub mfrc522: Arc<Mutex<Mfrc522<SpiInterface<SpidevDevice, DummyDelay>, Initialized>>>,

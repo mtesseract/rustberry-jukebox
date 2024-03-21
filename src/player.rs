@@ -3,7 +3,7 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use anyhow::Result;
+use anyhow::{Context,Result};
 use async_trait::async_trait;
 use crossbeam_channel::{Receiver, Sender};
 use serde::{Deserialize, Serialize};
@@ -11,7 +11,7 @@ use slog_scope::{error, info};
 use tokio::runtime;
 
 use crate::components::rfid::Tag;
-use crate::components::tag_mapper::{TagConf,TagMapperHandle};
+use crate::components::tag_mapper::{TagConf, TagMapperHandle};
 use crate::effects::Interpreter;
 use crate::led::Blinker;
 
@@ -169,8 +169,9 @@ impl Player {
         tx: Sender<Result<bool, anyhow::Error>>,
         state: &mut PlayerState,
         config: Arc<Config>,
+        tag_mapper: &TagMapperHandle,
     ) -> Result<()> {
-        let res = Self::handle_pause_continue_command(interpreter, state, config).await;
+        let res = Self::handle_pause_continue_command(interpreter, state, config, tag_mapper).await;
         tx.send(res)?;
         Ok(())
     }
@@ -179,6 +180,7 @@ impl Player {
         interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
         state: &mut PlayerState,
         _config: Arc<Config>,
+        _tag_mapper: &TagMapperHandle,
     ) -> Result<bool> {
         let mut is_playing = false;
         use PlayerState::*;
@@ -266,9 +268,10 @@ impl Player {
         tx: Sender<Result<bool, anyhow::Error>>,
         state: &mut PlayerState,
         config: Arc<Config>,
+        tag_mapper: &TagMapperHandle,
     ) -> Result<()> {
-        let res = Self::handle_playback_command(interpreter, request, state, config).await;
-        tx.send(res)?;
+        let res = Self::handle_playback_command(interpreter, request, state, config, tag_mapper).await;
+        tx.send(res).context("Sending result of handle_playback_command")?;
         Ok(())
     }
 
@@ -277,6 +280,7 @@ impl Player {
         request: PlaybackRequest,
         state: &mut PlayerState,
         config: Arc<Config>,
+        tag_mapper: &TagMapperHandle,
     ) -> Result<bool> {
         let mut is_playing = false;
         use PlaybackRequest::*;
@@ -284,7 +288,7 @@ impl Player {
 
         match request {
             Start(tag) => {
-                let tag_conf = tag_mapper.lookup(&tag).unwrap_or_default();
+                let tag_conf = tag_mapper.lookup(&tag.uid.to_string()).unwrap_or_default();
 
                 match state.clone() {
                     Idle => {
@@ -341,7 +345,7 @@ impl Player {
                     }
 
                     Playing {
-                        current_tag_conf,
+                        tag_conf: current_tag_conf,
                         handle,
                         ..
                     } if config.trigger_only_mode && current_tag_conf != tag_conf => {
@@ -541,22 +545,24 @@ impl Player {
         cmd: PlayerCommand,
         state: &mut PlayerState,
         config: Arc<Config>,
+        tag_mapper: &TagMapperHandle,
     ) -> Result<()> {
         use PlayerCommand::*;
 
         match cmd {
             PlaybackCommand { request, tx } => {
-                Self::handle_playback_command_tx(interpreter, request, tx, state, config).await
+                Self::handle_playback_command_tx(interpreter, request, tx, state, config, tag_mapper).await
             }
 
             PlayerCommand::PauseContinue { tx } => {
-                Self::handle_pause_continue_command_tx(interpreter, tx, state, config).await
+                Self::handle_pause_continue_command_tx(interpreter, tx, state, config, tag_mapper).await
             }
         }
     }
 
-    async fn player_loop(mut player: Player) {
+    async fn player_loop(mut player: Player, tag_mapper: TagMapperHandle) {
         let config = Arc::new(player.config.clone());
+        let tag_mapper_clone = tag_mapper.clone();
         loop {
             let command = player.rx.recv().unwrap();
             let mut state = player.state.clone();
@@ -565,6 +571,7 @@ impl Player {
                 command,
                 &mut state,
                 config.clone(),
+                &tag_mapper_clone,
             )
             .await;
             if let Err(ref err) = res {
@@ -587,7 +594,7 @@ impl Player {
         tag_mapper: TagMapperHandle,
     ) -> Result<PlayerHandle> {
         let (tx, rx) = crossbeam_channel::bounded(1);
-
+        let tag_mapper_clone = tag_mapper.clone();
         let player = Player {
             blinker,
             interpreter,
@@ -597,7 +604,7 @@ impl Player {
             tag_mapper,
         };
 
-        runtime.spawn(Self::player_loop(player));
+        runtime.spawn(Self::player_loop(player, tag_mapper_clone));
 
         let player_handle = PlayerHandle { tx };
 

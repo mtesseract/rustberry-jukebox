@@ -97,7 +97,7 @@ impl HttpPlayer {
 
     pub async fn start_playback(
         &self,
-        uris: &[TagConf],
+        uris: &[String],
         pause_state: Option<PauseState>,
     ) -> Result<HttpPlaybackHandle, anyhow::Error> {
         if let Some(pause_state) = pause_state {

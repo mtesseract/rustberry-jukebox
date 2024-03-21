@@ -19,11 +19,16 @@ jobs:
         with:
           images: |
             mtesseract/jukeboxd
+          flavor: |
+            latest=true
+            prefix=
+            suffix=
           tags: |
             type=raw,value=latest,enable=true
             type=ref,event=branch
             type=ref,event=pr
             type=sha
+            latest
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx

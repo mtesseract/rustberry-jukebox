@@ -12,6 +12,7 @@ use slog_scope::{info, warn};
 use std::process::Command;
 
 use crate::player::{DynPlaybackHandle, PauseState};
+use crate::components::tag_mapper::TagConf;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Effects {

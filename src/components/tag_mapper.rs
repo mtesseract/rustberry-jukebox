@@ -6,11 +6,10 @@ use std::fs;
 use std::sync::{Arc, RwLock};
 
 type TagID = String;
-type FilePath = String;
 
-#[derive(Default,Debug, Deserialize, Clone)]
+#[derive(Default,Debug, Deserialize, Clone, PartialEq)]
 pub struct TagConf {
-    uris: Vec<String>,
+    pub uris: Vec<String>,
 }
 
 impl TagConf {
@@ -19,11 +18,13 @@ impl TagConf {
     }
 }
 
-struct TagMapper {
+#[derive(Debug,Clone)]
+pub struct TagMapper {
     file: String,
     conf: Arc<RwLock<TagMapperConfiguration>>,
 }
 
+#[derive(Debug,Clone)]
 pub struct TagMapperHandle {
     conf: Arc<RwLock<TagMapperConfiguration>>,
 }
@@ -68,7 +69,7 @@ impl TagMapper {
         Ok(())
     }
 
-    fn handle(&self) -> TagMapperHandle {
+   pub fn handle(&self) -> TagMapperHandle {
         let conf = self.conf.clone();
         TagMapperHandle { conf }
     }
@@ -82,15 +83,15 @@ impl TagMapper {
         tag_mapper
     }
 
-    pub fn new_initialized(filename: &str) -> Result<TagMapperHandle> {
+    pub fn new_initialized(filename: &str) -> Result<TagMapper> {
         let mut tag_mapper = Self::new(filename);
         tag_mapper.refresh()?;
-        Ok(tag_mapper.handle())
+        Ok(tag_mapper)
     }
 }
 
 impl TagMapperHandle {
-    pub fn lookup(&self, tag_id: &Tag) -> Option<TagConf> {
+    pub fn lookup(&self, tag_id: &TagID) -> Option<TagConf> {
         let r = self.conf.read().unwrap();
         return r.mappings.get(tag_id).cloned();
     }
