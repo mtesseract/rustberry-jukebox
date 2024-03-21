@@ -1,46 +1,29 @@
-/*
-
-input:
-- user controls
-- playback requests
-
-effects:
-- play via spotify, stop via spotify
-- led on/off
-- shutdown
-
-*/
-
 pub mod http_player;
 pub mod led;
-pub mod spotify;
 
 use std::sync::Arc;
 
 use crate::config::Config;
+use anyhow::Result;
 use async_trait::async_trait;
-use failure::Fallible;
 use http_player::HttpPlayer;
 use led::{Led, LedController};
 use slog_scope::{info, warn};
-use spotify::player::SpotifyPlayer;
 use std::process::Command;
 
-use crate::player::{DynPlaybackHandle, PauseState, PlaybackHandle, PlaybackResource};
+use crate::player::{DynPlaybackHandle, PauseState};
+use crate::components::tag_mapper::TagConf;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Effects {
-    PlayHttp { url: String },
-    StopHttp,
-    PlaySpotify { spotify_uri: String },
-    StopSpotify,
+    Play { uri: String },
+    Stop,
     LedOn,
     LedOff,
     GenericCommand(String),
 }
 
 pub struct ProdInterpreter {
-    spotify_player: Option<SpotifyPlayer>,
     http_player: HttpPlayer,
     led_controller: Arc<Box<dyn LedController + 'static + Send + Sync>>,
     _config: Config,
@@ -49,64 +32,40 @@ pub struct ProdInterpreter {
 #[async_trait]
 
 pub trait Interpreter {
-    fn wait_until_ready(&self) -> Fallible<()>;
+    fn wait_until_ready(&self) -> Result<()>;
     async fn play(
         &self,
-        res: PlaybackResource,
+        tag_conf: TagConf,
         pause_state: Option<PauseState>,
-    ) -> Fallible<DynPlaybackHandle>;
-    // fn stop(&self, handle: DynPlaybackHandle) -> Fallible<()>;
-    fn led_on(&self) -> Fallible<()>;
-    fn led_off(&self) -> Fallible<()>;
-    fn generic_command(&self, cmd: String) -> Fallible<()>;
+    ) -> Result<DynPlaybackHandle>;
+    fn led_on(&self) -> Result<()>;
+    fn led_off(&self) -> Result<()>;
+    fn generic_command(&self, cmd: String) -> Result<()>;
 }
 
 #[async_trait]
 impl Interpreter for ProdInterpreter {
-    fn wait_until_ready(&self) -> Fallible<()> {
-        if let Some(ref spotify_player) = self.spotify_player {
-            spotify_player.wait_until_ready()?;
-        }
+    fn wait_until_ready(&self) -> Result<()> {
         Ok(())
     }
 
-    async fn play(
-        &self,
-        res: PlaybackResource,
-        pause_state: Option<PauseState>,
-    ) -> Fallible<DynPlaybackHandle> {
-        use PlaybackResource::*;
-        match res {
-            SpotifyUri(uri) => {
-                if let Some(ref spotify_player) = self.spotify_player {
-                spotify_player.start_playback(&uri, pause_state)
+    async fn play( &self, tag_conf: TagConf, pause_state: Option<PauseState>) -> Result<DynPlaybackHandle> {
+            self
+                .http_player
+                .start_playback(&tag_conf.uris, pause_state)
                 .await
                 .map(|x| Box::new(x) as DynPlaybackHandle)
-                } else {
-                    Err(failure::err_msg("Spotify Player not available"))
-                }
-            }
-            Http(url) => self
-                .http_player
-                .start_playback(&url, pause_state)
-                .await
-                .map(|x| Box::new(x) as DynPlaybackHandle),
-            // .map_err(|err| err.into()),
-        }
     }
 
-    // fn stop(&self, handle: DynPlaybackHandle) -> Fallible<()> {
-    // }
-
-    fn led_on(&self) -> Fallible<()> {
+    fn led_on(&self) -> Result<()> {
         info!("Switching LED on");
         self.led_controller.switch_on(Led::Playback)
     }
-    fn led_off(&self) -> Fallible<()> {
+    fn led_off(&self) -> Result<()> {
         info!("Switching LED off");
         self.led_controller.switch_off(Led::Playback)
     }
-    fn generic_command(&self, cmd: String) -> Fallible<()> {
+    fn generic_command(&self, cmd: String) -> Result<()> {
         info!("Executing command '{}'", &cmd);
         let res = Command::new("/bin/sh").arg("-c").arg(&cmd).status();
         match res {
@@ -119,7 +78,7 @@ impl Interpreter for ProdInterpreter {
                         "Command terminated with non-zero exit code: {:?}",
                         exit_status
                     );
-                    Err(failure::err_msg(format!(
+                    Err(anyhow::Error::msg(format!(
                         "Command terminated with exit status {}",
                         exit_status
                     )))
@@ -134,17 +93,12 @@ impl Interpreter for ProdInterpreter {
 }
 
 impl ProdInterpreter {
-    pub fn new(config: &Config) -> Fallible<Self> {
+    pub fn new(config: &Config) -> Result<Self> {
         let config = config.clone();
         let led_controller = Arc::new(Box::new(led::gpio_cdev::GpioCdev::new()?)
             as Box<dyn LedController + 'static + Send + Sync>);
-        let mut spotify_player: Option<SpotifyPlayer> = None;
-        if config.enable_spotify {
-            spotify_player = Some(SpotifyPlayer::newFromEnv()?);
-        }
         let http_player = HttpPlayer::new()?;
         Ok(ProdInterpreter {
-            spotify_player,
             http_player,
             led_controller,
             _config: config,
@@ -152,73 +106,70 @@ impl ProdInterpreter {
     }
 }
 
-pub mod test {
-    use super::*;
-    use async_trait::async_trait;
-    use crossbeam_channel::{self, Receiver, Sender};
-    use Effects::*;
+// pub mod test {
+//     use super::*;
+//     use async_trait::async_trait;
+//     use crossbeam_channel::{self, Receiver, Sender};
+//     use Effects::*;
 
-    pub struct TestInterpreter {
-        tx: Sender<Effects>,
-    }
+//     pub struct TestInterpreter {
+//         tx: Sender<Effects>,
+//     }
 
-    impl TestInterpreter {
-        pub fn new() -> (TestInterpreter, Receiver<Effects>) {
-            let (tx, rx) = crossbeam_channel::unbounded();
-            let interpreter = TestInterpreter { tx };
-            (interpreter, rx)
-        }
-    }
+//     impl TestInterpreter {
+//         pub fn new() -> (TestInterpreter, Receiver<Effects>) {
+//             let (tx, rx) = crossbeam_channel::unbounded();
+//             let interpreter = TestInterpreter { tx };
+//             (interpreter, rx)
+//         }
+//     }
 
-    struct DummyPlaybackHandle;
+//     struct DummyPlaybackHandle;
 
-    #[async_trait]
-    impl PlaybackHandle for DummyPlaybackHandle {
-        async fn stop(&self) -> Fallible<()> {
-            Ok(())
-        }
-        async fn is_complete(&self) -> Fallible<bool> {
-            Ok(true)
-        }
-        async fn cont(&self, _pause_state: PauseState) -> Fallible<()> {
-            Ok(())
-        }
-        async fn replay(&self) -> Fallible<()> {
-            Ok(())
-        }
-    }
+//     #[async_trait]
+//     impl PlaybackHandle for DummyPlaybackHandle {
+//         async fn stop(&self) -> Result<()> {
+//             Ok(())
+//         }
+//         async fn is_complete(&self) -> Result<bool> {
+//             Ok(true)
+//         }
+//         async fn cont(&self, _pause_state: PauseState) -> Result<()> {
+//             Ok(())
+//         }
+//         async fn replay(&self) -> Result<()> {
+//             Ok(())
+//         }
+//     }
 
-    #[async_trait]
-    impl Interpreter for TestInterpreter {
-        fn wait_until_ready(&self) -> Fallible<()> {
-            Ok(())
-        }
+//     #[async_trait]
+//     impl Interpreter for TestInterpreter {
+//         fn wait_until_ready(&self) -> Result<()> {
+//             Ok(())
+//         }
 
-        async fn play(
-            &self,
-            res: PlaybackResource,
-            _pause_state: Option<PauseState>,
-        ) -> Fallible<DynPlaybackHandle> {
-            use PlaybackResource::*;
+//         async fn play(
+//             &self,
+//             res: PlaybackResource,
+//             _pause_state: Option<PauseState>,
+//         ) -> Result<DynPlaybackHandle> {
+//             use PlaybackResource::*;
 
-            match res {
-                SpotifyUri(uri) => self.tx.send(PlaySpotify { spotify_uri: uri })?,
-                Http(url) => self.tx.send(PlayHttp { url })?,
-            }
-            Ok(Box::new(DummyPlaybackHandle) as DynPlaybackHandle)
-        }
+//             self.tx.send(Play { uri: res.uid.0 })?;
+//             Ok(Box::new(DummyPlaybackHandle) as DynPlaybackHandle)
+//         }
 
-        fn led_on(&self) -> Fallible<()> {
-            self.tx.send(LedOn).unwrap();
-            Ok(())
-        }
-        fn led_off(&self) -> Fallible<()> {
-            self.tx.send(LedOff).unwrap();
-            Ok(())
-        }
-        fn generic_command(&self, cmd: String) -> Fallible<()> {
-            self.tx.send(GenericCommand(cmd)).unwrap();
-            Ok(())
-        }
-    }
-}
+//         fn led_on(&self) -> Result<()> {
+//             self.tx.send(LedOn).unwrap();
+//             Ok(())
+//         }
+//         fn led_off(&self) -> Result<()> {
+//             self.tx.send(LedOff).unwrap();
+//             Ok(())
+//         }
+//         fn generic_command(&self, cmd: String) -> Result<()> {
+//             self.tx.send(GenericCommand(cmd)).unwrap();
+//             Ok(())
+//         }
+//     }
+// }

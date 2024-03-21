@@ -1,4 +1,4 @@
-use failure::Fallible;
+use anyhow::Result;
 use rodio::Sink;
 use slog_scope::{info, warn};
 use std::convert::From;
@@ -33,7 +33,7 @@ pub struct HttpPlaybackHandle {
 }
 
 impl HttpPlaybackHandle {
-    pub async fn queue(&self) -> Fallible<()> {
+    pub async fn queue(&self) -> Result<()> {
         let mut builder = self.http_client.get(&self.url);
         if let Some((ref username, ref password)) = &self.basic_auth {
             builder = builder.basic_auth(username, Some(password));
@@ -50,20 +50,20 @@ impl HttpPlaybackHandle {
 
 #[async_trait]
 impl PlaybackHandle for HttpPlaybackHandle {
-    async fn is_complete(&self) -> Fallible<bool> {
+    async fn is_complete(&self) -> Result<bool> {
         Ok(self.sink.empty())
     }
 
-    async fn stop(&self) -> Fallible<()> {
+    async fn stop(&self) -> Result<()> {
         self.sink.pause();
         Ok(())
     }
-    async fn cont(&self, _pause_state: PauseState) -> Fallible<()> {
+    async fn cont(&self, _pause_state: PauseState) -> Result<()> {
         self.sink.play();
         Ok(())
     }
 
-    async fn replay(&self) -> Fallible<()> {
+    async fn replay(&self) -> Result<()> {
         self.sink.stop();
         self.queue().await?;
         self.sink.play();
@@ -72,9 +72,8 @@ impl PlaybackHandle for HttpPlaybackHandle {
 }
 
 impl HttpPlayer {
-    pub fn new() -> Fallible<Self> {
+    pub fn new() -> Result<Self> {
         info!("Creating new HttpPlayer...");
-        // let (tx, rx) = crossbeam_channel::bounded(1);
         let http_client = Arc::new(reqwest::Client::new());
         let basic_auth = {
             let username: Option<String> =
@@ -98,19 +97,21 @@ impl HttpPlayer {
 
     pub async fn start_playback(
         &self,
-        url: &str,
+        uris: &[String],
         pause_state: Option<PauseState>,
-    ) -> Result<HttpPlaybackHandle, failure::Error> {
+    ) -> Result<HttpPlaybackHandle, anyhow::Error> {
         if let Some(pause_state) = pause_state {
             warn!("Ignoring pause state: {:?}", pause_state);
         }
         let device = rodio::default_output_device().unwrap();
-        let url = url.to_string();
+        let url = match uris.first().cloned() {
+            Some(uri) => uri,
+            None => return Err(anyhow::Error::msg("TagConf empty")),
+        };
         let http_client = self.http_client.clone();
         let basic_auth = self.basic_auth.clone();
         let (tx, rx) = crossbeam_channel::bounded(1);
         let sink = Arc::new(Sink::new(&device));
-        // let sink_cp = sink.clone();
         let _handle = Builder::new()
             .name("http-player".to_string())
             .spawn(move || {

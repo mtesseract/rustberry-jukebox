@@ -1,4 +1,4 @@
-use failure::Fallible;
+use anyhow::Result;
 
 #[derive(Debug)]
 pub enum Error {
@@ -22,13 +22,13 @@ pub enum Led {
 
 pub trait LedController {
     fn description(&self) -> String;
-    fn switch_on(&self, line: Led) -> Fallible<()>;
-    fn switch_off(&self, line: Led) -> Fallible<()>;
+    fn switch_on(&self, line: Led) -> Result<()>;
+    fn switch_off(&self, line: Led) -> Result<()>;
 }
 
 pub mod gpio_cdev {
     use super::{Error, Led, LedController};
-    use failure::Fallible;
+    use anyhow::Result;
     use gpio_cdev::{Chip, LineHandle, LineRequestFlags};
     use serde::Deserialize;
     use slog_scope::{info, warn};
@@ -51,7 +51,7 @@ pub mod gpio_cdev {
             chip: &mut Chip,
             led: Led,
             line_id: u32,
-        ) -> Fallible<()> {
+        ) -> Result<()> {
             let line = chip.get_line(line_id).map_err(|err| {
                 Error::IO(format!(
                     "Failed to get GPIO line for LED {:?}/{}: {:?}",
@@ -70,7 +70,7 @@ pub mod gpio_cdev {
             Ok(())
         }
 
-        pub fn new() -> Fallible<Self> {
+        pub fn new() -> Result<Self> {
             let config: Config = envy::from_env()?;
             let mut chip = Chip::new("/dev/gpiochip0")
                 .map_err(|err| Error::IO(format!("Failed to open Chip: {:?}", err)))?;
@@ -93,7 +93,7 @@ pub mod gpio_cdev {
         fn description(&self) -> String {
             "gpio-cdev backend".to_string()
         }
-        fn switch_on(&self, led: Led) -> Fallible<()> {
+        fn switch_on(&self, led: Led) -> Result<()> {
             if let Some(ref led_handle) = self.leds.get(&led) {
                 led_handle.set_value(1).map_err(|err| {
                     Error::IO(format!("Failed to switch on LED {:?}: {:?}", &led, err))
@@ -102,7 +102,7 @@ pub mod gpio_cdev {
             }
             Ok(())
         }
-        fn switch_off(&self, led: Led) -> Fallible<()> {
+        fn switch_off(&self, led: Led) -> Result<()> {
             if let Some(ref led_handle) = self.leds.get(&led) {
                 led_handle.set_value(0).map_err(|err| {
                     Error::IO(format!("Failed to switch off LED {:?}: {:?}", &led, err))

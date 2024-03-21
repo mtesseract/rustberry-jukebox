@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM rust:1.74 AS planner
+FROM --platform=$BUILDPLATFORM rust:1.76 AS planner
 RUN rustup target add aarch64-unknown-linux-gnu
 RUN cargo install cargo-chef
 WORKDIR /proj
@@ -7,7 +7,7 @@ COPY . .
 # Prepare a build plan ("recipe")
 RUN cargo chef prepare --recipe-path recipe.json
 
-FROM --platform=$BUILDPLATFORM rust:1.74 AS builder
+FROM --platform=$BUILDPLATFORM rust:1.76 AS builder
 RUN rustup target add aarch64-unknown-linux-gnu
 RUN cargo install cargo-chef
 RUN dpkg --add-architecture arm64 && apt-get update
@@ -33,11 +33,17 @@ RUN cargo build --target aarch64-unknown-linux-gnu
 RUN rm -rf out && \
 	mkdir -p out/bin out/lib && \
 	cp target/aarch64-unknown-linux-gnu/debug/jukeboxd out/bin && \
-	./scripts/copy-dyn-libs target/aarch64-unknown-linux-gnu/debug/jukeboxd out/lib && \
-	aarch64-linux-gnu-strip out/bin/jukeboxd
+	./scripts/copy-dyn-libs target/aarch64-unknown-linux-gnu/debug/jukeboxd out/lib
+#	aarch64-linux-gnu-strip out/bin/jukeboxd
+
+FROM --platform=linux/arm64/v8 alpine:3.16.9 AS pre-runtime
+RUN apk add patchelf
+RUN mkdir /app
+COPY --from=builder /proj/out/ /app
+COPY --from=builder /lib/ld-linux-aarch64.so.1 /app/lib
+RUN patchelf --set-rpath /app/lib /app/bin/jukeboxd
+RUN patchelf --set-interpreter /app/lib/ld-linux-aarch64.so.1 /app/bin/jukeboxd 
 
 FROM --platform=linux/arm64/v8 alpine:3.16.9 AS runtime
-COPY --from=builder /proj/out/ /usr/local
-COPY --from=builder /lib/ld-linux-aarch64.so* /lib
-ENV LD_LIBRARY_PATH=/usr/local/lib
-ENTRYPOINT ["/usr/local/bin/jukeboxd"]
+RUN apk add alsa-utils
+COPY --from=pre-runtime /app /app

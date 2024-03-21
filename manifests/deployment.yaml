@@ -17,12 +17,17 @@ spec:
     spec:
       containers:
       - name: jukeboxd 
-        image: mtesseract/jukeboxd:pr-15
+        image: mtesseract/jukeboxd:pr-16
         imagePullPolicy: Always
-        command: ["sleep", "10m"]
+        command: ["/usr/local/bin/jukeboxd"]
         securityContext:
           privileged: true
         env:
+        - name: TAG_MAPPER_CONFIGURATION_FILE
+          valueFrom:
+            configMapKeyRef:
+              name: jukeboxd
+              key: tag_mapper_configuration_file
         - name: ENABLE_SPOTIFY
           valueFrom:
             configMapKeyRef:
