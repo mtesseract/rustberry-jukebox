@@ -45,5 +45,6 @@ RUN patchelf --set-rpath /app/lib /app/bin/jukeboxd
 RUN patchelf --set-interpreter /app/lib/ld-linux-aarch64.so.1 /app/bin/jukeboxd 
 
 FROM --platform=linux/arm64/v8 alpine:3.16.9 AS runtime
-RUN apk add alsa-utils
+RUN apk add alsa-utils pulseaudio-utils
+
 COPY --from=pre-runtime /app /app
