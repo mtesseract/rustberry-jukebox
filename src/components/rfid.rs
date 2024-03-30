@@ -1,12 +1,10 @@
 use anyhow::{Context, Result};
-use slog_scope::{info};
+use slog_scope::info;
 use std::sync::{Arc, Mutex};
 use std::fmt;
 use serde::{Deserialize, Serialize};
 
-use embedded_hal_1 as embedded_hal;
 use linux_embedded_hal as hal;
-use embedded_hal::spi::Error as SPIError;
 use hal::spidev::{SpiModeFlags, SpidevOptions};
 use hal::SpidevDevice;
 use mfrc522::comm:: blocking::spi::{DummyDelay, SpiInterface};

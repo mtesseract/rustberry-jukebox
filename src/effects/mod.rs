@@ -1,4 +1,4 @@
-pub mod http_player;
+pub mod file_player;
 pub mod led;
 
 use std::sync::Arc;
@@ -6,7 +6,7 @@ use std::sync::Arc;
 use crate::config::Config;
 use anyhow::Result;
 use async_trait::async_trait;
-use http_player::HttpPlayer;
+use file_player::FilePlayer;
 use led::{Led, LedController};
 use slog_scope::{info, warn};
 use std::process::Command;
@@ -24,7 +24,7 @@ pub enum Effects {
 }
 
 pub struct ProdInterpreter {
-    http_player: HttpPlayer,
+    file_player: FilePlayer,
     led_controller: Arc<Box<dyn LedController + 'static + Send + Sync>>,
     _config: Config,
 }
@@ -51,7 +51,7 @@ impl Interpreter for ProdInterpreter {
 
     async fn play( &self, tag_conf: TagConf, pause_state: Option<PauseState>) -> Result<DynPlaybackHandle> {
             self
-                .http_player
+                .file_player
                 .start_playback(&tag_conf.uris, pause_state)
                 .await
                 .map(|x| Box::new(x) as DynPlaybackHandle)
@@ -97,9 +97,9 @@ impl ProdInterpreter {
         let config = config.clone();
         let led_controller = Arc::new(Box::new(led::gpio_cdev::GpioCdev::new()?)
             as Box<dyn LedController + 'static + Send + Sync>);
-        let http_player = HttpPlayer::new()?;
+        let file_player = FilePlayer::new(&config.audio_base_directory)?;
         Ok(ProdInterpreter {
-            http_player,
+            file_player,
             led_controller,
             _config: config,
         })

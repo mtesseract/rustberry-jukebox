@@ -91,8 +91,7 @@ struct App {
     interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>>,
     inputs: Vec<Receiver<Input>>,
     blinker: Blinker,
-    runtime: tokio::runtime::Runtime,
-    tag_mapper: TagMapper,
+    _runtime: tokio::runtime::Runtime,
 }
 
 impl App {
@@ -120,8 +119,7 @@ impl App {
             player,
             interpreter,
             blinker,
-            runtime,
-            tag_mapper,
+            _runtime: runtime,
         };
 
         // info!("Running in {} mode", if app.config.trigger_only_mode { "trigger-only" } else { "traditional" });

@@ -83,7 +83,7 @@ enum PlayerState {
 
 pub struct Player {
     interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
-    blinker: Option<Blinker>,
+    _blinker: Option<Blinker>,
     state: PlayerState,
     rx: Receiver<PlayerCommand>,
     config: Config,
@@ -560,9 +560,9 @@ impl Player {
         }
     }
 
-    async fn player_loop(mut player: Player, tag_mapper: TagMapperHandle) {
+    async fn player_loop(mut player: Player) {
         let config = Arc::new(player.config.clone());
-        let tag_mapper_clone = tag_mapper.clone();
+        let tag_mapper = player.tag_mapper.clone();
         loop {
             let command = player.rx.recv().unwrap();
             let mut state = player.state.clone();
@@ -571,7 +571,7 @@ impl Player {
                 command,
                 &mut state,
                 config.clone(),
-                &tag_mapper_clone,
+                &tag_mapper,
             )
             .await;
             if let Err(ref err) = res {
@@ -594,9 +594,8 @@ impl Player {
         tag_mapper: TagMapperHandle,
     ) -> Result<PlayerHandle> {
         let (tx, rx) = crossbeam_channel::bounded(1);
-        let tag_mapper_clone = tag_mapper.clone();
         let player = Player {
-            blinker,
+            _blinker: blinker,
             interpreter,
             state: PlayerState::Idle,
             rx,
@@ -604,7 +603,7 @@ impl Player {
             tag_mapper,
         };
 
-        runtime.spawn(Self::player_loop(player, tag_mapper_clone));
+        runtime.spawn(Self::player_loop(player));
 
         let player_handle = PlayerHandle { tx };
 

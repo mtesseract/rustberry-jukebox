@@ -2,10 +2,6 @@ use serde::Deserialize;
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Config {
-    // pub refresh_token: String,
-    // pub client_id: Option<String>,
-    // pub client_secret: Option<String>,
-    // pub device_name: Option<String>,
     #[serde(default = "enable_spotify_default")]
     pub enable_spotify: bool,
     pub post_init_command: Option<String>,
@@ -15,6 +11,7 @@ pub struct Config {
     #[serde(default = "trigger_only_mode_default")]
     pub trigger_only_mode: bool,
     pub tag_mapper_configuration_file: String,
+    pub audio_base_directory: String,
 }
 
 fn trigger_only_mode_default() -> bool {
