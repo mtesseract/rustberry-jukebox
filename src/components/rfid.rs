@@ -65,7 +65,8 @@ impl RfidController {
         let mut mfrc522 = self.mfrc522.lock().unwrap();
         let atqa = match mfrc522.new_card_present() {
             Err(mfrc522::error::Error::Timeout) => return Ok(None),
-            Err(err) => return Err(err.into()),
+            // mfrc522::error::Error only has a stub Display implementation.
+            Err(err) => return Err(anyhow::Error::msg(format!("{:?}", err))),
             Ok(atqa) => atqa,
         };
         let uid = mfrc522.select(&atqa)?;
