@@ -64,8 +64,9 @@ pub mod rfid {
                         thread::sleep(Duration::from_millis(80));
                     }
                     Ok(None) => {
+                        info!("No PICC seen.");
                         if last_uid.is_some() {
-                            info!("RFID Tag gone");
+                            info!("PICC gone");
                             last_uid = None;
                             if let Err(err) = self.tx.send(PlaybackRequest::Stop.into()) {
                                 error!("Failed to transmit User Request: {}", err);
@@ -74,6 +75,8 @@ pub mod rfid {
                         }
                     }
                     Ok(Some(tag)) => {
+                        info!("Seen PICC {:?}", tag);
+                        
                         let tagclone = tag.clone();
 
                         let current_uid = tag.uid;

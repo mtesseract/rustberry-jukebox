@@ -69,7 +69,7 @@ impl RfidController {
             Err(err) => return Err(anyhow::Error::msg(format!("{:?}", err))),
             Ok(atqa) => atqa,
         };
-        let uid = mfrc522.select(&atqa)?;
+        let uid = mfrc522.select(&atqa).context("Selecting AtqA for PICC")?;
         let uid = Uid::from_bytes(uid.as_bytes());
         Ok(Some(Tag { uid }))
     }
