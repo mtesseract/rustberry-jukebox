@@ -61,13 +61,14 @@ impl RfidController {
 
     pub fn open_tag(&mut self) -> Result<Option<Tag>> {
         let mut mfrc522 = self.mfrc522.lock().unwrap();
-        let atqa = match mfrc522.new_card_present() {
+        let atqa = match mfrc522.reqa() {
             Err(mfrc522::error::Error::Timeout) => return Ok(None),
             // mfrc522::error::Error only has a stub Display implementation.
             Err(err) => return Err(anyhow::Error::msg(format!("{:?}", err))),
             Ok(atqa) => atqa,
         };
         let uid = mfrc522.select(&atqa).context("Selecting AtqA for PICC")?;
+        let _ = mfrc522.hlta();
         let uid = Uid::from_bytes(uid.as_bytes());
         Ok(Some(Tag { uid }))
     }
