@@ -15,3 +15,4 @@ data:
   volume_down_command: ""
   trigger_only_mode: "true"
   tag_mapper_configuration_file: "/mnt/jukebox-drive/conf/tag-mapper.yaml"
+  audio_base_directory: "/mnt/jukebox-drive/audio"

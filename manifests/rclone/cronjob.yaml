@@ -1,0 +1,47 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: rclone-sync
+  namespace: koffer
+spec:
+  schedule: "0/5 * * * *"
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  concurrencyPolicy: Forbid
+  # startingDeadlineSeconds: {{ .Values.startingDeadlineSeconds }}
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          initContainers:
+          - name: init
+            image: "docker.io/rclone/rclone:1.66.0@sha256:a693c46a6b8b7585f77ffb439b5727cb192f0b865f3da66efbc049e6ef1c5c4c"
+            imagePullPolicy: IfNotPresent
+            command: ["cp", "/usr/local/etc/rclone.conf", "/config/rclone"]
+            volumeMounts:
+            - mountPath: "/config/rclone"
+              name: rclone-config
+            - mountPath: "/usr/local/etc/rclone.conf"
+              name: rclone-config-file
+              subPath: "rclone.conf"
+          containers:
+          - name: "rclone"
+            image: "docker.io/rclone/rclone:1.66.0@sha256:a693c46a6b8b7585f77ffb439b5727cb192f0b865f3da66efbc049e6ef1c5c4c"
+            imagePullPolicy: IfNotPresent
+            args: [ "sync", "jukebox:/Jukebox", "/mnt/jukebox-drive" ]
+            volumeMounts:
+              - mountPath: "/config/rclone"
+                name: rclone-config
+              - mountPath: /mnt/jukebox-drive
+                name: jukebox-drive
+          volumes:
+          - name: rclone-config
+            emptyDir:
+              sizeLimit: 1Mi
+          - name: rclone-config-file
+            secret:
+              secretName: rclone-config
+          - name: jukebox-drive
+            persistentVolumeClaim:
+              claimName: jukebox-drive
