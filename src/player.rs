@@ -86,6 +86,44 @@ enum PlayerState {
     },
 }
 
+impl PlayerState {
+    pub fn comparable(self) -> ComparablePlayerState {
+        self.into()
+    }
+}
+
+#[derive(Debug,Clone,PartialEq)]
+enum ComparablePlayerState {
+    Idle,
+    Playing {
+        tag_conf: TagConf,
+        playing_since: std::time::Instant,
+        offset: Duration,
+    },
+    Paused {
+        at: std::time::Duration,
+        prev_tag_conf: TagConf,
+    },
+}
+
+impl From<PlayerState> for ComparablePlayerState {
+    fn from(value: PlayerState) -> Self {
+        match value {
+            PlayerState::Idle => ComparablePlayerState::Idle,
+            PlayerState::Playing {
+                tag_conf,
+                playing_since,
+                offset,
+                ..
+            } => ComparablePlayerState::Playing { tag_conf: tag_conf.clone(), playing_since, offset },
+            PlayerState::Paused {
+                at,
+                prev_tag_conf,
+                ..
+            } => ComparablePlayerState::Paused {at, prev_tag_conf: prev_tag_conf.clone() },
+        }
+    }
+}
 pub struct Player {
     interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
     _blinker: Option<Blinker>,
@@ -585,7 +623,7 @@ impl Player {
                     "Player State Transition Failure: {}, staying in State {}",
                     err, &state
                 );
-            } else {
+            } else if player.state.comparable() != state.comparable() {
                 info!("Player State Transition: {} -> {}", player.state, state);
             }
             player.state = state;
