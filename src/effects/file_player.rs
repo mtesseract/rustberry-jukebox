@@ -1,6 +1,6 @@
 use anyhow::{Context,Result};
 use rodio::Sink;
-use tracing::{warn,info};
+use tracing::{warn,info,trace};
 use std::convert::From;
 use std::fs::File;
 use std::io::BufReader;
@@ -89,6 +89,7 @@ impl FilePlayer {
         uris: &[String],
         pause_state: Option<PauseState>,
     ) -> Result<FilePlaybackHandle, anyhow::Error> {
+        trace!("Initiating playback for uris {:?}", uris);
         if let Some(pause_state) = pause_state {
             warn!("Ignoring pause state: {:?}", pause_state);
         }

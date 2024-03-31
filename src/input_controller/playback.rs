@@ -46,11 +46,11 @@ pub mod rfid {
             info!("PlaybackRequestTransmitterRfid loop running");
 
             loop {
+                thread::sleep(Duration::from_millis(1000));
                 match self.picc.open_tag() {
                     Err(err) => {
                         // Do not change playback state in this case.
                         warn!("Failed to open RFID tag: {}", err);
-                        thread::sleep(Duration::from_millis(80));
                     }
                     Ok(None) => {
                         trace!("No PICC seen.");
@@ -60,7 +60,6 @@ pub mod rfid {
                             if let Err(err) = self.tx.send(PlaybackRequest::Stop.into()) {
                                 error!("Failed to transmit User Request: {}", err);
                             }
-                            thread::sleep(Duration::from_millis(80));
                         }
                     }
                     Ok(Some(tag)) => {
@@ -73,12 +72,10 @@ pub mod rfid {
                             info!("Seen new PICC {}", current_uid);
                             if let Err(err) = self.tx.send(PlaybackRequest::Start(tagclone).into()) {
                                 error!("Failed to handle tag: {}", err);
-                                thread::sleep(Duration::from_millis(80));
                                 continue;
                             }
                             last_uid = Some(current_uid);
                         }
-                        thread::sleep(Duration::from_millis(80));
                     }
                 }
             }
