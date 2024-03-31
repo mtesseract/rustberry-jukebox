@@ -7,7 +7,7 @@ use anyhow::{Context,Result};
 use async_trait::async_trait;
 use crossbeam_channel::{Receiver, Sender};
 use serde::{Deserialize, Serialize};
-use tracing::{error,info};
+use tracing::{trace,error,info};
 use tokio::runtime;
 
 use crate::components::rfid::Tag;
@@ -559,7 +559,7 @@ impl Player {
                 Self::handle_playback_command_tx(interpreter, request, tx, state, config, tag_mapper).await
             }
 
-            PlayerCommand::PauseContinue { tx } => {
+            PauseContinue { tx } => {
                 Self::handle_pause_continue_command_tx(interpreter, tx, state, config, tag_mapper).await
             }
         }
@@ -570,6 +570,7 @@ impl Player {
         let tag_mapper = player.tag_mapper.clone();
         loop {
             let command = player.rx.recv().unwrap();
+            trace!("Player command: {:?}", command);
             let mut state = player.state.clone();
             let res = Self::handle_command(
                 player.interpreter.clone(),
