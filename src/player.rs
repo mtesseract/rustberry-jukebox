@@ -87,8 +87,30 @@ enum PlayerState {
 }
 
 impl PlayerState {
-    pub fn comparable(self) -> ComparablePlayerState {
-        self.into()
+    pub fn comparable(&self) -> ComparablePlayerState {
+        match self {
+            PlayerState::Idle => ComparablePlayerState::Idle,
+            PlayerState::Playing {
+                tag_conf,
+                playing_since,
+                offset,
+                ..
+            } => ComparablePlayerState::Playing { tag_conf: tag_conf.clone(), playing_since: *playing_since, offset: *offset },
+            PlayerState::Paused {
+                at,
+                prev_tag_conf,
+                ..
+            } => ComparablePlayerState::Paused {at: *at, prev_tag_conf: prev_tag_conf.clone() },
+        }
+    }
+
+    pub fn is_playing(&self) -> bool {
+        use PlayerState::*;
+        match self {
+            Idle => false,
+            Playing {..} => true,
+            Paused {..} => false,
+        }
     }
 }
 
@@ -106,24 +128,6 @@ enum ComparablePlayerState {
     },
 }
 
-impl From<PlayerState> for ComparablePlayerState {
-    fn from(value: PlayerState) -> Self {
-        match value {
-            PlayerState::Idle => ComparablePlayerState::Idle,
-            PlayerState::Playing {
-                tag_conf,
-                playing_since,
-                offset,
-                ..
-            } => ComparablePlayerState::Playing { tag_conf: tag_conf.clone(), playing_since, offset },
-            PlayerState::Paused {
-                at,
-                prev_tag_conf,
-                ..
-            } => ComparablePlayerState::Paused {at, prev_tag_conf: prev_tag_conf.clone() },
-        }
-    }
-}
 pub struct Player {
     interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
     _blinker: Option<Blinker>,
@@ -579,7 +583,6 @@ impl Player {
             }
         }
 
-        Self::playing_led(interpreter, is_playing);
         Ok(is_playing)
     }
 
@@ -625,6 +628,7 @@ impl Player {
                 );
             } else if player.state.comparable() != state.comparable() {
                 info!("Player State Transition: {} -> {}", player.state, state);
+                Self::playing_led(player.interpreter.clone(), state.is_playing());
             }
             player.state = state;
         }
