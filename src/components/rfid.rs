@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use slog_scope::info;
+use tracing::info;
 use std::sync::{Arc, Mutex};
 use std::fmt;
 use serde::{Deserialize, Serialize};

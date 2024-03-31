@@ -1,6 +1,6 @@
 use anyhow::{Context,Result};
 use rodio::Sink;
-use slog_scope::{info, warn};
+use tracing::{warn,info};
 use std::convert::From;
 use std::fs::File;
 use std::io::BufReader;

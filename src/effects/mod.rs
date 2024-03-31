@@ -8,7 +8,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use file_player::FilePlayer;
 use led::{Led, LedController};
-use slog_scope::{info, warn};
+use tracing::{info, warn};
 use std::process::Command;
 
 use crate::player::{DynPlaybackHandle, PauseState};

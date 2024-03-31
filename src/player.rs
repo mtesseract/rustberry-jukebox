@@ -7,7 +7,7 @@ use anyhow::{Context,Result};
 use async_trait::async_trait;
 use crossbeam_channel::{Receiver, Sender};
 use serde::{Deserialize, Serialize};
-use slog_scope::{error, info};
+use tracing::{error,info};
 use tokio::runtime;
 
 use crate::components::rfid::Tag;
@@ -42,6 +42,11 @@ pub enum PlayerCommand {
 
 // type StopPlayEffect = Box<dyn Fn() -> Result<(), anyhow::Error>>;
 pub type DynPlaybackHandle = Box<dyn PlaybackHandle + Send + Sync + 'static>;
+impl std::fmt::Debug for DynPlaybackHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(f, "DynPlaybackHandle")
+    }
+}
 
 impl fmt::Display for PlayerState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -65,7 +70,7 @@ impl fmt::Display for PlayerState {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug,Clone)]
 enum PlayerState {
     Idle,
     Playing {

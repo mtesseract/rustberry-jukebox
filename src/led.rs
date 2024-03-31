@@ -8,7 +8,7 @@ use tokio::runtime;
 use crate::effects::Interpreter;
 use anyhow::Result;
 use futures::future::AbortHandle;
-use slog_scope::info;
+use tracing::info;
 
 #[derive(Clone)]
 pub struct Blinker {

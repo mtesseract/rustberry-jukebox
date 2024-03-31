@@ -37,7 +37,7 @@ pub mod cdev_gpio {
 
     use gpio_cdev::{Chip, EventRequestFlags, Line, LineRequestFlags};
     use serde::Deserialize;
-    use slog_scope::{error, info, warn};
+    use tracing::{error,info,warn};
 
     use super::*;
 

@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use crossbeam_channel::{self, Receiver, Sender};
-use slog_scope::{error, info, trace, warn};
+use tracing::{error, info, trace, warn};
 use std::{thread, time::Duration};
 
 use crate::player::PlaybackRequest;

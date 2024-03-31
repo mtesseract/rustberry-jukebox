@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use serde::Deserialize;
-use slog_scope::info;
+use tracing::info;
 use std::collections::HashMap;
 use std::fs;
 use std::sync::{Arc, RwLock};

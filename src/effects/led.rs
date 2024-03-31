@@ -31,7 +31,7 @@ pub mod gpio_cdev {
     use anyhow::Result;
     use gpio_cdev::{Chip, LineHandle, LineRequestFlags};
     use serde::Deserialize;
-    use slog_scope::{info, warn};
+    use tracing::{info, warn};
     use std::collections::HashMap;
 
     #[derive(Deserialize)]

@@ -4,8 +4,8 @@ use tokio::runtime::{self, Runtime};
 
 use anyhow::{Context, Result};
 use crossbeam_channel::{self, Receiver, Select};
-use slog::{self, o, Drain};
-use slog_scope::{error, info, warn};
+use tracing::{error,info,warn};
+use tracing_subscriber;
 
 use rustberry::components::tag_mapper::TagMapper;
 use rustberry::config::Config;
@@ -15,16 +15,7 @@ use rustberry::led::{self, Blinker};
 use rustberry::player::{self, Player};
 
 fn main() -> Result<()> {
-    let decorator = slog_term::TermDecorator::new().build();
-    let drain = slog_term::FullFormat::new(decorator).build().fuse();
-    let drain = slog_async::Async::new(drain).build().fuse();
-    let logger = slog::Logger::root(drain, o!());
-    let _guard = slog_scope::set_global_logger(logger);
-
-    slog_scope::scope(&slog_scope::logger().new(o!()), main_with_log)
-}
-
-fn main_with_log() -> Result<()> {
+    tracing_subscriber::fmt::init();
     let config = envy::from_env::<Config>()?;
     info!("Starting application");
 
