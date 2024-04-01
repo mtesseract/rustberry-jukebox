@@ -1,0 +1,17 @@
+#!/bin/sh
+
+ret=0
+
+while true; do
+	/app/bin/jukeboxd "$@"
+	ret=$?
+	if [ -e "/app/bin/jukeboxd.new" ]; then
+		mv /app/bin/jukeboxd.new /app/bin/jukeboxd
+		continue
+	else
+		break
+	fi
+done
+
+exit "${ret}"
+

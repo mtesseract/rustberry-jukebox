@@ -19,7 +19,7 @@ spec:
       - name: jukeboxd 
         image: mtesseract/jukeboxd:latest
         imagePullPolicy: Always
-        command: ["/app/bin/jukeboxd"]
+        command: ["/app/bin/jukeboxd-wrapper"]
         securityContext:
           privileged: true
         env:

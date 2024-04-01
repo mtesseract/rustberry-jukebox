@@ -48,3 +48,4 @@ FROM --platform=linux/arm64/v8 alpine:3.16.9 AS runtime
 RUN apk add alsa-utils pulseaudio-utils
 
 COPY --from=pre-runtime /app /app
+COPY scripts/jukeboxd-wrapper /app/bin/jukeboxd-wrapper
