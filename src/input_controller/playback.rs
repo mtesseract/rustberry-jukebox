@@ -45,11 +45,11 @@ pub mod rfid {
 
         fn run(mut self) -> Result<()> {
             let mut last_uid: Option<Uid> = None;
-            info!("PlaybackRequestTransmitterRfid loop running");
+            trace!("PlaybackRequestTransmitterRfid loop running");
 
             loop {
                 thread::sleep(Duration::from_millis(200));
-                match self.picc.open_tag() {
+                match self.picc.read_picc_uid() {
                     Err(err) => {
                         // Do not change playback state in this case.
                         warn!("Failed to open RFID tag: {}", err);
@@ -57,7 +57,7 @@ pub mod rfid {
                     Ok(None) => {
                         trace!("No PICC seen.");
                         if last_uid.is_some() {
-                            info!("PICC gone");
+                            info!("PICC gone.");
                             last_uid = None;
                             if let Err(err) = self.tx.send(PlaybackRequest::Stop.into()) {
                                 error!("Failed to transmit User Request: {}", err);
@@ -66,15 +66,17 @@ pub mod rfid {
                     }
                     Ok(Some(tag)) => {
                         trace!("Seen PICC {:?}", tag);
-
-                        let tagclone = tag.clone();
-
-                        let current_uid = tag.uid;
-                        if last_uid != Some(current_uid.clone()) {
+                        let current_uid = tag.uid.clone();
+                        if let Some(ref uid) = last_uid  {
+                            if current_uid == *uid {
+                                continue;
+                            }
                             info!("Seen new PICC {}", current_uid);
-                            if let Err(err) = self.tx.send(PlaybackRequest::Start(tagclone).into())
-                            {
-                                error!("Failed to handle tag: {}", err);
+                            if let Err(err) = self.tx.send(PlaybackRequest::Start(tag).into()) {
+                                error!(
+                                    "Failed to send playback start event for PICC {}: {}",
+                                    current_uid, err
+                                );
                                 continue;
                             }
                             last_uid = Some(current_uid);

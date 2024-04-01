@@ -170,30 +170,26 @@ impl App {
                         Input::Button(cmd) => {
                             match cmd {
                                 button::Command::Shutdown => {
-                                    if let Err(err) = self.interpreter.generic_command(
-                                        self.config
-                                            .shutdown_command
-                                            .clone()
-                                            .unwrap_or_else(|| "sudo shutdown -h now".to_string()),
-                                    ) {
-                                        error!("Failed to execute shutdown command: {}", err);
+                                    let cmd = self.config
+                                    .shutdown_command
+                                    .clone()
+                                    .unwrap_or_else(|| "sudo shutdown -h now".to_string());
+                                    if let Err(err) = self.interpreter.generic_command(&cmd) {
+                                        error!("Failed to execute shutdown command '{}': {}", cmd, err);
                                     }
                                 }
                                 button::Command::VolumeUp => {
-                                    if let Err(err) = self.interpreter.generic_command(
-                                        self.config.volume_up_command.clone().unwrap_or_else(
-                                            || "amixer -q -M set PCM 10%+".to_string(),
-                                        ),
-                                    ) {
-                                        error!("Failed to increase volume: {}", err);
+                                    let cmd = self.config.volume_up_command.clone().unwrap_or_else(
+                                        || "pactl set-sink-volume 0 +10%".to_string()
+                                    );
+                                    if let Err(err) = self.interpreter.generic_command(&cmd) {
+                                        error!("Failed to increase volume using command {}: {}", cmd, err);
                                     }
                                 }
                                 button::Command::VolumeDown => {
-                                    if let Err(err) = self.interpreter.generic_command(
-                                        self.config.volume_down_command.clone().unwrap_or_else(
-                                            || "amixer -q -M set PCM 10%-".to_string(),
-                                        ),
-                                    ) {
+                                    let cmd = self.config.volume_up_command.clone().unwrap_or_else(
+                                        || "pactl set-sink-volume 0 -10%".to_string());
+                                    if let Err(err) = self.interpreter.generic_command(&cmd) {
                                         error!("Failed to decrease volume: {}", err);
                                     }
                                 }
@@ -215,43 +211,3 @@ impl App {
         }
     }
 }
-
-// #[cfg(test)]
-// mod test {
-//     use rustberry::config::Config;
-//     use rustberry::effects::{test::TestInterpreter, Effects};
-//     use rustberry::input_controller::{button, Input};
-//     use rustberry::components::tag_mapper::TagMapper;
-//     use super::*;
-
-//     #[test]
-//     fn jukebox_can_be_shut_down() {
-//         let (interpreter, effects_rx) = TestInterpreter::new();
-//         let interpreter =
-//             Arc::new(Box::new(interpreter) as Box<dyn Interpreter + Send + Sync + 'static>);
-//         let (_effects_tx, effects_rx) = crossbeam_channel::bounded(10);
-//         let config: Config = Config {
-//             enable_spotify: false,
-//             post_init_command: None,
-//             shutdown_command: None,
-//             volume_up_command: None,
-//             volume_down_command: None,
-//             trigger_only_mode: false,
-//             tag_mapper_configuration_file: "/some/file.yaml".to_string(),
-//         };
-//         let blinker = Blinker::new(interpreter.clone()).unwrap();
-//         let inputs = vec![Input::Button(button::Command::Shutdown)];
-//         let effects_expected = vec![Effects::GenericCommand("sudo shutdown -h now".to_string())];
-//         let (input_tx, input_rx) = crossbeam_channel::unbounded();
-//         let tag_mapper = TagMapper::new(&config.tag_mapper_configuration_file);
-//         let app = App::new(config, interpreter, blinker, &vec![input_rx], tag_mapper).unwrap();
-//         for input in inputs {
-//             input_tx.send(input).unwrap();
-//         }
-//         drop(input_tx);
-//         app.run();
-//         let produced_effects: Vec<Effects> = effects_rx.iter().collect();
-
-//         assert_eq!(produced_effects, effects_expected);
-//     }
-// }

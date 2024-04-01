@@ -27,6 +27,12 @@ impl fmt::Display for Uid {
     }
 }
 
+impl Default for Uid {
+    fn default() -> Self {
+        Self(Default::default())
+    }
+}
+
 impl Uid {
     pub fn from_bytes(bs: &[u8]) -> Uid {
         return Uid(hex::encode(bs));
@@ -59,7 +65,7 @@ impl RfidController {
         })
     }
 
-    pub fn open_tag(&mut self) -> Result<Option<Tag>> {
+    pub fn read_picc_uid(&mut self) -> Result<Option<Tag>> {
         let mut mfrc522 = self.mfrc522.lock().unwrap();
         let atqa = match mfrc522.reqa() {
             Err(mfrc522::error::Error::Timeout) => return Ok(None),
@@ -69,20 +75,7 @@ impl RfidController {
         };
         let uid = mfrc522.select(&atqa).context("Selecting AtqA for PICC")?;
         let _ = mfrc522.wupa(); // To make the next reqa() call behave reliably.
-        // let _ = Self::handle_authenticate(&mut *mfrc522, &uid)?;
         let pretty_uid = Uid::from_bytes(uid.as_bytes());
         Ok(Some(Tag { uid: pretty_uid }))
     }
-    // fn handle_authenticate(
-    //     mfrc522: &mut Mfrc522<SpiInterface<SpidevDevice, DummyDelay>, Initialized>,
-    //     uid: &mfrc522::Uid,
-    // ) -> Result<()>
-    // {
-    //     // Use *default* key, this should work on new/empty cards
-    //     let key = [0xFF; 6];
-    //     mfrc522.mf_authenticate(uid, 1, &key).context("authenticating PICC")?;
-    //     mfrc522.hlta()?;
-    //     mfrc522.stop_crypto1()?;
-    //     Ok(())
-    // }
 }

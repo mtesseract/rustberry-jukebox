@@ -108,7 +108,7 @@ pub mod cdev_gpio {
                 tx,
             };
 
-            gpio_cdev.run()?;
+            gpio_cdev.run().context("Running GPIO event listener")?;
             Ok(Handle { channel: rx })
         }
 
@@ -134,12 +134,12 @@ pub mod cdev_gpio {
                 })?
             {
                 if ts.elapsed() < std::time::Duration::from_millis(500) {
-                    info!("Ignoring GPIO event {:?} on line {} since the last event on this line arrived just {}ms ago",
+                    trace!("Ignoring GPIO event {:?} on line {} since the last event on this line arrived just {}ms ago",
                           event, line_id, ts.elapsed().as_millis());
                     continue;
                 }
 
-                info!("Received GPIO event {:?} on line {}", event, line_id);
+                trace!("Received GPIO event {:?} on line {}", event, line_id);
                 if cmd == Command::Shutdown {
                     if let Some(start_time) = self.config.start_time {
                         let now = Instant::now();

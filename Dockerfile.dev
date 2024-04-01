@@ -1,25 +1,30 @@
 FROM --platform=$BUILDPLATFORM rust:1.74 AS dev
-RUN rustup target add aarch64-unknown-linux-gnu
-RUN rustup component add rustfmt
-RUN curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
-ENV PATH="/root/.cargo/bin:${PATH}"
-RUN cargo install cargo-chef
-RUN cargo binstall -y cargo-watch
-RUN dpkg --add-architecture arm64 && apt-get update
-RUN apt-get update && \
-	apt-get -y install \
-		binutils-aarch64-linux-gnu \
-		gcc-aarch64-linux-gnu \
-		curl \
-		vim \
-		build-essential \
-		libasound2-dev:arm64 \
-		pkg-config:arm64
+
+RUN <<EOF
+dpkg --add-architecture arm64 && apt-get update
+apt-get update && \
+apt-get -y install \
+	binutils-aarch64-linux-gnu \
+	gcc-aarch64-linux-gnu \
+	curl \
+	vim \
+	build-essential \
+	libasound2-dev:arm64 \
+	pkg-config:arm64
+EOF
+
+RUN <<EOF
+rustup target add aarch64-unknown-linux-gnu
+rustup component add rustfmt
+rustup component add clippy
+curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
+PATH="/root/.cargo/bin:${PATH}"
+cargo install cargo-chef
+cargo binstall -y cargo-watch
+
 RUN mkdir /proj
 WORKDIR /proj-snapshot
 COPY . .
 RUN cargo chef prepare --recipe-path recipe.json
 RUN cargo chef cook --target aarch64-unknown-linux-gnu --recipe-path recipe.json
 WORKDIR /proj
-
-# ENTRYPOINT cargo

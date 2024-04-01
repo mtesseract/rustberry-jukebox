@@ -19,8 +19,8 @@ use embedded_hal::delay::DelayNs;
 use hal::spidev::{SpiModeFlags, SpidevOptions};
 use hal::Delay;
 use hal::SpidevDevice;
-use mfrc522::comm::{blocking::spi::SpiInterface, Interface};
-use mfrc522::{Initialized, Mfrc522};
+use mfrc522::comm::blocking::spi::SpiInterface;
+use mfrc522::Mfrc522;
 
 fn main() -> Result<()> {
     let mut delay = Delay;

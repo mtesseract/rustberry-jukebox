@@ -40,7 +40,7 @@ pub trait Interpreter {
     ) -> Result<DynPlaybackHandle>;
     fn led_on(&self) -> Result<()>;
     fn led_off(&self) -> Result<()>;
-    fn generic_command(&self, cmd: String) -> Result<()>;
+    fn generic_command(&self, cmd: &str) -> Result<()>;
 }
 
 #[async_trait]
@@ -68,7 +68,7 @@ impl Interpreter for ProdInterpreter {
         info!("Switching LED off");
         self.led_controller.switch_off(Led::Playback)
     }
-    fn generic_command(&self, cmd: String) -> Result<()> {
+    fn generic_command(&self, cmd: &str) -> Result<()> {
         info!("Executing command '{}'", &cmd);
         let res = Command::new("/bin/sh").arg("-c").arg(&cmd).status();
         match res {
@@ -108,71 +108,3 @@ impl ProdInterpreter {
         })
     }
 }
-
-// pub mod test {
-//     use super::*;
-//     use async_trait::async_trait;
-//     use crossbeam_channel::{self, Receiver, Sender};
-//     use Effects::*;
-
-//     pub struct TestInterpreter {
-//         tx: Sender<Effects>,
-//     }
-
-//     impl TestInterpreter {
-//         pub fn new() -> (TestInterpreter, Receiver<Effects>) {
-//             let (tx, rx) = crossbeam_channel::unbounded();
-//             let interpreter = TestInterpreter { tx };
-//             (interpreter, rx)
-//         }
-//     }
-
-//     struct DummyPlaybackHandle;
-
-//     #[async_trait]
-//     impl PlaybackHandle for DummyPlaybackHandle {
-//         async fn stop(&self) -> Result<()> {
-//             Ok(())
-//         }
-//         async fn is_complete(&self) -> Result<bool> {
-//             Ok(true)
-//         }
-//         async fn cont(&self, _pause_state: PauseState) -> Result<()> {
-//             Ok(())
-//         }
-//         async fn replay(&self) -> Result<()> {
-//             Ok(())
-//         }
-//     }
-
-//     #[async_trait]
-//     impl Interpreter for TestInterpreter {
-//         fn wait_until_ready(&self) -> Result<()> {
-//             Ok(())
-//         }
-
-//         async fn play(
-//             &self,
-//             res: PlaybackResource,
-//             _pause_state: Option<PauseState>,
-//         ) -> Result<DynPlaybackHandle> {
-//             use PlaybackResource::*;
-
-//             self.tx.send(Play { uri: res.uid.0 })?;
-//             Ok(Box::new(DummyPlaybackHandle) as DynPlaybackHandle)
-//         }
-
-//         fn led_on(&self) -> Result<()> {
-//             self.tx.send(LedOn).unwrap();
-//             Ok(())
-//         }
-//         fn led_off(&self) -> Result<()> {
-//             self.tx.send(LedOff).unwrap();
-//             Ok(())
-//         }
-//         fn generic_command(&self, cmd: String) -> Result<()> {
-//             self.tx.send(GenericCommand(cmd)).unwrap();
-//             Ok(())
-//         }
-//     }
-// }

@@ -10,7 +10,7 @@ fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
     let mut mf = RfidController::new()?;
     loop {
-        let res = mf.open_tag();
+        let res = mf.read_picc_uid();
         info!("res = {:?}", res);
         thread::sleep(Duration::from_millis(200));
     }
