@@ -4,13 +4,17 @@ use tokio::runtime::{self, Runtime};
 
 use anyhow::{Context, Result};
 use crossbeam_channel::{self, Receiver, Select};
-use tracing::{error,info,warn};
+use tracing::{error, info, warn};
 use tracing_subscriber;
 
 use rustberry::components::tag_mapper::TagMapper;
 use rustberry::config::Config;
 use rustberry::effects::{Interpreter, ProdInterpreter};
-use rustberry::input_controller::{button::{self, cdev_gpio::CdevGpio}, playback::{self, rfid::PlaybackRequestTransmitterRfid}, Input};
+use rustberry::input_controller::{
+    button::{self, cdev_gpio::CdevGpio},
+    playback::{self, rfid::PlaybackRequestTransmitterRfid},
+    Input,
+};
 use rustberry::led::{self, Blinker};
 use rustberry::player::{self, Player};
 
@@ -53,8 +57,7 @@ fn main() -> Result<()> {
         CdevGpio::new_from_env().context("Creating button controller")?;
     info!("Creating PlayBackRequestTransmitter");
     let playback_controller_handle: playback::Handle<Input> =
-            PlaybackRequestTransmitterRfid::new()
-            .context("Creating playback controller")?;
+        PlaybackRequestTransmitterRfid::new().context("Creating playback controller")?;
 
     // Execute Application Logic, producing Effects.
     let application = App::new(
@@ -98,14 +101,22 @@ impl App {
         let player_config = player::Config {
             trigger_only_mode: config.trigger_only_mode,
         };
-        info!("Running in {} mode", if player_config.trigger_only_mode { "trigger-only" } else { "traditional" });
+        info!(
+            "Running in {} mode",
+            if player_config.trigger_only_mode {
+                "trigger-only"
+            } else {
+                "traditional"
+            }
+        );
         let player = Player::new(
             Some(blinker.clone()),
             runtime.handle(),
             interpreter.clone(),
             player_config,
             tag_mapper.handle(),
-        ).context("creating Player")?;
+        )
+        .context("creating Player")?;
         let app = Self {
             config,
             inputs: inputs.to_vec(),

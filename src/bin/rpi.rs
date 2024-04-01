@@ -14,10 +14,10 @@
 use embedded_hal_1 as embedded_hal;
 use linux_embedded_hal as hal;
 
-use anyhow::{Context,Result};
+use anyhow::{Context, Result};
 use embedded_hal::delay::DelayNs;
 use hal::spidev::{SpiModeFlags, SpidevOptions};
-use hal::{Delay};
+use hal::Delay;
 use hal::SpidevDevice;
 use mfrc522::comm::{blocking::spi::SpiInterface, Interface};
 use mfrc522::{Initialized, Mfrc522};
@@ -26,17 +26,17 @@ fn main() -> Result<()> {
     let mut delay = Delay;
 
     let mut spi =
-    SpidevDevice::open("/dev/spidev0.0").context("Opening SPI device /dev/spidev0.0")?;
-let options = SpidevOptions::new()
-    .max_speed_hz(1_000_000)
-    .mode(SpiModeFlags::SPI_MODE_0)
-    .build();
-spi.configure(&options).context("Configuring SPI device")?;
+        SpidevDevice::open("/dev/spidev0.0").context("Opening SPI device /dev/spidev0.0")?;
+    let options = SpidevOptions::new()
+        .max_speed_hz(1_000_000)
+        .mode(SpiModeFlags::SPI_MODE_0)
+        .build();
+    spi.configure(&options).context("Configuring SPI device")?;
 
-let itf = SpiInterface::new(spi);
-let mut mfrc522 = Mfrc522::new(itf)
-    .init()
-    .context("Initializing MFRC522 PICC")?;
+    let itf = SpiInterface::new(spi);
+    let mut mfrc522 = Mfrc522::new(itf)
+        .init()
+        .context("Initializing MFRC522 PICC")?;
     let vers = mfrc522.version()?;
 
     println!("VERSION: 0x{:x}", vers);
@@ -47,22 +47,29 @@ let mut mfrc522 = Mfrc522::new(itf)
         const CARD_UID: [u8; 4] = [34, 246, 178, 171];
         const TAG_UID: [u8; 4] = [128, 170, 179, 76];
 
-        if let Ok(atqa) = mfrc522.reqa() {
-            if let Ok(uid) = mfrc522.select(&atqa) {
-                println!("UID: {:?}", uid.as_bytes());
+        let res = mfrc522.reqa();
+        match res {
+            Ok(atqa) => {
+                if let Ok(uid) = mfrc522.select(&atqa) {
+                    println!("Ok: UID: {:?}", uid.as_bytes());
 
-                if uid.as_bytes() == &CARD_UID {
-                    println!("CARD");
-                } else if uid.as_bytes() == &TAG_UID {
-                    println!("TAG");
+                    if uid.as_bytes() == &CARD_UID {
+                        println!("CARD");
+                    } else if uid.as_bytes() == &TAG_UID {
+                        println!("TAG");
+                    }
+
+                    // handle_authenticate(&mut mfrc522, &uid, |m| {
+                    //     let data = m.mf_read(1)?;
+                    //     println!("read {:?}", data);
+                    //     Ok(())
+                    // })
+                    // .ok();
+                    let _ = mfrc522.wupa();
                 }
-
-                // handle_authenticate(&mut mfrc522, &uid, |m| {
-                //     let data = m.mf_read(1)?;
-                //     println!("read {:?}", data);
-                //     Ok(())
-                // })
-                // .ok();
+            }
+            Err(err) => {
+                println!("Err: {:?}", err);
             }
         }
 

@@ -37,7 +37,7 @@ pub mod cdev_gpio {
 
     use gpio_cdev::{Chip, EventRequestFlags, Line, LineRequestFlags};
     use serde::Deserialize;
-    use tracing::{error,info,warn};
+    use tracing::{error, info, warn};
 
     use super::*;
 
@@ -76,10 +76,11 @@ pub mod cdev_gpio {
         }
     }
 
-    impl<T: Clone + Send + 'static> CdevGpio<T> 
-    where T: From<Command> {
-        pub fn new_from_env() -> Result<Handle<T>>
-        {
+    impl<T: Clone + Send + 'static> CdevGpio<T>
+    where
+        T: From<Command>,
+    {
+        pub fn new_from_env() -> Result<Handle<T>> {
             info!("Using CdevGpio based Button Controller");
             let env_config =
                 EnvConfig::new_from_env().context("Creating CdevGpio based button controller")?;
@@ -114,8 +115,7 @@ pub mod cdev_gpio {
         fn run_single_event_listener(
             self,
             (line, line_id, cmd): (Line, u32, Command),
-        ) -> Result<()>
-        {
+        ) -> Result<()> {
             let mut n_received_during_shutdown_delay = 0;
             let mut ts = Instant::now();
 
@@ -131,7 +131,8 @@ pub mod cdev_gpio {
                         "Failed to request events from GPIO line {}: {}",
                         line_id, err
                     ))
-                })? {
+                })?
+            {
                 if ts.elapsed() < std::time::Duration::from_millis(500) {
                     info!("Ignoring GPIO event {:?} on line {} since the last event on this line arrived just {}ms ago",
                           event, line_id, ts.elapsed().as_millis());
@@ -166,8 +167,7 @@ pub mod cdev_gpio {
             Ok(())
         }
 
-        fn run(&mut self) -> Result<()>
-        {
+        fn run(&mut self) -> Result<()> {
             let chip = &mut *(self.chip.write().unwrap());
             // Spawn threads for requested GPIO lines.
             for (line_id, cmd) in self.map.iter() {
@@ -181,8 +181,7 @@ pub mod cdev_gpio {
                 let _handle = std::thread::Builder::new()
                     .name(format!("button-controller-{}", line_id))
                     .spawn(move || {
-                        let res =
-                            clone.run_single_event_listener((line, line_id, cmd));
+                        let res = clone.run_single_event_listener((line, line_id, cmd));
                         error!("GPIO Listener loop terminated unexpectedly: {:?}", res);
                     })
                     .unwrap();

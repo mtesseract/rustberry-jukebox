@@ -16,8 +16,8 @@ spec:
         app: jukeboxd
     spec:
       initContainers:
-      - image: alpine:3.16.9
-        imagePullPolicy: IfNotPresetn
+      - name: init
+        image: alpine:3.16.9
         command:
           - sh
           - -c

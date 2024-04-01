@@ -1,13 +1,13 @@
 use anyhow::{Context, Result};
 use serde::Deserialize;
-use tracing::info;
 use std::collections::HashMap;
 use std::fs;
 use std::sync::{Arc, RwLock};
+use tracing::info;
 
 type TagID = String;
 
-#[derive(Default,Debug, Deserialize, Clone, PartialEq)]
+#[derive(Default, Debug, Deserialize, Clone, PartialEq)]
 pub struct TagConf {
     pub uris: Vec<String>,
 }
@@ -18,13 +18,13 @@ impl TagConf {
     }
 }
 
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub struct TagMapper {
     file: String,
     conf: Arc<RwLock<TagMapperConfiguration>>,
 }
 
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub struct TagMapperHandle {
     conf: Arc<RwLock<TagMapperConfiguration>>,
 }
@@ -69,7 +69,7 @@ impl TagMapper {
         Ok(())
     }
 
-   pub fn handle(&self) -> TagMapperHandle {
+    pub fn handle(&self) -> TagMapperHandle {
         let conf = self.conf.clone();
         TagMapperHandle { conf }
     }

@@ -1,20 +1,20 @@
 use anyhow::{Context, Result};
-use tracing::info;
-use std::sync::{Arc, Mutex};
-use std::fmt;
 use serde::{Deserialize, Serialize};
+use std::fmt;
+use std::sync::{Arc, Mutex};
+use tracing::info;
 
-use linux_embedded_hal as hal;
 use hal::spidev::{SpiModeFlags, SpidevOptions};
 use hal::SpidevDevice;
-use mfrc522::comm:: blocking::spi::{DummyDelay, SpiInterface};
+use linux_embedded_hal as hal;
+use mfrc522::comm::blocking::spi::{DummyDelay, SpiInterface};
 use mfrc522::{self, Initialized, Mfrc522};
 
 #[derive(Clone)]
 pub struct RfidController {
     pub mfrc522: Arc<Mutex<Mfrc522<SpiInterface<SpidevDevice, DummyDelay>, Initialized>>>,
 }
-#[derive(Debug, Clone,Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct Uid(String);
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct Tag {
@@ -29,7 +29,7 @@ impl fmt::Display for Uid {
 
 impl Uid {
     pub fn from_bytes(bs: &[u8]) -> Uid {
-        return Uid(hex::encode(bs))
+        return Uid(hex::encode(bs));
     }
 }
 
@@ -68,6 +68,7 @@ impl RfidController {
             Ok(atqa) => atqa,
         };
         let uid = mfrc522.select(&atqa).context("Selecting AtqA for PICC")?;
+        let _ = mfrc522.wupa(); // To make the next reqa() call behave reliably.
         // let _ = Self::handle_authenticate(&mut *mfrc522, &uid)?;
         let pretty_uid = Uid::from_bytes(uid.as_bytes());
         Ok(Some(Tag { uid: pretty_uid }))

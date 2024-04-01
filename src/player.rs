@@ -3,12 +3,12 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use anyhow::{Context,Result};
+use anyhow::{Context, Result};
 use async_trait::async_trait;
 use crossbeam_channel::{Receiver, Sender};
 use serde::{Deserialize, Serialize};
-use tracing::{trace,error,info};
 use tokio::runtime;
+use tracing::{error, info, trace};
 
 use crate::components::rfid::Tag;
 use crate::components::tag_mapper::{TagConf, TagMapperHandle};
@@ -70,7 +70,7 @@ impl fmt::Display for PlayerState {
     }
 }
 
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 enum PlayerState {
     Idle,
     Playing {
@@ -95,12 +95,17 @@ impl PlayerState {
                 playing_since,
                 offset,
                 ..
-            } => ComparablePlayerState::Playing { tag_conf: tag_conf.clone(), playing_since: *playing_since, offset: *offset },
+            } => ComparablePlayerState::Playing {
+                tag_conf: tag_conf.clone(),
+                playing_since: *playing_since,
+                offset: *offset,
+            },
             PlayerState::Paused {
-                at,
-                prev_tag_conf,
-                ..
-            } => ComparablePlayerState::Paused {at: *at, prev_tag_conf: prev_tag_conf.clone() },
+                at, prev_tag_conf, ..
+            } => ComparablePlayerState::Paused {
+                at: *at,
+                prev_tag_conf: prev_tag_conf.clone(),
+            },
         }
     }
 
@@ -108,13 +113,13 @@ impl PlayerState {
         use PlayerState::*;
         match self {
             Idle => false,
-            Playing {..} => true,
-            Paused {..} => false,
+            Playing { .. } => true,
+            Paused { .. } => false,
         }
     }
 }
 
-#[derive(Debug,Clone,PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 enum ComparablePlayerState {
     Idle,
     Playing {
@@ -318,8 +323,10 @@ impl Player {
         config: Arc<Config>,
         tag_mapper: &TagMapperHandle,
     ) -> Result<()> {
-        let res = Self::handle_playback_command(interpreter, request, state, config, tag_mapper).await;
-        tx.send(res).context("Sending result of handle_playback_command")?;
+        let res =
+            Self::handle_playback_command(interpreter, request, state, config, tag_mapper).await;
+        tx.send(res)
+            .context("Sending result of handle_playback_command")?;
         Ok(())
     }
 
@@ -597,11 +604,20 @@ impl Player {
 
         match cmd {
             PlaybackCommand { request, tx } => {
-                Self::handle_playback_command_tx(interpreter, request, tx, state, config, tag_mapper).await
+                Self::handle_playback_command_tx(
+                    interpreter,
+                    request,
+                    tx,
+                    state,
+                    config,
+                    tag_mapper,
+                )
+                .await
             }
 
             PauseContinue { tx } => {
-                Self::handle_pause_continue_command_tx(interpreter, tx, state, config, tag_mapper).await
+                Self::handle_pause_continue_command_tx(interpreter, tx, state, config, tag_mapper)
+                    .await
             }
         }
     }

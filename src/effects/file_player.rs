@@ -1,18 +1,18 @@
-use anyhow::{Context,Result};
+use anyhow::{Context, Result};
 use rodio::Sink;
-use tracing::{warn,info,trace};
 use std::convert::From;
 use std::fs::File;
 use std::io::BufReader;
 use std::sync::Arc;
 use std::thread::{Builder, JoinHandle};
 use std::time::Duration;
+use tracing::{info, trace, warn};
 
 use async_trait::async_trait;
 use crossbeam_channel::{self, Sender};
+use std::path::{Path, PathBuf};
 use tokio::runtime::Runtime;
 use tokio::task::spawn_blocking;
-use std::path::{Path, PathBuf};
 
 use crate::player::{PauseState, PlaybackHandle};
 
@@ -75,7 +75,7 @@ impl FilePlayer {
         Ok(player)
     }
 
-     fn complete_file_name(&self, mut fname: &Path) -> Result<PathBuf> {
+    fn complete_file_name(&self, mut fname: &Path) -> Result<PathBuf> {
         let mut complete_fname = self.base_dir.clone();
         if fname.is_absolute() {
             fname = fname.strip_prefix("/")?;
@@ -98,8 +98,9 @@ impl FilePlayer {
             Some(uri) => uri,
             None => return Err(anyhow::Error::msg("TagConf is empty")),
         };
-        let file_path = self.complete_file_name(Path::new(file_name.as_str()))
-        .with_context(|| format!("completing file name {}", file_name))?;
+        let file_path = self
+            .complete_file_name(Path::new(file_name.as_str()))
+            .with_context(|| format!("completing file name {}", file_name))?;
 
         let (tx, rx) = crossbeam_channel::bounded(1);
         let sink = Arc::new(Sink::new(&device));
@@ -119,8 +120,16 @@ impl FilePlayer {
             sink,
             file_path: file_path,
         };
-        handle.queue().await.context("queue method of player handle")?;
-        handle.cont(PauseState { pos: FROM_BEGINNING }).await.context("cont method of player handle")?;
+        handle
+            .queue()
+            .await
+            .context("queue method of player handle")?;
+        handle
+            .cont(PauseState {
+                pos: FROM_BEGINNING,
+            })
+            .await
+            .context("cont method of player handle")?;
         Ok(handle)
     }
 }

@@ -8,11 +8,11 @@ use anyhow::Result;
 use async_trait::async_trait;
 use file_player::FilePlayer;
 use led::{Led, LedController};
-use tracing::{info, warn};
 use std::process::Command;
+use tracing::{info, warn};
 
-use crate::player::{DynPlaybackHandle, PauseState};
 use crate::components::tag_mapper::TagConf;
+use crate::player::{DynPlaybackHandle, PauseState};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Effects {
@@ -49,12 +49,15 @@ impl Interpreter for ProdInterpreter {
         Ok(())
     }
 
-    async fn play( &self, tag_conf: TagConf, pause_state: Option<PauseState>) -> Result<DynPlaybackHandle> {
-            self
-                .file_player
-                .start_playback(&tag_conf.uris, pause_state)
-                .await
-                .map(|x| Box::new(x) as DynPlaybackHandle)
+    async fn play(
+        &self,
+        tag_conf: TagConf,
+        pause_state: Option<PauseState>,
+    ) -> Result<DynPlaybackHandle> {
+        self.file_player
+            .start_playback(&tag_conf.uris, pause_state)
+            .await
+            .map(|x| Box::new(x) as DynPlaybackHandle)
     }
 
     fn led_on(&self) -> Result<()> {

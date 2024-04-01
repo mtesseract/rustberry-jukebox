@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use crossbeam_channel::{self, Receiver, Sender};
-use tracing::{error, info, trace, warn};
 use std::{thread, time::Duration};
+use tracing::{error, info, trace, warn};
 
 use crate::player::PlaybackRequest;
 
@@ -26,7 +26,9 @@ pub mod rfid {
     }
 
     impl<T: 'static + Send + Sync + Clone + std::fmt::Debug> PlaybackRequestTransmitterRfid<T>
-        where T: From<PlaybackRequest> {
+    where
+        T: From<PlaybackRequest>,
+    {
         pub fn new() -> Result<Handle<T>> {
             let (tx, rx) = crossbeam_channel::bounded(10);
             let picc = RfidController::new().context("Creating RfidController")?;
@@ -70,7 +72,8 @@ pub mod rfid {
                         let current_uid = tag.uid;
                         if last_uid != Some(current_uid.clone()) {
                             info!("Seen new PICC {}", current_uid);
-                            if let Err(err) = self.tx.send(PlaybackRequest::Start(tagclone).into()) {
+                            if let Err(err) = self.tx.send(PlaybackRequest::Start(tagclone).into())
+                            {
                                 error!("Failed to handle tag: {}", err);
                                 continue;
                             }
