@@ -15,6 +15,13 @@ spec:
       labels:
         app: jukeboxd
     spec:
+      initContainers:
+      - image: alpine:3.16.9
+        imagePullPolicy: IfNotPresetn
+        command:
+          - sh
+          - -c
+          - "rm /mnt/jukebox-hotloading/*"
       containers:
       - name: jukeboxd 
         image: mtesseract/jukeboxd:latest
@@ -55,6 +62,8 @@ spec:
             name: pulseaudio-etc
           - mountPath: /mnt/jukebox-drive
             name: jukebox-drive
+          - mountPath: /mnt/jukebox-hotloading
+            name: jukebox-hotloading
       volumes:
         - name: pulseaudio-etc
           hostPath:
@@ -65,3 +74,6 @@ spec:
         - name: jukebox-drive
           persistentVolumeClaim:
             claimName: jukebox-drive
+        - name: jukebox-hotloading
+          persistentVolumeClaim:
+            claimName: jukebox-hotloading

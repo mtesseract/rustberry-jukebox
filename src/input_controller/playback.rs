@@ -46,7 +46,7 @@ pub mod rfid {
             info!("PlaybackRequestTransmitterRfid loop running");
 
             loop {
-                thread::sleep(Duration::from_millis(1000));
+                thread::sleep(Duration::from_millis(200));
                 match self.picc.open_tag() {
                     Err(err) => {
                         // Do not change playback state in this case.
