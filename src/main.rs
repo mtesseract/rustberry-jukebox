@@ -10,7 +10,7 @@ use tracing_subscriber;
 use rustberry::components::tag_mapper::TagMapper;
 use rustberry::config::Config;
 use rustberry::effects::{Interpreter, ProdInterpreter};
-use rustberry::input_controller::{button, playback, Input};
+use rustberry::input_controller::{button::{self, cdev_gpio::CdevGpio}, playback::{self, rfid::PlaybackRequestTransmitterRfid}, Input};
 use rustberry::led::{self, Blinker};
 use rustberry::player::{self, Player};
 
@@ -47,13 +47,13 @@ fn main() -> Result<()> {
         .wait_until_ready()
         .context("Waiting for interpreter readiness")?;
 
-    // Prepare individual input channels.
+    // Prepare input channels.
     info!("Creating Button Controller");
     let button_controller_handle: button::Handle<Input> =
-        button::cdev_gpio::CdevGpio::new_from_env() .context("Creating button controller")?;
+        CdevGpio::new_from_env().context("Creating button controller")?;
     info!("Creating PlayBackRequestTransmitter");
     let playback_controller_handle: playback::Handle<Input> =
-        playback::rfid::PlaybackRequestTransmitterRfid::new()
+            PlaybackRequestTransmitterRfid::new()
             .context("Creating playback controller")?;
 
     // Execute Application Logic, producing Effects.
@@ -69,6 +69,7 @@ fn main() -> Result<()> {
         tag_mapper,
     )
     .context("Creating application object")?;
+
     info!("Running application");
     application
         .run()
@@ -97,13 +98,14 @@ impl App {
         let player_config = player::Config {
             trigger_only_mode: config.trigger_only_mode,
         };
+        info!("Running in {} mode", if player_config.trigger_only_mode { "trigger-only" } else { "traditional" });
         let player = Player::new(
             Some(blinker.clone()),
             runtime.handle(),
             interpreter.clone(),
             player_config,
             tag_mapper.handle(),
-        )?;
+        ).context("creating Player")?;
         let app = Self {
             config,
             inputs: inputs.to_vec(),
@@ -113,10 +115,10 @@ impl App {
             _runtime: runtime,
         };
 
-        // info!("Running in {} mode", if app.config.trigger_only_mode { "trigger-only" } else { "traditional" });
         Ok(app)
     }
 
+    // Runs main application logic.
     pub fn run(self) -> Result<()> {
         self.blinker.run_async(led::Cmd::Repeat(
             1,
@@ -130,8 +132,9 @@ impl App {
             sel.recv(r);
         }
 
+        // Main loop is an event handler .
         loop {
-            // Wait until a receive operation becomes ready and try executing it.
+            // Wait until a receive operation becomes ready and handle the event.
             let index = sel.ready();
             let res = self.inputs[index].try_recv();
 

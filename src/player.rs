@@ -164,6 +164,7 @@ pub type PlaybackResource = Tag;
 
 impl PlayerHandle {
     pub fn playback(&self, request: PlaybackRequest) -> Result<bool> {
+        // Response channel.
         let (tx, rx) = crossbeam_channel::bounded(1);
 
         self.tx
@@ -330,11 +331,10 @@ impl Player {
         tag_mapper: &TagMapperHandle,
     ) -> Result<bool> {
         let mut is_playing = false;
-        use PlaybackRequest::*;
         use PlayerState::*;
 
         match request {
-            Start(tag) => {
+            PlaybackRequest::Start(tag) => {
                 let tag_conf = tag_mapper.lookup(&tag.uid.to_string()).unwrap_or_default();
 
                 match state.clone() {
@@ -542,7 +542,7 @@ impl Player {
                 }
             }
 
-            Stop => {
+            PlaybackRequest::Stop => {
                 // RFID tag removed.
 
                 match state.clone() {

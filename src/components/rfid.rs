@@ -68,8 +68,20 @@ impl RfidController {
             Ok(atqa) => atqa,
         };
         let uid = mfrc522.select(&atqa).context("Selecting AtqA for PICC")?;
-        let _ = mfrc522.hlta();
-        let uid = Uid::from_bytes(uid.as_bytes());
-        Ok(Some(Tag { uid }))
+        // let _ = Self::handle_authenticate(&mut *mfrc522, &uid)?;
+        let pretty_uid = Uid::from_bytes(uid.as_bytes());
+        Ok(Some(Tag { uid: pretty_uid }))
     }
+    // fn handle_authenticate(
+    //     mfrc522: &mut Mfrc522<SpiInterface<SpidevDevice, DummyDelay>, Initialized>,
+    //     uid: &mfrc522::Uid,
+    // ) -> Result<()>
+    // {
+    //     // Use *default* key, this should work on new/empty cards
+    //     let key = [0xFF; 6];
+    //     mfrc522.mf_authenticate(uid, 1, &key).context("authenticating PICC")?;
+    //     mfrc522.hlta()?;
+    //     mfrc522.stop_crypto1()?;
+    //     Ok(())
+    // }
 }

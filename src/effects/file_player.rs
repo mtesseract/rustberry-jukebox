@@ -119,8 +119,8 @@ impl FilePlayer {
             sink,
             file_path: file_path,
         };
-        handle.queue().await?;
-        handle .cont(PauseState { pos: FROM_BEGINNING }) .await?;
+        handle.queue().await.context("queue method of player handle")?;
+        handle.cont(PauseState { pos: FROM_BEGINNING }).await.context("cont method of player handle")?;
         Ok(handle)
     }
 }
