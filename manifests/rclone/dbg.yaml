@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: dbg
+  namespace: koffer
+spec:
+  containers:
+    - name: dbg
+      image: fedora:39
+      command: ["sleep", "10000"]
+      volumeMounts:
+        - name: jukebox-drive
+          mountPath: /mnt/jukebox-drive
+  volumes:
+    - name: jukebox-drive
+      persistentVolumeClaim:
+        claimName: jukebox-drive
+
+
