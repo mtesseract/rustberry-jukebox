@@ -67,20 +67,22 @@ pub mod rfid {
                     Ok(Some(tag)) => {
                         trace!("Seen PICC {:?}", tag);
                         let current_uid = tag.uid.clone();
+
                         if let Some(ref uid) = last_uid  {
                             if current_uid == *uid {
                                 continue;
                             }
-                            info!("Seen new PICC {}", current_uid);
-                            if let Err(err) = self.tx.send(PlaybackRequest::Start(tag).into()) {
-                                error!(
-                                    "Failed to send playback start event for PICC {}: {}",
-                                    current_uid, err
-                                );
-                                continue;
-                            }
-                            last_uid = Some(current_uid);
                         }
+
+                        info!("Seen new PICC {}", current_uid);
+                        if let Err(err) = self.tx.send(PlaybackRequest::Start(tag).into()) {
+                            error!(
+                                "Failed to send playback start event for PICC {}: {}",
+                                current_uid, err
+                            );
+                            continue;
+                        }
+                        last_uid = Some(current_uid);
                     }
                 }
             }
