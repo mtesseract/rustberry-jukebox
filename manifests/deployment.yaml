@@ -21,7 +21,10 @@ spec:
         command:
           - sh
           - -c
-          - "rm -f /mnt/jukebox-hotloading/*"
+          - "rm -f /var/run/jukeboxd/hotloading/*"
+        volumeMounts:
+          - mountPath: /var/run/jukeboxd
+            name: var-run-jukeboxd
       containers:
       - name: jukeboxd 
         image: mtesseract/jukeboxd:latest
@@ -30,6 +33,8 @@ spec:
         securityContext:
           privileged: true
         env:
+        - name: RUST_LOG
+          value: trace
         - name: AUDIO_BASE_DIRECTORY
           valueFrom:
             configMapKeyRef:
