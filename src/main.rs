@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::runtime::{self, Runtime};
+// use tokio::runtime::{self, };
 
 use anyhow::{Context, Result};
 use crossbeam_channel::{self, Receiver, Select};
@@ -12,22 +12,17 @@ use rustberry::config::Config;
 use rustberry::effects::{Interpreter, ProdInterpreter};
 use rustberry::input_controller::{
     button::{self, cdev_gpio::CdevGpio},
-    playback::{self, rfid::PlaybackRequestTransmitterRfid},
+    rfid_playback::{self, rfid::PlaybackRequestTransmitterRfid},
     Input,
 };
 use rustberry::led::{self, Blinker};
 use rustberry::player::{self, Player};
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
     let config = envy::from_env::<Config>()?;
     info!("Starting application");
-
-    let runtime = runtime::Builder::new()
-        .threaded_scheduler()
-        .enable_all()
-        .build()
-        .unwrap();
 
     info!("Creating TagMapper");
     let tag_mapper = TagMapper::new_initialized(&config.tag_mapper_configuration_file)
@@ -41,7 +36,7 @@ fn main() -> Result<()> {
         Arc::new(Box::new(interpreter));
 
     let blinker =
-        Blinker::new(runtime.handle().clone(), interpreter.clone()).context("Creating blinker")?;
+        Blinker::new(interpreter.clone()).context("Creating blinker")?;
     blinker.run_async(led::Cmd::Loop(Box::new(led::Cmd::Many(vec![
         led::Cmd::On(Duration::from_millis(100)),
         led::Cmd::Off(Duration::from_millis(100)),
@@ -56,12 +51,11 @@ fn main() -> Result<()> {
     let button_controller_handle: button::Handle<Input> =
         CdevGpio::new_from_env().context("Creating button controller")?;
     info!("Creating PlayBackRequestTransmitter");
-    let playback_controller_handle: playback::Handle<Input> =
+    let playback_controller_handle: rfid_playback::Handle<Input> =
         PlaybackRequestTransmitterRfid::new().context("Creating playback controller")?;
 
     // Execute Application Logic, producing Effects.
     let application = App::new(
-        runtime,
         config,
         interpreter.clone(),
         blinker,
@@ -86,12 +80,10 @@ struct App {
     interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>>,
     inputs: Vec<Receiver<Input>>,
     blinker: Blinker,
-    _runtime: tokio::runtime::Runtime,
 }
 
 impl App {
     pub fn new(
-        runtime: Runtime,
         config: Config,
         interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>>,
         blinker: Blinker,
@@ -111,7 +103,6 @@ impl App {
         );
         let player = Player::new(
             Some(blinker.clone()),
-            runtime.handle(),
             interpreter.clone(),
             player_config,
             tag_mapper.handle(),
@@ -123,7 +114,6 @@ impl App {
             player,
             interpreter,
             blinker,
-            _runtime: runtime,
         };
 
         Ok(app)

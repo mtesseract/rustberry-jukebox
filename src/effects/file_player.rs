@@ -6,7 +6,7 @@ use std::io::BufReader;
 use std::sync::Arc;
 use std::thread::{Builder, JoinHandle};
 use std::time::Duration;
-use tracing::{info, trace, warn};
+use tracing::{info, warn};
 
 use async_trait::async_trait;
 use crossbeam_channel::{self, Sender};
@@ -89,7 +89,7 @@ impl FilePlayer {
         uris: &[String],
         pause_state: Option<PauseState>,
     ) -> Result<FilePlaybackHandle, anyhow::Error> {
-        trace!("Initiating playback for uris {:?}", uris);
+        info!("Initiating playback for uris {:?}", uris);
         if let Some(pause_state) = pause_state {
             warn!("Ignoring pause state: {:?}", pause_state);
         }
@@ -107,7 +107,7 @@ impl FilePlayer {
         let _handle = Builder::new()
             .name("file-player".to_string())
             .spawn(move || {
-                let mut rt = Runtime::new().unwrap();
+                let rt = Runtime::new().unwrap();
                 let f = async {
                     let _msg = rx.recv();
                 };

@@ -1,5 +1,5 @@
 pub mod button;
-pub mod playback;
+pub mod rfid_playback;
 
 use std::convert::From;
 

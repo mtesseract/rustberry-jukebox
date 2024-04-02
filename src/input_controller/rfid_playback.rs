@@ -76,7 +76,7 @@ pub mod rfid {
                                     continue;
                                 }
                             }
-                            deflicker += min(deflicker_threshold, deflicker);
+                            deflicker = min(deflicker_threshold, deflicker + 1);
                         }
                     }
                     Ok(Some(tag)) => {
@@ -98,7 +98,7 @@ pub mod rfid {
                                         continue;
                                     }
                                 }
-                                deflicker += min(deflicker_threshold, deflicker);
+                                deflicker = min(deflicker_threshold, deflicker + 1);
                                 continue;
                             }
                         }

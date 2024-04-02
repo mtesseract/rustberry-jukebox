@@ -21,7 +21,7 @@ curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-
 PATH="/root/.cargo/bin:${PATH}"
 cargo install cargo-chef
 cargo binstall -y cargo-watch
-
+cargo install cargo-audit
 RUN mkdir /proj
 WORKDIR /proj-snapshot
 COPY . .

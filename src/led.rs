@@ -3,7 +3,6 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::runtime;
 
 use crate::effects::Interpreter;
 use anyhow::Result;
@@ -14,7 +13,6 @@ use tracing::info;
 pub struct Blinker {
     interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
     abort_handle: RefCell<Option<AbortHandle>>,
-    rt: runtime::Handle,
 }
 
 #[derive(Debug, Clone)]
@@ -28,14 +26,12 @@ pub enum Cmd {
 
 impl Blinker {
     pub fn new(
-        rt: runtime::Handle,
         interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
     ) -> Result<Self> {
         let abort_handle = RefCell::new(None);
         let blinker = Self {
             interpreter,
             abort_handle,
-            rt,
         };
         Ok(blinker)
     }
@@ -49,12 +45,12 @@ impl Blinker {
                 Cmd::On(duration) => {
                     info!("Blinker switches on");
                     let _ = interpreter.led_on();
-                    tokio::time::delay_for(duration).await;
+                    tokio::time::sleep(duration).await;
                 }
                 Cmd::Off(duration) => {
                     info!("Blinker switches off");
                     let _ = interpreter.led_off();
-                    tokio::time::delay_for(duration).await;
+                    tokio::time::sleep(duration).await;
                 }
                 Cmd::Many(cmds) => {
                     info!("Blinker processes Many");
@@ -94,7 +90,7 @@ impl Blinker {
         // let spec = spec.clone();
         let (f, handle) =
             futures::future::abortable(async move { Self::run(interpreter, spec).await });
-        let _join_handle = self.rt.spawn(f);
+        let _ = tokio::spawn(f);
         info!("Created new blinking task");
         *(self.abort_handle.borrow_mut()) = Some(handle);
     }

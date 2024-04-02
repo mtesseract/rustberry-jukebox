@@ -7,7 +7,6 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use crossbeam_channel::{Receiver, Sender};
 use serde::{Deserialize, Serialize};
-use tokio::runtime;
 use tracing::{error, info, trace};
 
 use crate::components::rfid::Tag;
@@ -340,7 +339,7 @@ impl Player {
         let mut is_playing = false;
         use PlayerState::*;
 
-        trace!(
+        info!(
             "Player in state {} received playback command {:?}",
             state,
             request
@@ -658,7 +657,6 @@ impl Player {
 
     pub fn new(
         blinker: Option<Blinker>,
-        runtime: &runtime::Handle,
         interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
         config: Config,
         tag_mapper: TagMapperHandle,
@@ -673,7 +671,7 @@ impl Player {
             tag_mapper,
         };
 
-        runtime.spawn(Self::player_loop(player));
+        tokio::spawn(Self::player_loop(player));
 
         let player_handle = PlayerHandle { tx };
 
@@ -699,12 +697,6 @@ pub mod err {
                     write!(f, "Failed to transmit command via channel: {}", err)
                 }
             }
-        }
-    }
-
-    impl From<reqwest::Error> for Error {
-        fn from(err: reqwest::Error) -> Self {
-            Error::Http(err.into())
         }
     }
 
