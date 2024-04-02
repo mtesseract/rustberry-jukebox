@@ -167,39 +167,44 @@ impl App {
                 Ok(input) => {
                     self.blinker.stop();
                     match input {
-                        Input::Button(cmd) => {
-                            match cmd {
-                                button::Command::Shutdown => {
-                                    let cmd = self.config
+                        Input::Button(cmd) => match cmd {
+                            button::Command::Shutdown => {
+                                let cmd = self
+                                    .config
                                     .shutdown_command
                                     .clone()
                                     .unwrap_or_else(|| "sudo shutdown -h now".to_string());
-                                    if let Err(err) = self.interpreter.generic_command(&cmd) {
-                                        error!("Failed to execute shutdown command '{}': {}", cmd, err);
-                                    }
-                                }
-                                button::Command::VolumeUp => {
-                                    let cmd = self.config.volume_up_command.clone().unwrap_or_else(
-                                        || "pactl set-sink-volume 0 +10%".to_string()
-                                    );
-                                    if let Err(err) = self.interpreter.generic_command(&cmd) {
-                                        error!("Failed to increase volume using command {}: {}", cmd, err);
-                                    }
-                                }
-                                button::Command::VolumeDown => {
-                                    let cmd = self.config.volume_up_command.clone().unwrap_or_else(
-                                        || "pactl set-sink-volume 0 -10%".to_string());
-                                    if let Err(err) = self.interpreter.generic_command(&cmd) {
-                                        error!("Failed to decrease volume: {}", err);
-                                    }
-                                }
-                                button::Command::PauseContinue => {
-                                    if let Err(err) = self.player.pause_continue() {
-                                        error!("Failed to execute pause_continue request: {}", err);
-                                    }
+                                if let Err(err) = self.interpreter.generic_command(&cmd) {
+                                    error!("Failed to execute shutdown command '{}': {}", cmd, err);
                                 }
                             }
-                        }
+                            button::Command::VolumeUp => {
+                                let cmd =
+                                    self.config.volume_up_command.clone().unwrap_or_else(|| {
+                                        "pactl set-sink-volume 0 +10%".to_string()
+                                    });
+                                if let Err(err) = self.interpreter.generic_command(&cmd) {
+                                    error!(
+                                        "Failed to increase volume using command {}: {}",
+                                        cmd, err
+                                    );
+                                }
+                            }
+                            button::Command::VolumeDown => {
+                                let cmd =
+                                    self.config.volume_up_command.clone().unwrap_or_else(|| {
+                                        "pactl set-sink-volume 0 -10%".to_string()
+                                    });
+                                if let Err(err) = self.interpreter.generic_command(&cmd) {
+                                    error!("Failed to decrease volume: {}", err);
+                                }
+                            }
+                            button::Command::PauseContinue => {
+                                if let Err(err) = self.player.pause_continue() {
+                                    error!("Failed to execute pause_continue request: {}", err);
+                                }
+                            }
+                        },
                         Input::Playback(request) => {
                             if let Err(err) = self.player.playback(request.clone()) {
                                 error!("Failed to execute playback request {:?}: {}", request, err);
