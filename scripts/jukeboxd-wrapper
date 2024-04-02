@@ -5,5 +5,3 @@ if [ -e "/mnt/jukebox-hotloading/jukeboxd" ]; then
 fi
 
 /app/bin/jukeboxd "$@"
-
-exit "${ret}"

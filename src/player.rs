@@ -340,6 +340,8 @@ impl Player {
         let mut is_playing = false;
         use PlayerState::*;
 
+        trace!("Player in state {} received playback command {:?}", state, request);
+
         match request {
             PlaybackRequest::Start(tag) => {
                 let tag_conf = tag_mapper.lookup(&tag.uid.to_string()).unwrap_or_default();

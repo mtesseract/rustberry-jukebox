@@ -21,7 +21,7 @@ spec:
         command:
           - sh
           - -c
-          - "rm /mnt/jukebox-hotloading/*"
+          - "rm -f /mnt/jukebox-hotloading/*"
       containers:
       - name: jukeboxd 
         image: mtesseract/jukeboxd:latest
