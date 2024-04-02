@@ -47,12 +47,14 @@ pub mod rfid {
 
         fn run(mut self) -> Result<()> {
             let mut last_uid: Option<Uid> = None;
-            trace!("PlaybackRequestTransmitterRfid loop running");
             let mut deflicker: u32 = 0;
             let deflicker_threshold: u32 = 3;
 
+            trace!("PlaybackRequestTransmitterRfid loop running");
             loop {
+                trace!("loop()");
                 thread::sleep(Duration::from_millis(200));
+                trace!("about to read_picc_uid()");
                 match self.picc.read_picc_uid() {
                     Err(err) => {
                         // Do not change playback state in this case.
@@ -104,6 +106,7 @@ pub mod rfid {
                         // New PICC UID.
                         info!("New PICC: {}.", current_uid);
                         deflicker = 0;
+                        last_uid = Some(current_uid);
                     }
                 }
             }

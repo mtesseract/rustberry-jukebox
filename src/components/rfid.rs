@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::sync::{Arc, Mutex};
-use tracing::info;
+use tracing::{trace,info};
 
 use hal::spidev::{SpiModeFlags, SpidevOptions};
 use hal::SpidevDevice;
@@ -66,15 +66,21 @@ impl RfidController {
     }
 
     pub fn read_picc_uid(&mut self) -> Result<Option<Tag>> {
+        trace!("read_picc_uid()");
         let mut mfrc522 = self.mfrc522.lock().unwrap();
-        let atqa = match mfrc522.reqa() {
+        let res = mfrc522.reqa();
+        match res {
+            Err(ref err) => trace!("reqa(): {:?}", err),
+            Ok(_) => trace!("reqa() returned AtqA"),
+        }
+        let atqa = match res {
             Err(mfrc522::error::Error::Timeout) => return Ok(None),
             // mfrc522::error::Error only has a stub Display implementation.
             Err(err) => return Err(anyhow::Error::msg(format!("{:?}", err))),
             Ok(atqa) => atqa,
         };
-        let uid = mfrc522.select(&atqa).context("Selecting AtqA for PICC")?;
-        let _ = mfrc522.wupa(); // To make the next reqa() call behave reliably.
+        let uid = mfrc522.select(&atqa).map_err(|err| { trace!("select(): {:?}", err); err }).context("Selecting AtqA for PICC")?;
+        let _res = mfrc522.wupa().map_err(|err| { trace!("wupa(): {:?}", err); err });
         let pretty_uid = Uid::from_bytes(uid.as_bytes());
         Ok(Some(Tag { uid: pretty_uid }))
     }

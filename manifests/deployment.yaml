@@ -15,16 +15,16 @@ spec:
       labels:
         app: jukeboxd
     spec:
-      initContainers:
-      - name: init
-        image: alpine:3.16.9
-        command:
-          - sh
-          - -c
-          - "rm -f /var/run/jukeboxd/hotloading/*"
-        volumeMounts:
-          - mountPath: /var/run/jukeboxd
-            name: var-run-jukeboxd
+      # initContainers:
+      # - name: init
+      #   image: alpine:3.16.9
+      #   command:
+      #     - sh
+      #     - -c
+      #     - "rm -f /var/run/jukeboxd/hotloading/*"
+      #   volumeMounts:
+      #     - mountPath: /var/run/jukeboxd
+      #       name: var-run-jukeboxd
       containers:
       - name: jukeboxd 
         image: mtesseract/jukeboxd:latest
