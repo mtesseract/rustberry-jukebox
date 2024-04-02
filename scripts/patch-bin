@@ -1,0 +1,5 @@
+#!/bin/sh
+
+patchelf --set-rpath /app/lib "$1"
+patchelf --set-interpreter /app/lib/ld-linux-aarch64.so.1 "$1"
+strip "$1"
