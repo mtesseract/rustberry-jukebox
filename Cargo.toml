@@ -24,7 +24,7 @@ hex = "0.4"
 # gotham_derive = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-crossbeam-channel = "0.4"
+crossbeam-channel = "0.5.12"
 futures = "0.3.4"
 # blinkt = "0.5.0"
 mime = "0.3"
