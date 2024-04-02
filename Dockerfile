@@ -25,15 +25,15 @@ ENV PKG_CONFIG_ALLOW_CROSS="true"
 WORKDIR /proj
 COPY --from=planner /proj/recipe.json recipe.json
 
-RUN cargo chef cook --target aarch64-unknown-linux-gnu --recipe-path recipe.json
+RUN cargo chef cook --release --target aarch64-unknown-linux-gnu --recipe-path recipe.json
 
 COPY . .
 RUN cargo build --release --target aarch64-unknown-linux-gnu
 
 RUN rm -rf out && \
 	mkdir -p out/bin out/lib && \
-	cp target/aarch64-unknown-linux-gnu/debug/jukeboxd out/bin && \
-	./scripts/copy-dyn-libs target/aarch64-unknown-linux-gnu/debug/jukeboxd out/lib
+	cp target/aarch64-unknown-linux-gnu/release/jukeboxd out/bin && \
+	./scripts/copy-dyn-libs target/aarch64-unknown-linux-gnu/release/jukeboxd out/lib
 
 FROM --platform=linux/arm64/v8 alpine:3.16.9 AS pre-runtime
 RUN apk add patchelf
