@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use crossbeam_channel::{Receiver, Sender};
 use serde::{Deserialize, Serialize};
-use tracing::{error, info, trace};
+use tracing::{error, debug, info, trace};
 
 use crate::components::rfid::Tag;
 use crate::components::tag_mapper::{TagConf, TagMapperHandle};
@@ -604,10 +604,10 @@ impl Player {
         config: Arc<Config>,
         tag_mapper: &TagMapperHandle,
     ) -> Result<()> {
-        use PlayerCommand::*;
+        debug!("Player handling command {:?}", cmd);
 
         match cmd {
-            PlaybackCommand { request, tx } => {
+            PlayerCommand::PlaybackCommand { request, tx } => {
                 Self::handle_playback_command_tx(
                     interpreter,
                     request,
@@ -619,7 +619,7 @@ impl Player {
                 .await
             }
 
-            PauseContinue { tx } => {
+            PlayerCommand::PauseContinue { tx } => {
                 Self::handle_pause_continue_command_tx(interpreter, tx, state, config, tag_mapper)
                     .await
             }
@@ -631,7 +631,7 @@ impl Player {
         let tag_mapper = player.tag_mapper.clone();
         loop {
             let command = player.rx.recv().unwrap();
-            trace!("Player command: {:?}", command);
+            debug!("Player command: {:?}", command);
             let mut state = player.state.clone();
             let res = Self::handle_command(
                 player.interpreter.clone(),

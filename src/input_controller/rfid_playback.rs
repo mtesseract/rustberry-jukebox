@@ -51,7 +51,6 @@ pub mod rfid {
 
             trace!("PlaybackRequestTransmitterRfid loop running");
             loop {
-                trace!("loop()");
                 thread::sleep(Duration::from_millis(200));
                 trace!("about to read_picc_uid()");
                 match self.picc.read_picc_uid() {

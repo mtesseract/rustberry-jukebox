@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use file_player::FilePlayer;
 use led::{Led, LedController};
 use std::process::Command;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use crate::components::tag_mapper::TagConf;
 use crate::player::{DynPlaybackHandle, PauseState};
@@ -61,15 +61,15 @@ impl Interpreter for ProdInterpreter {
     }
 
     fn led_on(&self) -> Result<()> {
-        info!("Switching LED on");
+        debug!("Switching LED on");
         self.led_controller.switch_on(Led::Playback)
     }
     fn led_off(&self) -> Result<()> {
-        info!("Switching LED off");
+        debug!("Switching LED off");
         self.led_controller.switch_off(Led::Playback)
     }
     fn generic_command(&self, cmd: &str) -> Result<()> {
-        info!("Executing command '{}'", &cmd);
+        debug!("Executing command '{}'", &cmd);
         let res = Command::new("/bin/sh").arg("-c").arg(&cmd).status();
         match res {
             Ok(exit_status) => {
