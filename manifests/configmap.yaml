@@ -5,14 +5,12 @@ metadata:
   namespace: koffer
 data:
   enable_spotify: "false"
-  refresh_token: ""
-  client_id: ""
-  client_secret: ""
   device_name: ""
   post_init_command: ""
   shutdown_command: "touch /var/run/jukeboxd/shutdown"
   volume_up_command: ""
   volume_down_command: ""
-  trigger_only_mode: "true"
+  trigger_only_mode: "false"
   tag_mapper_configuration_file: "/mnt/jukebox-drive/conf/tag-mapper.yaml"
   audio_base_directory: "/mnt/jukebox-drive/audio"
+  pause_pin: "14"
