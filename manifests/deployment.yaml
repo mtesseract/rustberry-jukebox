@@ -29,12 +29,12 @@ spec:
       - name: jukeboxd 
         image: mtesseract/jukeboxd:latest
         imagePullPolicy: Always
-        command: ["/app/bin/jukeboxd-wrapper"]
+        args: ["/app/bin/jukeboxd-wrapper"]
         securityContext:
           privileged: true
         env:
         - name: RUST_LOG
-          value: trace
+          value: info 
         - name: AUDIO_BASE_DIRECTORY
           valueFrom:
             configMapKeyRef:
@@ -50,16 +50,16 @@ spec:
             configMapKeyRef:
               name: jukeboxd
               key: enable_spotify
-        - name: REFRESH_TOKEN
-          valueFrom:
-            configMapKeyRef:
-              name: jukeboxd
-              key: refresh_token
         - name: TRIGGER_ONLY_MODE
           valueFrom:
             configMapKeyRef:
               name: jukeboxd
               key: trigger_only_mode
+        # # - name: PAUSE_PIN
+        # #   valueFrom:
+        # #     configMapKeyRef:
+        # #       name: jukeboxd
+        #       key: pause_pin
         volumeMounts:
           - mountPath: /run/pulse
             name: pulseaudio-run
