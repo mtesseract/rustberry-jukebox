@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::sync::{Arc, Mutex};
-use tracing::{trace,info};
+use tracing::{info, trace};
 
 use hal::spidev::{SpiModeFlags, SpidevOptions};
 use hal::SpidevDevice;
@@ -79,8 +79,17 @@ impl RfidController {
             Err(err) => return Err(anyhow::Error::msg(format!("{:?}", err))),
             Ok(atqa) => atqa,
         };
-        let uid = mfrc522.select(&atqa).map_err(|err| { trace!("select(): {:?}", err); err }).context("Selecting AtqA for PICC")?;
-        let _res = mfrc522.wupa().map_err(|err| { trace!("wupa(): {:?}", err); err });
+        let uid = mfrc522
+            .select(&atqa)
+            .map_err(|err| {
+                trace!("select(): {:?}", err);
+                err
+            })
+            .context("Selecting AtqA for PICC")?;
+        let _res = mfrc522.wupa().map_err(|err| {
+            trace!("wupa(): {:?}", err);
+            err
+        });
         let pretty_uid = Uid::from_bytes(uid.as_bytes());
         Ok(Some(Tag { uid: pretty_uid }))
     }

@@ -16,8 +16,6 @@ impl<T> Handle<T> {
 }
 
 pub mod rfid {
-    use std::cmp::min;
-
     use crate::components::rfid::*;
 
     use super::*;
@@ -46,7 +44,8 @@ pub mod rfid {
         }
 
         fn run(mut self) -> Result<()> {
-            let mut last_uid: Option<Uid> = None;
+            let mut last_playing_opt: Option<Uid> = None;
+            let mut last_uid_opt: Option<Uid> = None;
             let mut deflicker: u32 = 0;
             let deflicker_threshold: u32 = 3;
 
@@ -62,34 +61,58 @@ pub mod rfid {
                     }
                     Ok(None) => {
                         trace!("No PICC found.");
-                        if last_uid.is_some() {
+                        if last_uid_opt.is_some() {
                             // Switch from PICC present to no PICC.
-                            info!("PICC gone.");
-                            last_uid = None;
+                            info!("PICC not present anymore.");
+                            last_uid_opt = None;
                             deflicker = 0;
                         } else {
                             // Another iteration without PICC.
-                            if deflicker + 1 == deflicker_threshold {
-                                // Deflicker threshold reached, propagate message.
-                                if let Err(err) = self.tx.send(PlaybackRequest::Stop.into()) {
-                                    error!("Failed to transmit User Request: {}", err);
-                                    continue;
-                                }
+                            // Same PICC UID. Apply deflicker logic.
+                            if deflicker == deflicker_threshold {
+                                continue;
                             }
-                            deflicker = min(deflicker_threshold, deflicker + 1);
+                            deflicker += 1;
+                            if deflicker < deflicker_threshold {
+                                continue;
+                            }
+                            // Deflicker threshold reached, propagate stop message, if necessary.
+                            if last_playing_opt.is_none() {
+                                continue;
+                            }
+                            if let Err(err) = self.tx.send(PlaybackRequest::Stop.into()) {
+                                error!("Failed to transmit playback stop request: {}", err);
+                            }
+                            last_playing_opt = None;
                         }
                     }
-                    Ok(Some(tag)) => {
-                        trace!("Found PICC {:?}.", tag);
-                        let current_uid = tag.uid.clone();
+                    Ok(Some(current_tag)) => {
+                        trace!("Detected PICC {:?}.", current_tag);
+                        let current_uid = current_tag.uid.clone();
 
-                        if let Some(ref uid) = last_uid {
-                            // In the last iteration we alrady had a PICC.
-                            if current_uid == *uid {
-                                // Same PICC UID.
-                                if deflicker + 1 == deflicker_threshold {
+                        if let Some(ref last_uid) = last_uid_opt {
+                            // A PICC has been detected previously.
+                            if current_uid != *last_uid {
+                                // Different UID, reset deflicker counter.
+                                deflicker = 0;
+                                last_uid_opt = Some(current_uid);
+                                continue;
+                            }
+
+                            // Same PICC UID. Apply deflicker logic.
+                            if deflicker == deflicker_threshold {
+                                continue;
+                            }
+                            deflicker += 1;
+                            if deflicker < deflicker_threshold {
+                                continue;
+                            }
+                            // Stable event, process it.
+                            // Might trigger Stop and Start playback requests, depending on the current playing state.
+                            match last_playing_opt {
+                                None => {
                                     if let Err(err) =
-                                        self.tx.send(PlaybackRequest::Start(tag).into())
+                                        self.tx.send(PlaybackRequest::Start(current_tag).into())
                                     {
                                         error!(
                                             "Failed to send playback start event for PICC {}: {}",
@@ -97,16 +120,36 @@ pub mod rfid {
                                         );
                                         continue;
                                     }
+                                    last_playing_opt = Some(current_uid);
                                 }
-                                deflicker = min(deflicker_threshold, deflicker + 1);
-                                continue;
+                                Some(ref last_playing_uid) if *last_playing_uid == current_uid => {
+                                    // This PICC is already playing, nothing to do here.
+                                }
+                                Some(_) => {
+                                    // Different PICC is currently playing.
+                                    if let Err(err) = self.tx.send(PlaybackRequest::Stop.into()) {
+                                        error!("Failed to send playback stop event: {}", err);
+                                        continue;
+                                    }
+                                    last_playing_opt = None;
+                                    if let Err(err) =
+                                        self.tx.send(PlaybackRequest::Start(current_tag).into())
+                                    {
+                                        error!(
+                                            "Failed to send playback start event for PICC {}: {}",
+                                            current_uid, err
+                                        );
+                                        continue;
+                                    }
+                                    last_playing_opt = Some(current_uid);
+                                }
                             }
+                        } else {
+                            // PICC detected after a phase of no PICCs.
+                            info!("New PICC: {}.", current_uid);
+                            deflicker = 0;
+                            last_uid_opt = Some(current_uid);
                         }
-
-                        // New PICC UID.
-                        info!("New PICC: {}.", current_uid);
-                        deflicker = 0;
-                        last_uid = Some(current_uid);
                     }
                 }
             }

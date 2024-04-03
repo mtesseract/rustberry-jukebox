@@ -341,8 +341,7 @@ impl Player {
 
         info!(
             "Player in state {} received playback command {:?}",
-            state,
-            request
+            state, request
         );
 
         match request {

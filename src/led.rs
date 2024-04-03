@@ -25,9 +25,7 @@ pub enum Cmd {
 }
 
 impl Blinker {
-    pub fn new(
-        interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
-    ) -> Result<Self> {
+    pub fn new(interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>) -> Result<Self> {
         let abort_handle = RefCell::new(None);
         let blinker = Self {
             interpreter,

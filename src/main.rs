@@ -35,8 +35,7 @@ async fn main() -> Result<()> {
     let interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>> =
         Arc::new(Box::new(interpreter));
 
-    let blinker =
-        Blinker::new(interpreter.clone()).context("Creating blinker")?;
+    let blinker = Blinker::new(interpreter.clone()).context("Creating blinker")?;
     blinker.run_async(led::Cmd::Loop(Box::new(led::Cmd::Many(vec![
         led::Cmd::On(Duration::from_millis(100)),
         led::Cmd::Off(Duration::from_millis(100)),
