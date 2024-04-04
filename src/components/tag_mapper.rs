@@ -47,13 +47,6 @@ impl TagMapperConfiguration {
     }
 }
 
-// mappings:
-//   12345:
-//     uris:
-//       - foo.ogg
-//       - bar.ogg
-//
-
 impl TagMapper {
     fn refresh(&mut self) -> Result<()> {
         let content = fs::read_to_string(&self.file)

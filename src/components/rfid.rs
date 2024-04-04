@@ -58,8 +58,7 @@ impl RfidController {
             .version()
             .context("Retrieving MFRC522 version information")?;
 
-        info!("mfrc522 version: 0x{:x}", vers);
-        info!("Created new MFRC522 Controller");
+        info!("Created new MFRC522 Controller (version 0x{:x}", vers);
         Ok(RfidController {
             mfrc522: Arc::new(Mutex::new(mfrc522)),
         })

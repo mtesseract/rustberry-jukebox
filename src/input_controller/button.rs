@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use anyhow::{Context, Result};
+use anyhow::{Error, Context, Result};
 use crossbeam_channel::{self, Receiver, Sender};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -15,7 +15,6 @@ pub struct Config {
     pub volume_up_pin: Option<u32>,
     pub volume_down_pin: Option<u32>,
     pub pause_pin: Option<u32>,
-    pub start_time: Option<Instant>,
 }
 
 pub struct Handle<T> {
@@ -56,12 +55,10 @@ pub mod cdev_gpio {
 
     impl From<EnvConfig> for Config {
         fn from(env_config: EnvConfig) -> Self {
-            let start_time = Some(Instant::now());
             Config {
                 volume_up_pin: env_config.volume_up_pin,
                 volume_down_pin: env_config.volume_down_pin,
                 pause_pin: env_config.pause_pin,
-                start_time,
             }
         }
     }
@@ -92,7 +89,7 @@ pub mod cdev_gpio {
                 map.insert(pin, Command::PauseContinue);
             }
             let chip = Chip::new("/dev/gpiochip0")
-                .map_err(|err| Error::IO(format!("Failed to open Chip: {:?}", err)))?;
+                .map_err(|err| Error::msg(format!("opening GPIO chip: {}", err)))?;
             let (tx, rx) = crossbeam_channel::bounded(1);
             let mut gpio_cdev = Self {
                 map,
@@ -118,12 +115,7 @@ pub mod cdev_gpio {
                     EventRequestFlags::FALLING_EDGE,
                     "read-input",
                 )
-                .map_err(|err| {
-                    Error::IO(format!(
-                        "Failed to request events from GPIO line {}: {}",
-                        line_id, err
-                    ))
-                })?
+                .map_err(|err| Error::msg(format!("requesting events from GPIO line {}: {}", line_id, err)))?
             {
                 if ts.elapsed() < std::time::Duration::from_millis(500) {
                     trace!("Ignoring GPIO event {:?} on line {} since the last event on this line arrived just {}ms ago",
@@ -148,7 +140,7 @@ pub mod cdev_gpio {
                 let line_id = *line_id as u32;
                 let line = chip
                     .get_line(line_id)
-                    .map_err(|err| Error::IO(format!("Failed to get GPIO line: {:?}", err)))?;
+                    .map_err(|err| Error::msg(format!("Failed to get GPIO line: {:?}", err)))?;
                 let cmd = (*cmd).clone();
                 let clone = self.clone();
                 let _handle = std::thread::Builder::new()
@@ -163,18 +155,3 @@ pub mod cdev_gpio {
         }
     }
 }
-
-#[derive(Debug)]
-pub enum Error {
-    IO(String),
-}
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Error::IO(s) => write!(f, "IO Error: {}", s),
-        }
-    }
-}
-
-impl std::error::Error for Error {}

@@ -30,7 +30,6 @@ pub struct ProdInterpreter {
 }
 
 #[async_trait]
-
 pub trait Interpreter {
     fn wait_until_ready(&self) -> Result<()>;
     async fn play(
