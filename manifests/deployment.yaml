@@ -45,11 +45,6 @@ spec:
             configMapKeyRef:
               name: jukeboxd
               key: tag_mapper_configuration_file
-        - name: ENABLE_SPOTIFY
-          valueFrom:
-            configMapKeyRef:
-              name: jukeboxd
-              key: enable_spotify
         - name: TRIGGER_ONLY_MODE
           valueFrom:
             configMapKeyRef:

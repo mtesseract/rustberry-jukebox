@@ -4,7 +4,6 @@ metadata:
   name: jukeboxd
   namespace: koffer
 data:
-  enable_spotify: "false"
   device_name: ""
   post_init_command: ""
   volume_up_command: ""
