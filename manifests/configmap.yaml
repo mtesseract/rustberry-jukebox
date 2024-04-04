@@ -7,7 +7,6 @@ data:
   enable_spotify: "false"
   device_name: ""
   post_init_command: ""
-  shutdown_command: "touch /var/run/jukeboxd/shutdown"
   volume_up_command: ""
   volume_down_command: ""
   trigger_only_mode: "false"

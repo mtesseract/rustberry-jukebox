@@ -157,16 +157,6 @@ impl App {
                     self.blinker.stop();
                     match input {
                         Input::Button(cmd) => match cmd {
-                            button::Command::Shutdown => {
-                                let cmd = self
-                                    .config
-                                    .shutdown_command
-                                    .clone()
-                                    .unwrap_or_else(|| "sudo shutdown -h now".to_string());
-                                if let Err(err) = self.interpreter.generic_command(&cmd) {
-                                    error!("Failed to execute shutdown command '{}': {}", cmd, err);
-                                }
-                            }
                             button::Command::VolumeUp => {
                                 let cmd =
                                     self.config.volume_up_command.clone().unwrap_or_else(|| {
