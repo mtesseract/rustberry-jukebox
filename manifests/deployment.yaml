@@ -67,8 +67,6 @@ spec:
             name: pulseaudio-etc
           - mountPath: /mnt/jukebox-drive
             name: jukebox-drive
-          - mountPath: /mnt/jukebox-hotloading
-            name: jukebox-hotloading
           - mountPath: /var/run/jukeboxd
             name: var-run-jukeboxd
       volumes:
@@ -86,5 +84,5 @@ spec:
             claimName: jukebox-hotloading
         - name: var-run-jukeboxd
           hostPath:
-            path: /var/run/jukeboxd
+            path: /jukeboxd
             type: Directory

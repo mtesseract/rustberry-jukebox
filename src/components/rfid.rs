@@ -66,7 +66,6 @@ impl RfidController {
     }
 
     pub fn read_picc_uid(&mut self) -> Result<Option<Tag>> {
-        trace!("read_picc_uid()");
         let mut mfrc522 = self.mfrc522.lock().unwrap();
         let res = mfrc522.reqa();
         match res {

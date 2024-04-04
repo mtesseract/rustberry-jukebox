@@ -1,7 +1,9 @@
 #!/bin/sh
 
-if [ -e "/var/run/jukeboxd/hotloading/jukeboxd" ]; then
-	cp /var/run/jukeboxd/hotloading/jukeboxd /app/bin
+HOTLOADING_DIR="/var/run/jukeboxd/hotloading"
+
+if [ -e "${HOTLOADING_DIR}/jukeboxd" ]; then
+	cp "${HOTLOADING_DIR}/jukeboxd" /app/bin
 fi
 
 /app/bin/jukeboxd "$@"
