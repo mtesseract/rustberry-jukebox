@@ -33,7 +33,7 @@ RUN cargo build --release --target aarch64-unknown-linux-gnu
 FROM --platform=linux/arm64/v8 debian:12-slim as runtime
 RUN apt-get update && apt-get dist-upgrade -y && \
 	apt-get -y install \
-		libasound2 tini alsa-utils
+		libasound2 tini alsa-utils libasound2-plugins
 RUN mkdir -p /app/bin
 
 COPY --from=builder /proj/target/aarch64-unknown-linux-gnu/release/jukeboxd /app/bin
