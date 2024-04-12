@@ -61,8 +61,12 @@ spec:
         # #       name: jukeboxd
         #       key: pause_pin
         volumeMounts:
+          - mountPath: /dev/snd
+            name: dev-snd
           - mountPath: /run/pulse
             name: pulseaudio-run
+          - mountPath: /etc/alsa/conf.d/99-pulseaudio-default.conf
+            name: alsa-etc
           - mountPath: /etc/pulse
             name: pulseaudio-etc
           - mountPath: /mnt/jukebox-drive
@@ -70,6 +74,12 @@ spec:
           - mountPath: /var/run/jukeboxd
             name: var-run-jukeboxd
       volumes:
+        - name: dev-snd
+          hostPath:
+            path: /dev/snd
+        - name: alsa-etc
+          hostPath:
+            path: /etc/alsa/conf.d/99-pulseaudio-default.conf.example
         - name: pulseaudio-etc
           hostPath:
             path: /etc/pulse
