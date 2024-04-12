@@ -30,7 +30,7 @@ RUN cargo chef cook --release --target aarch64-unknown-linux-gnu --recipe-path r
 COPY . .
 RUN cargo build --release --target aarch64-unknown-linux-gnu
 
-FROM --platform=linux/arm64/v8 debian:12 as runtime
+FROM --platform=linux/arm64/v8 debian:12-slim as runtime
 RUN apt-get update && apt-get dist-upgrade -y && \
 	apt-get -y install \
 		libasound2 tini alsa-utils
