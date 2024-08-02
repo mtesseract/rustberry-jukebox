@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use crossbeam_channel::{Receiver, Sender};
 use serde::{Deserialize, Serialize};
-use tracing::{error, debug, info, trace};
+use tracing::{error, debug, info };
 
 use crate::components::rfid::Tag;
 use crate::components::tag_mapper::{TagConf, TagMapperHandle};
