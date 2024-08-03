@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 // use tokio::runtime::{self, };
+use std::path::Path;
 
 use anyhow::{Context, Result};
 use crossbeam_channel::{self, Receiver, Select};
@@ -8,7 +9,8 @@ use tracing::{error, info, warn};
 use tracing_subscriber;
 
 use rustberry::components::tag_mapper::TagMapper;
-use rustberry::config::Config;
+use rustberry::components::config::ConfigLoader;
+use rustberry::model::config::Config;
 use rustberry::effects::{Interpreter, ProdInterpreter};
 use rustberry::input_controller::{
     button::{self, cdev_gpio::CdevGpio},
@@ -18,11 +20,17 @@ use rustberry::input_controller::{
 use rustberry::led::{self, Blinker};
 use rustberry::player::{self, Player};
 
+const DEFAULT_JUKEBOX_CONFIG_FILE: &str = "/etc/jukebox/config";
+
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
-    let config = envy::from_env::<Config>()?;
     info!("Starting application");
+    let config_loader = ConfigLoader::new(Path::new(DEFAULT_JUKEBOX_CONFIG_FILE))?;
+    let config = config_loader.get()?;
+    if let Err(err) = config_loader.spawn_async_loader() {
+        error!("Failed to spawn aync config loader: {}", err);
+    }
 
     info!("Creating TagMapper");
     let tag_mapper = TagMapper::new_initialized(&config.tag_mapper_configuration_file)

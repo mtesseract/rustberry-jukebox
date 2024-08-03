@@ -3,7 +3,7 @@ pub mod led;
 
 use std::sync::Arc;
 
-use crate::config::Config;
+use crate::model::config::Config;
 use anyhow::Result;
 use async_trait::async_trait;
 use file_player::FilePlayer;

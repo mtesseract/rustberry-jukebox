@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug, Default, Clone)]
 pub struct Config {
     #[serde(default = "enable_spotify_default")]
     pub enable_spotify: bool,
