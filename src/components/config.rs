@@ -3,6 +3,7 @@ use anyhow::{Context, Result};
 use std::default::Default;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
+use std::io;
 
 use tokio::time::{sleep, Duration};
 use tracing::level_filters::LevelFilter;
@@ -75,6 +76,11 @@ impl ConfigLoader {
                     self.set(cfg);
                 }
                 Err(err) => {
+                    if let Some(io_err) = err.downcast_ref::<io::Error>() {
+                        if io_err.kind() == io::ErrorKind::NotFound {
+                            continue;
+                        }
+                    }
                     error!("Failed to load runtime config: {}", err);
                 }
             }
