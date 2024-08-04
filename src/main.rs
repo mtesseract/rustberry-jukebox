@@ -32,7 +32,6 @@ async fn main() -> Result<()> {
         .with(fmt::Layer::default())
         .init();
 
-    // tracing_subscriber::fmt::init();
     info!("Starting application");
     let config_loader = ConfigLoader::new(Path::new(DEFAULT_JUKEBOX_CONFIG_FILE), reload_handle)?;
     let config = config_loader.get();

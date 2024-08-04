@@ -54,7 +54,7 @@ impl ConfigLoader {
         if prev.debug != current.debug {
             let mut fltr = filter::LevelFilter::INFO;
             if current.debug {
-                fltr = filter::LevelFilter::DEBUG;
+                fltr = filter::LevelFilter::TRACE;
             }
             info!("Updating tracing log level to: {}", fltr);
             if let Err(err) = self.reload_handle.modify(|filter| *filter = fltr) {

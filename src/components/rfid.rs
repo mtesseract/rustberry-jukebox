@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::sync::{Arc, Mutex};
-use tracing::{info, trace};
+use tracing::{info, debug, trace};
 
 use hal::spidev::{SpiModeFlags, SpidevOptions};
 use hal::SpidevDevice;
