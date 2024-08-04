@@ -6,11 +6,11 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use crossbeam_channel::{self, Receiver, Select};
 use tracing::{error, info, warn};
-use tracing_subscriber;
+// use tracing_subscriber;
+use tracing_subscriber::{filter, fmt, prelude::*, reload};
 
-use rustberry::components::tag_mapper::TagMapper;
 use rustberry::components::config::ConfigLoader;
-use rustberry::model::config::Config;
+use rustberry::components::tag_mapper::TagMapper;
 use rustberry::effects::{Interpreter, ProdInterpreter};
 use rustberry::input_controller::{
     button::{self, cdev_gpio::CdevGpio},
@@ -18,19 +18,24 @@ use rustberry::input_controller::{
     Input,
 };
 use rustberry::led::{self, Blinker};
+use rustberry::model::config::Config;
 use rustberry::player::{self, Player};
 
 const DEFAULT_JUKEBOX_CONFIG_FILE: &str = "/etc/jukebox/config";
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    tracing_subscriber::fmt::init();
+    let filter = filter::LevelFilter::INFO;
+    let (filter, reload_handle) = reload::Layer::new(filter);
+    tracing_subscriber::registry()
+        .with(filter)
+        .with(fmt::Layer::default())
+        .init();
+
+    // tracing_subscriber::fmt::init();
     info!("Starting application");
-    let config_loader = ConfigLoader::new(Path::new(DEFAULT_JUKEBOX_CONFIG_FILE))?;
-    let config = config_loader.get()?;
-    if let Err(err) = config_loader.spawn_async_loader() {
-        error!("Failed to spawn aync config loader: {}", err);
-    }
+    let config_loader = ConfigLoader::new(Path::new(DEFAULT_JUKEBOX_CONFIG_FILE), reload_handle)?;
+    let config = config_loader.get();
 
     info!("Creating TagMapper");
     let tag_mapper = TagMapper::new_initialized(&config.tag_mapper_configuration_file)
