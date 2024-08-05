@@ -57,7 +57,7 @@ impl TagMapperConfiguration {
 impl TagMapper {
     fn refresh(&mut self) -> Result<()> {
         let content = fs::read_to_string(&self.file)
-            .with_context(|| format!("Reading tag_mapper configuration at {}", self.file))?;
+            .with_context(|| format!("Reading tag_mapper configuration at '{}'", self.file))?;
         let conf: TagMapperConfiguration = serde_yaml::from_str(&content).with_context(|| {
             format!(
                 "YAML unmarshalling tag_mapper configuration at {}",
