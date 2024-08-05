@@ -7,7 +7,7 @@ use std::sync::{Arc, RwLock};
 
 use tokio::time::{sleep, Duration};
 use tracing::level_filters::LevelFilter;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 use tracing_subscriber::{filter, reload, Registry};
 
 use model::config::{Config, PartialConfig};
@@ -67,6 +67,10 @@ impl ConfigLoader {
         let cfg_file = self.cfg_file.as_path();
         info!("Config loader loop started");
         loop {
+            debug!(
+                "Attempting to reload configuration from {}",
+                cfg_file.display()
+            );
             match Self::load_cfg(&cfg_file).await {
                 Ok(cfg_part) => {
                     let cfg_prev = self.get();
