@@ -14,3 +14,4 @@ data:
   tag_mapper_configuration_file: "/mnt/jukebox-drive/conf/tag-mapper.yaml"
   audio_base_directory: "/mnt/jukebox-drive/audio"
   pause_pin: "14"
+  enable_rfid_controller: "true"

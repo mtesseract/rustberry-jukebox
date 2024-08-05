@@ -12,6 +12,7 @@ pub struct Config {
     pub tag_mapper_configuration_file: String,
     pub audio_base_directory: String,
     pub debug: bool,
+    pub enable_rfid_controller: bool,
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -25,6 +26,7 @@ pub struct PartialConfig {
     pub tag_mapper_configuration_file: Option<String>,
     pub audio_base_directory: Option<String>,
     pub debug: Option<bool>,
+    pub enable_rfid_controller: Option<bool>,
 }
 
 impl Default for Config {
@@ -39,6 +41,7 @@ impl Default for Config {
             tag_mapper_configuration_file: "".to_string(),
             audio_base_directory: "".to_string(),
             debug: false,
+            enable_rfid_controller: true,
         }
     }
 }
@@ -47,7 +50,7 @@ impl Config {
     // cfg overwrites values in self.
     pub fn merge_partial(&mut self, cfg: PartialConfig) {
         if let Some(enable_spotify) = cfg.enable_spotify {
-            self.enable_spotify = self.enable_spotify;
+            self.enable_spotify = enable_spotify;
         }
 
         if let Some(post_init_command) = cfg.post_init_command {
@@ -73,6 +76,9 @@ impl Config {
         }
         if let Some(debug) = cfg.debug {
             self.debug = debug
+        }
+        if let Some(enable_rfid_controller) = cfg.enable_rfid_controller {
+            self.enable_rfid_controller = enable_rfid_controller
         }
     }
 }

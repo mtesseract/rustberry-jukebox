@@ -60,6 +60,11 @@ spec:
         # #     configMapKeyRef:
         # #       name: jukeboxd
         #       key: pause_pin
+        - name: ENABLE_RFID_CONTROLLER
+          valueFrom:
+            configMapKeyRef:
+              name: jukeboxd
+              key: enable_rfid_controller
         volumeMounts:
           - mountPath: /run/pulse
             name: pulseaudio-run

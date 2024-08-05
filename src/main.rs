@@ -58,25 +58,28 @@ async fn main() -> Result<()> {
         .context("Waiting for interpreter readiness")?;
 
     // Prepare input channels.
+    let mut inputs = Vec::new();
+    // Dummy:
+    let (_dummy_tx, dummy_rx) = crossbeam_channel::bounded(1);
+    inputs.push(dummy_rx);
+
     info!("Creating Button Controller");
     let button_controller_handle: button::Handle<Input> =
         CdevGpio::new_from_env().context("Creating button controller")?;
-    info!("Creating PlayBackRequestTransmitter");
-    let playback_controller_handle: rfid_playback::Handle<Input> =
-        PlaybackRequestTransmitterRfid::new().context("Creating playback controller")?;
+    inputs.push(button_controller_handle.channel());
+
+    if config.enable_rfid_controller {
+        info!("Creating PlayBackRequestTransmitter");
+        let playback_controller_handle: rfid_playback::Handle<Input> =
+            PlaybackRequestTransmitterRfid::new().context("Creating playback controller")?;
+        inputs.push(playback_controller_handle.channel());
+    } else {
+        warn!("Skipping creation of PlayBackRequestTransmitter: RFID controller disabled.");
+    }
 
     // Execute Application Logic, producing Effects.
-    let application = App::new(
-        config,
-        interpreter.clone(),
-        blinker,
-        &[
-            button_controller_handle.channel(),
-            playback_controller_handle.channel(),
-        ],
-        tag_mapper,
-    )
-    .context("Creating application object")?;
+    let application = App::new(config, interpreter.clone(), blinker, &inputs, tag_mapper)
+        .context("Creating application object")?;
 
     info!("Running application");
     application
