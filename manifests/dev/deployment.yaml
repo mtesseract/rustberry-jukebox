@@ -24,31 +24,6 @@ spec:
         env:
         - name: RUST_LOG
           value: info 
-        - name: AUDIO_BASE_DIRECTORY
-          valueFrom:
-            configMapKeyRef:
-              name: jukebox-conf
-              key: audio_base_directory
-        - name: TAG_MAPPER_CONFIGURATION_FILE
-          valueFrom:
-            configMapKeyRef:
-              name: jukebox-conf
-              key: tag_mapper_configuration_file
-        - name: ENABLE_SPOTIFY
-          valueFrom:
-            configMapKeyRef:
-              name: jukebox-conf
-              key: enable_spotify
-        - name: TRIGGER_ONLY_MODE
-          valueFrom:
-            configMapKeyRef:
-              name: jukebox-conf
-              key: trigger_only_mode
-        - name: ENABLE_RFID_CONTROLLER
-          valueFrom:
-            configMapKeyRef:
-              name: jukebox-conf
-              key: enable_rfid_controller
         # # - name: PAUSE_PIN
         # #   valueFrom:
         # #     configMapKeyRef:

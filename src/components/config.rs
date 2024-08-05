@@ -41,6 +41,14 @@ impl ConfigLoader {
         *write_guard = cfg;
     }
 
+    fn load_cfg_sync(file: &PathBuf) -> Result<PartialConfig> {
+        let content = std::fs::read_to_string(file)
+            .with_context(|| format!("Reading configuration file at {}", file.display()))?;
+        let cfg: PartialConfig = serde_yaml::from_str(&content)
+            .with_context(|| format!("YAML unmarshalling configuration at {}", file.display()))?;
+        Ok(cfg)
+    }
+
     async fn load_cfg(file: &Path) -> Result<PartialConfig> {
         let content = tokio::fs::read_to_string(file)
             .await
@@ -111,8 +119,8 @@ impl ConfigLoader {
     ) -> Result<ConfigLoaderHandle> {
         let cfg_file = cfg_file.to_path_buf();
         let mut cfg = model::config::Config::default();
-        let env_cfg = envy::from_env::<model::config::PartialConfig>()?;
-        cfg.merge_partial(env_cfg);
+        let cfg_from_file = Self::load_cfg_sync(&cfg_file)?;
+        cfg.merge_partial(cfg_from_file);
         let cfg = Arc::new(RwLock::new(cfg));
         let cfg_loader = ConfigLoader {
             cfg_file,
