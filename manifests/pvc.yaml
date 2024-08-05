@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: jukebox-drive
+  name: jukebox-audio
   namespace: koffer
   annotations:
     volumeType: local

@@ -1,8 +1,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: jukeboxd
-  namespace: koffer
+  name: jukebox-conf
 data:
   enable_spotify: "false"
   device_name: ""
@@ -11,7 +10,7 @@ data:
   volume_up_command: ""
   volume_down_command: ""
   trigger_only_mode: "false"
-  tag_mapper_configuration_file: "/mnt/jukebox-drive/conf/tag-mapper.yaml"
+  tag_mapper_configuration_file: "/mnt/jukebox-drive/audio/tag-mapper.yaml"
   audio_base_directory: "/mnt/jukebox-drive/audio"
   pause_pin: "14"
   enable_rfid_controller: "false"

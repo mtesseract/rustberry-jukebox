@@ -1,29 +1,21 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: jukeboxd
-  namespace: koffer
+  name: jukebox
   labels:
-    app: jukeboxd
+    app: jukebox
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: jukeboxd
+      app: jukebox
   template:
     metadata:
       labels:
-        app: jukeboxd
+        app: jukebox
     spec:
-      initContainers:
-      - name: init
-        image: alpine:3.16.9
-        command:
-          - sh
-          - -c
-          - "mkdir -p /etc/jukebox"
       containers:
-      - name: jukeboxd 
+      - name: jukebox
         image: mtesseract/jukeboxd:latest
         imagePullPolicy: Always
         args: ["/app/bin/jukeboxd-wrapper"]
@@ -35,44 +27,42 @@ spec:
         - name: AUDIO_BASE_DIRECTORY
           valueFrom:
             configMapKeyRef:
-              name: jukeboxd
+              name: jukebox-conf
               key: audio_base_directory
         - name: TAG_MAPPER_CONFIGURATION_FILE
           valueFrom:
             configMapKeyRef:
-              name: jukeboxd
+              name: jukebox-conf
               key: tag_mapper_configuration_file
         - name: ENABLE_SPOTIFY
           valueFrom:
             configMapKeyRef:
-              name: jukeboxd
+              name: jukebox-conf
               key: enable_spotify
         - name: TRIGGER_ONLY_MODE
           valueFrom:
             configMapKeyRef:
-              name: jukeboxd
+              name: jukebox-conf
               key: trigger_only_mode
         - name: ENABLE_RFID_CONTROLLER
           valueFrom:
             configMapKeyRef:
-              name: jukeboxd
+              name: jukebox-conf
               key: enable_rfid_controller
         # # - name: PAUSE_PIN
         # #   valueFrom:
         # #     configMapKeyRef:
-        # #       name: jukeboxd
+        # #       name: jukebox-conf
         #       key: pause_pin
         volumeMounts:
           - mountPath: /run/pulse
             name: pulseaudio-run
           - mountPath: /etc/pulse
             name: pulseaudio-etc
-          - mountPath: /mnt/jukebox-drive/conf
+          - mountPath: /etc/jukebox
             name: jukebox-conf
           - mountPath: /mnt/jukebox-drive/audio
             name: jukebox-audio
-          - mountPath: /var/run/jukeboxd
-            name: jukebox-var-run
       volumes:
         - name: pulseaudio-etc
           hostPath:
@@ -80,10 +70,9 @@ spec:
         - name: pulseaudio-run
           hostPath:
             path: /run/pulse
+        - name: jukebox-audio
+          persistentVolumeClaim:
+            claimName: jukebox-audio
         - name: jukebox-conf
           configMap:
             name: jukebox-conf
-        - name: jukebox-audio
-          emptyDir: {}
-        - name: jukebox-var-run
-          emptyDir: {}

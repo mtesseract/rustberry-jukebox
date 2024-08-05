@@ -3,7 +3,7 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
 use std::sync::{Arc, RwLock};
-use tracing::info;
+use tracing::{debug, info};
 
 type TagID = String;
 
@@ -56,8 +56,19 @@ impl TagMapperConfiguration {
 
 impl TagMapper {
     fn refresh(&mut self) -> Result<()> {
-        let content = fs::read_to_string(&self.file)
-            .with_context(|| format!("Reading tag_mapper configuration at '{}'", self.file))?;
+        let content = match fs::read_to_string(&self.file) {
+            Ok(cnt) => cnt,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                debug!("No tag mapper configuration found");
+                return Ok(());
+            }
+            Err(err) => {
+                return Err(err).with_context(|| {
+                    format!("Reading tag mapper configuration at '{}'", self.file)
+                });
+            }
+        };
+
         let conf: TagMapperConfiguration = serde_yaml::from_str(&content).with_context(|| {
             format!(
                 "YAML unmarshalling tag_mapper configuration at {}",

@@ -21,7 +21,7 @@ use rustberry::led::{self, Blinker};
 use rustberry::model::config::Config;
 use rustberry::player::{self, Player};
 
-const DEFAULT_JUKEBOX_CONFIG_FILE: &str = "/etc/jukebox/config";
+const DEFAULT_JUKEBOX_CONFIG_FILE: &str = "/etc/jukebox/conf.yaml";
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -29,7 +29,7 @@ async fn main() -> Result<()> {
     let (filter, reload_handle) = reload::Layer::new(filter);
     tracing_subscriber::registry()
         .with(filter)
-        .with(fmt::Layer::default())
+        .with(fmt::Layer::default().with_writer(std::io::stderr))
         .init();
 
     info!("Starting application");
