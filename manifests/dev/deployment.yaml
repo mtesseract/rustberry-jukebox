@@ -24,11 +24,6 @@ spec:
         env:
         - name: RUST_LOG
           value: info 
-        # # - name: PAUSE_PIN
-        # #   valueFrom:
-        # #     configMapKeyRef:
-        # #       name: jukebox-conf
-        #       key: pause_pin
         volumeMounts:
           - mountPath: /run/pulse
             name: pulseaudio-run
