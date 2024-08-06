@@ -1,12 +1,13 @@
 use anyhow::{Context, Result};
-use rodio::{DeviceTrait, Sink};
+use rodio::{DeviceTrait, Device, OutputStream, Sink};
+use cpal::traits::HostTrait;
 use std::convert::From;
 use std::fs::File;
 use std::io::BufReader;
 use std::sync::Arc;
 use std::thread::{Builder, JoinHandle};
 use std::time::Duration;
-use tracing::{debug, info, warn};
+use tracing::{ info, warn};
 
 use async_trait::async_trait;
 use crossbeam_channel::{self, Sender};
@@ -64,8 +65,47 @@ impl PlaybackHandle for FilePlaybackHandle {
 }
 
 impl FilePlayer {
+    fn display_device_info(device: &Device) -> Result<()> {
+        let name = device.name().unwrap_or_else(|_| "Unknown".to_string());
+        println!("{}", name);
+        if let Ok(configs) = device.supported_output_configs() {
+            for config in configs {
+                println!("  - {:?}", config);
+            }
+        }
+        Ok(())
+    }
+
+    fn display_devices_info() -> Result<()> {
+        println!("Available output devices:");
+        let host = cpal::default_host();
+        let devices = host.output_devices()?;
+        if let Some(device) = host.default_output_device() {
+            if let Err(err) = Self::display_device_info(&device) {
+                warn!(
+                    "Failed to list device info for default device {:?}: {}",
+                    device.name(),
+                    err
+                );
+            }
+        }
+        for device in devices {
+            if let Err(err) = Self::display_device_info(&device) {
+                warn!(
+                    "Failed to list device info for device {:?}: {}",
+                    device.name(),
+                    err
+                );
+            }
+        }
+        Ok(())
+    }
+
     pub fn new(base_dir: &str) -> Result<Self> {
         info!("Creating new FilePlayer...");
+        if let Err(err) = Self::display_devices_info() {
+            warn!("Failed to list audio devices: {}", err);
+        }
         let base_dir = PathBuf::from(base_dir);
         let player = FilePlayer {
             _handle: None,
@@ -93,11 +133,10 @@ impl FilePlayer {
         if let Some(pause_state) = pause_state {
             warn!("Ignoring pause state: {:?}", pause_state);
         }
-        let device = rodio::default_output_device().unwrap();
-        debug!(
-            "Initiating playback via device: {:?}",
-            device.name().unwrap_or("(unknown)".to_string())
-        );
+
+        let (_stream, stream_handle) = OutputStream::try_default()?;
+        let sink = Sink::try_new(&stream_handle)?;
+
         let file_name = match uris.first().cloned() {
             Some(uri) => uri,
             None => return Err(anyhow::Error::msg("TagConf is empty")),
@@ -107,7 +146,6 @@ impl FilePlayer {
             .with_context(|| format!("completing file name {}", file_name))?;
 
         let (tx, rx) = crossbeam_channel::bounded(1);
-        let sink = Arc::new(Sink::new(&device));
         let _handle = Builder::new()
             .name("file-player".to_string())
             .spawn(move || {
@@ -121,7 +159,7 @@ impl FilePlayer {
 
         let handle = FilePlaybackHandle {
             _tx: tx, // Cancellation mechanism.
-            sink,
+            sink: Arc::new(sink),
             file_path: file_path,
         };
         handle
