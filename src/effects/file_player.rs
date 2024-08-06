@@ -1,12 +1,12 @@
 use anyhow::{Context, Result};
-use rodio::Sink;
+use rodio::{DeviceTrait, Sink};
 use std::convert::From;
 use std::fs::File;
 use std::io::BufReader;
 use std::sync::Arc;
 use std::thread::{Builder, JoinHandle};
 use std::time::Duration;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use async_trait::async_trait;
 use crossbeam_channel::{self, Sender};
@@ -94,6 +94,10 @@ impl FilePlayer {
             warn!("Ignoring pause state: {:?}", pause_state);
         }
         let device = rodio::default_output_device().unwrap();
+        debug!(
+            "Initiating playback via device: {:?}",
+            device.name().unwrap_or("(unknown)".to_string())
+        );
         let file_name = match uris.first().cloned() {
             Some(uri) => uri,
             None => return Err(anyhow::Error::msg("TagConf is empty")),

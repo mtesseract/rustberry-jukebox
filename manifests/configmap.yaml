@@ -11,8 +11,8 @@ data:
     volume_up_command: ""
     volume_down_command: ""
     trigger_only_mode: false
-    tag_mapper_configuration_file: "/mnt/jukebox-drive/audio/tag-mapper.yaml"
-    audio_base_directory: "/mnt/jukebox-drive/audio"
+    tag_mapper_configuration_file: "/mnt/jukebox-audio/tag-mapper.yaml"
+    audio_base_directory: "/mnt/jukebox-audio"
     pause_pin: 14
     enable_rfid_controller: true
     debug: false

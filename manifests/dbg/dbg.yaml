@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: dbg
+spec:
+  containers:
+    - name: dbg
+      image: fedora:39
+      command: ["sleep", "10000"]
+      volumeMounts:
+        - mountPath: /run/pulse
+          name: pulseaudio-run
+        - mountPath: /etc/pulse
+          name: pulseaudio-etc
+        - name: jukebox-audio
+          mountPath: /mnt/jukebox-audio
+  volumes:
+    - name: pulseaudio-etc
+      hostPath:
+        path: /etc/pulse
+    - name: pulseaudio-run
+      hostPath:
+        path: /run/pulse
+    - name: jukebox-audio
+      persistentVolumeClaim:
+        claimName: jukebox-audio
+
+
