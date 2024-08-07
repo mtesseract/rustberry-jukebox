@@ -13,6 +13,7 @@ pub struct Config {
     pub audio_base_directory: String,
     pub debug: bool,
     pub enable_rfid_controller: bool,
+    pub audio_output_device: Option<String>,
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -27,6 +28,7 @@ pub struct PartialConfig {
     pub audio_base_directory: Option<String>,
     pub debug: Option<bool>,
     pub enable_rfid_controller: Option<bool>,
+    pub audio_output_device: Option<String>,
 }
 
 impl Default for Config {
@@ -42,6 +44,7 @@ impl Default for Config {
             audio_base_directory: "".to_string(),
             debug: false,
             enable_rfid_controller: true,
+            audio_output_device: None,
         }
     }
 }
@@ -79,6 +82,9 @@ impl Config {
         }
         if let Some(enable_rfid_controller) = cfg.enable_rfid_controller {
             self.enable_rfid_controller = enable_rfid_controller
+        }
+        if let Some(audio_output_device) = cfg.audio_output_device {
+            self.audio_output_device = Some(audio_output_device)
         }
     }
 }

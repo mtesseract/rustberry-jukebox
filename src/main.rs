@@ -43,7 +43,7 @@ async fn main() -> Result<()> {
     tag_mapper_handle.debug_dump();
 
     // Create Effects Channel and Interpreter.
-    let interpreter = ProdInterpreter::new(&config).context("Creating production interpreter")?;
+    let interpreter = ProdInterpreter::new(config_loader).context("Creating production interpreter")?;
     let interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>> =
         Arc::new(Box::new(interpreter));
 

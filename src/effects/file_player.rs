@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use cpal::traits::HostTrait;
 use rodio::{Device, DeviceTrait, Sink};
 use std::convert::From;
@@ -16,10 +16,12 @@ use tokio::runtime::Runtime;
 use tokio::task::spawn_blocking;
 
 use crate::player::{PauseState, PlaybackHandle};
+use crate::components::config::ConfigLoaderHandle;
 
 pub struct FilePlayer {
     _handle: Option<JoinHandle<()>>,
     base_dir: PathBuf,
+    config: ConfigLoaderHandle,
 }
 
 pub struct FilePlaybackHandle {
@@ -101,7 +103,9 @@ impl FilePlayer {
         Ok(())
     }
 
-    pub fn new(base_dir: &str) -> Result<Self> {
+    pub fn new(config_loader: ConfigLoaderHandle) -> Result<Self> {
+        let config = config_loader.get();
+        let base_dir = config.audio_base_directory;
         info!("Creating new FilePlayer...");
         if let Err(err) = Self::display_devices_info() {
             warn!("Failed to list audio devices: {}", err);
@@ -110,6 +114,7 @@ impl FilePlayer {
         let player = FilePlayer {
             _handle: None,
             base_dir,
+            config: config_loader,
         };
 
         Ok(player)
@@ -124,17 +129,33 @@ impl FilePlayer {
         Ok(complete_fname)
     }
 
+    fn lookup_device_by_name(name: &str) -> Result<Device> {
+        let devices = rodio::devices().with_context(|| "retrieving list of audio devices")?;
+        for device in devices {
+            let device_name = device.name().with_context(|| "retrieving audio device name")?;
+            if device_name == name {
+                return Ok(device);
+            }
+        }
+        Err(anyhow!("audio device not found: {}", name))
+    }
+
     pub async fn start_playback(
         &self,
         uris: &[String],
         pause_state: Option<PauseState>,
     ) -> Result<FilePlaybackHandle, anyhow::Error> {
         info!("Initiating playback for uris {:?}", uris);
+        let config = self.config.get();
+
         if let Some(pause_state) = pause_state {
             warn!("Ignoring pause state: {:?}", pause_state);
         }
 
-        let device = rodio::default_output_device().unwrap();
+        let device = match config.audio_output_device {
+            Some(name) => Self::lookup_device_by_name(&name).with_context(|| "attempting to initiate playback")?,
+            None => rodio::default_output_device().with_context(|| "retrieving default audio output device")?,
+        };
         debug!(
             "Initiating playback via device: {:?}",
             device.name().unwrap_or("(unknown)".to_string())

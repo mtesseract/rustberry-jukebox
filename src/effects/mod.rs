@@ -3,7 +3,7 @@ pub mod led;
 
 use std::sync::Arc;
 
-use crate::model::config::Config;
+use crate::components::config::ConfigLoaderHandle;
 use anyhow::Result;
 use async_trait::async_trait;
 use file_player::FilePlayer;
@@ -26,7 +26,6 @@ pub enum Effects {
 pub struct ProdInterpreter {
     file_player: FilePlayer,
     led_controller: Arc<Box<dyn LedController + 'static + Send + Sync>>,
-    _config: Config,
 }
 
 #[async_trait]
@@ -96,15 +95,14 @@ impl Interpreter for ProdInterpreter {
 }
 
 impl ProdInterpreter {
-    pub fn new(config: &Config) -> Result<Self> {
-        let config = config.clone();
+    pub fn new(config_loader: ConfigLoaderHandle) -> Result<Self> {
+        // let config = config_loader.get();
         let led_controller = Arc::new(Box::new(led::gpio_cdev::GpioCdev::new()?)
             as Box<dyn LedController + 'static + Send + Sync>);
-        let file_player = FilePlayer::new(&config.audio_base_directory)?;
+        let file_player = FilePlayer::new(config_loader)?;
         Ok(ProdInterpreter {
             file_player,
             led_controller,
-            _config: config,
         })
     }
 }
