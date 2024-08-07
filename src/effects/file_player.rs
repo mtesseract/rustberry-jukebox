@@ -1,13 +1,13 @@
 use anyhow::{Context, Result};
-use rodio::{DeviceTrait, Device, OutputStream, Sink};
 use cpal::traits::HostTrait;
+use rodio::{Device, DeviceTrait, Sink};
 use std::convert::From;
 use std::fs::File;
 use std::io::BufReader;
 use std::sync::Arc;
 use std::thread::{Builder, JoinHandle};
 use std::time::Duration;
-use tracing::{ info, warn};
+use tracing::{debug, info, warn};
 
 use async_trait::async_trait;
 use crossbeam_channel::{self, Sender};
@@ -67,17 +67,17 @@ impl PlaybackHandle for FilePlaybackHandle {
 impl FilePlayer {
     fn display_device_info(device: &Device) -> Result<()> {
         let name = device.name().unwrap_or_else(|_| "Unknown".to_string());
-        println!("{}", name);
-        if let Ok(configs) = device.supported_output_configs() {
-            for config in configs {
-                println!("  - {:?}", config);
-            }
-        }
+        info!("- audio output device: {}", name);
+        // if let Ok(configs) = device.supported_output_configs() {
+        //     for config in configs {
+        //         println!("  - {:?}", config);
+        //     }
+        // }
         Ok(())
     }
 
     fn display_devices_info() -> Result<()> {
-        println!("Available output devices:");
+        info!("Available output devices:");
         let host = cpal::default_host();
         let devices = host.output_devices()?;
         if let Some(device) = host.default_output_device() {
@@ -134,8 +134,11 @@ impl FilePlayer {
             warn!("Ignoring pause state: {:?}", pause_state);
         }
 
-        let (_stream, stream_handle) = OutputStream::try_default()?;
-        let sink = Sink::try_new(&stream_handle)?;
+        let device = rodio::default_output_device().unwrap();
+        debug!(
+            "Initiating playback via device: {:?}",
+            device.name().unwrap_or("(unknown)".to_string())
+        );
 
         let file_name = match uris.first().cloned() {
             Some(uri) => uri,
@@ -146,6 +149,7 @@ impl FilePlayer {
             .with_context(|| format!("completing file name {}", file_name))?;
 
         let (tx, rx) = crossbeam_channel::bounded(1);
+
         let _handle = Builder::new()
             .name("file-player".to_string())
             .spawn(move || {
@@ -157,6 +161,7 @@ impl FilePlayer {
             })
             .unwrap();
 
+        let sink = Sink::new(&device);
         let handle = FilePlaybackHandle {
             _tx: tx, // Cancellation mechanism.
             sink: Arc::new(sink),
