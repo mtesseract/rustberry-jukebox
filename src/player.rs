@@ -365,7 +365,7 @@ impl Player {
                                 "Same resource, not completed, continuing with pause state {:?}",
                                 &at
                             );
-                            if let Err(err) = self.effect_tx.send(Effect::Stop) {
+                            if let Err(err) = self.effect_tx.send(Effect::PlayContinue(at)) {
                                 error!("Failed to continue playback: {}", err);
                                 self.state = Paused { at, prev_tag_conf };
                                 return Err(err.into());
