@@ -19,26 +19,28 @@ pub struct FilePlayer {
     file_path: Option<PathBuf>,
 }
 
-const FROM_BEGINNING: Duration = Duration::from_secs(0);
+// const FROM_BEGINNING: Duration = Duration::from_secs(0);
 
 impl FilePlayer {
     pub fn queue(&self) -> Result<()> {
-        let path = if let Some(file_path) = self.file_path { file_path } else { warn!("cannot queue without file name"); return Ok(()); };
+        let path = if let Some(ref file_path) = self.file_path {
+            file_path.clone()
+        } else {
+            warn!("cannot queue without file name");
+            return Ok(());
+        };
         let file = BufReader::new(File::open(path).unwrap());
         let source = rodio::Decoder::new(BufReader::new(file))?;
         self.sink.append(source);
         Ok(())
     }
-
-    fn is_complete(&self) -> Result<bool> {
-        Ok(self.sink.empty())
-    }
-
+    
     pub fn stop(&self) -> Result<()> {
         self.sink.pause();
         Ok(())
     }
-    fn cont(&self) -> Result<()> {
+
+    pub fn cont(&self) -> Result<()> {
         self.sink.play();
         Ok(())
     }
@@ -155,9 +157,7 @@ impl FilePlayer {
             .queue()
             .context("queue method of player handle")?;
         self 
-            .cont(PauseState {
-                pos: FROM_BEGINNING,
-            })
+            .cont()
             .context("cont method of player handle")?;
         Ok(())
     }

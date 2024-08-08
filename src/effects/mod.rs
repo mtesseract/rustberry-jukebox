@@ -22,6 +22,7 @@ pub enum Effect {
     GenericCommand(String),
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct InterpreterState {
     pub currently_playing: bool
 }
@@ -35,7 +36,7 @@ pub struct ProdInterpreter {
 
 pub trait Interpreter {
     fn wait_until_ready(&self) -> Result<()>;
-    fn interprete(&self, eff: Effect) -> Result<()>;
+    fn interprete(&mut self, eff: Effect) -> Result<()>;
 }
 
 impl Interpreter for ProdInterpreter {
@@ -43,14 +44,14 @@ impl Interpreter for ProdInterpreter {
         Ok(())
     }
 
-    fn interprete(&self, eff: Effect) -> Result<()> {
+    fn interprete(&mut self, eff: Effect) -> Result<()> {
         match eff {
             Effect::GenericCommand(cmd) => self.generic_command(&cmd),
             Effect::LedOn => self.led_on(),
             Effect::LedOff => self.led_off(),
             Effect::Play(tag_conf) => self.play(tag_conf),
             Effect::Stop => self.stop(),
-            Effect::PlayContinue() => self.
+            Effect::PlayContinue(_) => self.play_continue(),
         }
     }
 }
@@ -82,8 +83,12 @@ impl ProdInterpreter {
 
     // Effect implementations.
 
+    fn play_continue(&mut self) -> Result<()> {
+        self.file_player.cont()
+    }
+
     fn play(&mut self, tag_conf: TagConf) -> Result<()> {
-        self.file_player.start_playback(&tag_conf.uris, self.pause_state)
+        self.file_player.start_playback(&tag_conf.uris, Some(self.pause_state))
     }
     
     fn stop(&self) -> Result<()> {
