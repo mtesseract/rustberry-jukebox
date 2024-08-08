@@ -1,73 +1,106 @@
 pub mod file_player;
 pub mod led;
 
-use std::sync::Arc;
+use std::sync::{Mutex, Arc};
 
 use crate::components::config::ConfigLoaderHandle;
 use anyhow::Result;
-use async_trait::async_trait;
 use file_player::FilePlayer;
 use led::{Led, LedController};
 use std::process::Command;
 use tracing::{debug, info, warn};
 
 use crate::components::tag_mapper::TagConf;
-use crate::player::{DynPlaybackHandle, PauseState};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Effects {
-    Play { uri: String },
+pub enum Effect {
+    Play(TagConf),
+    PlayContinue(std::time::Duration),
     Stop,
     LedOn,
     LedOff,
     GenericCommand(String),
 }
 
+pub struct InterpreterState {
+    pub currently_playing: bool
+}
+
 pub struct ProdInterpreter {
     file_player: FilePlayer,
     led_controller: Arc<Box<dyn LedController + 'static + Send + Sync>>,
+    pause_state: std::time::Duration,
+    pub interpreter_state: Arc<Mutex<InterpreterState>>,
 }
-
-#[async_trait]
 
 pub trait Interpreter {
     fn wait_until_ready(&self) -> Result<()>;
-    async fn play(
-        &self,
-        tag_conf: TagConf,
-        pause_state: Option<PauseState>,
-    ) -> Result<DynPlaybackHandle>;
-    fn led_on(&self) -> Result<()>;
-    fn led_off(&self) -> Result<()>;
-    fn generic_command(&self, cmd: &str) -> Result<()>;
+    fn interprete(&self, eff: Effect) -> Result<()>;
 }
 
-#[async_trait]
 impl Interpreter for ProdInterpreter {
     fn wait_until_ready(&self) -> Result<()> {
         Ok(())
     }
 
-    async fn play(
-        &self,
-        tag_conf: TagConf,
-        pause_state: Option<PauseState>,
-    ) -> Result<DynPlaybackHandle> {
-        self.file_player
-            .start_playback(&tag_conf.uris, pause_state)
-            .await
-            .map(|x| Box::new(x) as DynPlaybackHandle)
+    fn interprete(&self, eff: Effect) -> Result<()> {
+        match eff {
+            Effect::GenericCommand(cmd) => self.generic_command(&cmd),
+            Effect::LedOn => self.led_on(),
+            Effect::LedOff => self.led_off(),
+            Effect::Play(tag_conf) => self.play(tag_conf),
+            Effect::Stop => self.stop(),
+            Effect::PlayContinue() => self.
+        }
+    }
+}
+
+impl ProdInterpreter {
+    pub fn new(config_loader: ConfigLoaderHandle) -> Result<Self> {
+        let led_controller = Arc::new(Box::new(led::gpio_cdev::GpioCdev::new()?)
+            as Box<dyn LedController + 'static + Send + Sync>);
+        let file_player = FilePlayer::new(config_loader)?;
+        let interpreter_state = Arc::new(Mutex::new(InterpreterState { currently_playing: false }));
+        let interpreter_state_copy = interpreter_state.clone();
+        let sink = file_player.sink.clone();
+        tokio::task::spawn_blocking(move || {
+            loop {
+                {
+                    let mut state = interpreter_state_copy.lock().unwrap();
+                    state.currently_playing = !sink.empty();
+                }
+                std::thread::sleep(std::time::Duration::from_secs(2));
+            }
+        });
+        Ok(ProdInterpreter {
+            file_player,
+            led_controller,
+            pause_state: std::time::Duration::from_secs(0),
+            interpreter_state,
+        })
+    }
+
+    // Effect implementations.
+
+    fn play(&mut self, tag_conf: TagConf) -> Result<()> {
+        self.file_player.start_playback(&tag_conf.uris, self.pause_state)
+    }
+    
+    fn stop(&self) -> Result<()> {
+        self.file_player.stop()
     }
 
     fn led_on(&self) -> Result<()> {
         debug!("Switching LED on");
         self.led_controller.switch_on(Led::Playback)
     }
+
     fn led_off(&self) -> Result<()> {
         debug!("Switching LED off");
         self.led_controller.switch_off(Led::Playback)
     }
-    fn generic_command(&self, cmd: &str) -> Result<()> {
+
+    pub fn generic_command(&self, cmd: &str) -> Result<()> {
         debug!("Executing command '{}'", &cmd);
         let res = Command::new("/bin/sh").arg("-c").arg(&cmd).status();
         match res {
@@ -91,18 +124,5 @@ impl Interpreter for ProdInterpreter {
                 Err(err.into())
             }
         }
-    }
-}
-
-impl ProdInterpreter {
-    pub fn new(config_loader: ConfigLoaderHandle) -> Result<Self> {
-        // let config = config_loader.get();
-        let led_controller = Arc::new(Box::new(led::gpio_cdev::GpioCdev::new()?)
-            as Box<dyn LedController + 'static + Send + Sync>);
-        let file_player = FilePlayer::new(config_loader)?;
-        Ok(ProdInterpreter {
-            file_player,
-            led_controller,
-        })
     }
 }

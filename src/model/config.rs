@@ -5,7 +5,6 @@ use std::default::Default;
 pub struct Config {
     pub enable_spotify: bool,
     pub post_init_command: Option<String>,
-    pub shutdown_command: Option<String>,
     pub volume_up_command: Option<String>,
     pub volume_down_command: Option<String>,
     pub trigger_only_mode: bool,
@@ -20,7 +19,6 @@ pub struct Config {
 pub struct PartialConfig {
     pub enable_spotify: Option<bool>,
     pub post_init_command: Option<String>,
-    pub shutdown_command: Option<String>,
     pub volume_up_command: Option<String>,
     pub volume_down_command: Option<String>,
     pub trigger_only_mode: Option<bool>,
@@ -36,7 +34,6 @@ impl Default for Config {
         Config {
             enable_spotify: false,
             post_init_command: None,
-            shutdown_command: None,
             volume_up_command: None,
             volume_down_command: None,
             trigger_only_mode: false,
@@ -58,9 +55,6 @@ impl Config {
 
         if let Some(post_init_command) = cfg.post_init_command {
             self.post_init_command = Some(post_init_command);
-        }
-        if let Some(shutdown_command) = cfg.shutdown_command {
-            self.shutdown_command = Some(shutdown_command);
         }
         if let Some(volume_up_command) = cfg.volume_up_command {
             self.volume_up_command = Some(volume_up_command);

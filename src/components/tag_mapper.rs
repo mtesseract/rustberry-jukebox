@@ -7,7 +7,7 @@ use tracing::{debug, info};
 
 type TagID = String;
 
-#[derive(Default, Debug, Deserialize, Clone, PartialEq)]
+#[derive(Default, Eq, Debug, Deserialize, Clone, PartialEq)]
 pub struct TagConf {
     pub uris: Vec<String>,
 }

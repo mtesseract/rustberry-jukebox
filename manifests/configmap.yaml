@@ -7,7 +7,6 @@ data:
     enable_spotify: false
     device_name: ""
     post_init_command: ""
-    shutdown_command: "touch /var/run/jukeboxd/shutdown"
     volume_up_command: ""
     volume_down_command: ""
     trigger_only_mode: false
@@ -16,3 +15,4 @@ data:
     pause_pin: 14
     enable_rfid_controller: true
     debug: false
+    audio_output_device: "default:CARD=vc4hdmi0"

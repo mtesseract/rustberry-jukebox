@@ -11,7 +11,6 @@ implemented via [Spotify](https://www.spotify.com) and controlled with RFID tags
 * A service (`jukeboxd`), which processes commands from hardware periphery (GPIOs, including
   an attached MF RC522 RFID reader). Such commands include:
   * Playback start/stop requests,
-  * shutdown requests,
   * volume control (to be implemented).
   
   Playback requests are derived

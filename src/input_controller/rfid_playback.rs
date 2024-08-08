@@ -29,10 +29,9 @@ pub mod rfid {
     where
         T: From<PlaybackRequest>,
     {
-        pub fn new() -> Result<Handle<T>> {
-            let (tx, rx) = crossbeam_channel::bounded(10);
+        pub fn new(inputs_tx: Sender<T>) -> Result<()> {
             let picc = RfidController::new().context("Creating RfidController")?;
-            let transmitter = Self { picc, tx };
+            let transmitter = Self { picc, tx: inputs_tx };
             thread::Builder::new()
                 .name("playback-transmitter".to_string())
                 .spawn(move || {
@@ -40,7 +39,7 @@ pub mod rfid {
                     transmitter.run().unwrap()
                 })
                 .context("Spawning PlaybackRequestTransmitterRfid")?;
-            Ok(Handle { channel: rx })
+            Ok(())
         }
 
         fn run(mut self) -> Result<()> {

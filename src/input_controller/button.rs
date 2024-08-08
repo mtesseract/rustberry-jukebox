@@ -1,11 +1,11 @@
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use anyhow::{Context, Result};
 use crossbeam_channel::{self, Receiver, Sender};
 
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
-    Shutdown,
     VolumeUp,
     VolumeDown,
     PauseContinue,
@@ -13,11 +13,9 @@ pub enum Command {
 
 #[derive(Debug, Clone)]
 pub struct Config {
-    pub shutdown_pin: Option<u32>,
     pub volume_up_pin: Option<u32>,
     pub volume_down_pin: Option<u32>,
     pub pause_pin: Option<u32>,
-    pub start_time: Option<Instant>,
 }
 
 pub struct Handle<T> {
@@ -37,7 +35,7 @@ pub mod cdev_gpio {
 
     use gpio_cdev::{Chip, EventRequestFlags, Line, LineRequestFlags};
     use serde::Deserialize;
-    use tracing::{error, info, trace, warn};
+    use tracing::{error, info, trace};
 
     use super::*;
 
@@ -51,7 +49,6 @@ pub mod cdev_gpio {
 
     #[derive(Deserialize, Debug, Clone)]
     pub struct EnvConfig {
-        shutdown_pin: Option<u32>,
         volume_up_pin: Option<u32>,
         volume_down_pin: Option<u32>,
         pause_pin: Option<u32>,
@@ -59,13 +56,10 @@ pub mod cdev_gpio {
 
     impl From<EnvConfig> for Config {
         fn from(env_config: EnvConfig) -> Self {
-            let start_time = Some(Instant::now());
             Config {
-                shutdown_pin: env_config.shutdown_pin,
                 volume_up_pin: env_config.volume_up_pin,
                 volume_down_pin: env_config.volume_down_pin,
                 pause_pin: env_config.pause_pin,
-                start_time,
             }
         }
     }
@@ -80,15 +74,12 @@ pub mod cdev_gpio {
     where
         T: From<Command>,
     {
-        pub fn new_from_env() -> Result<Handle<T>> {
+        pub fn new_from_env(input_tx: Sender<T>) -> Result<()> {
             info!("Using CdevGpio based Button Controller");
             let env_config =
                 EnvConfig::new_from_env().context("Creating CdevGpio based button controller")?;
             let config: Config = env_config.into();
             let mut map = HashMap::new();
-            if let Some(shutdown_pin) = config.shutdown_pin {
-                map.insert(shutdown_pin, Command::Shutdown);
-            }
             if let Some(pin) = config.volume_up_pin {
                 map.insert(pin, Command::VolumeUp);
             }
@@ -100,23 +91,21 @@ pub mod cdev_gpio {
             }
             let chip = Chip::new("/dev/gpiochip0")
                 .map_err(|err| Error::IO(format!("Failed to open Chip: {:?}", err)))?;
-            let (tx, rx) = crossbeam_channel::bounded(1);
             let mut gpio_cdev = Self {
                 map,
                 chip: Arc::new(RwLock::new(chip)),
                 config,
-                tx,
+                tx: input_tx,
             };
 
             gpio_cdev.run().context("Running GPIO event listener")?;
-            Ok(Handle { channel: rx })
+            Ok(())
         }
 
         fn run_single_event_listener(
             self,
             (line, line_id, cmd): (Line, u32, Command),
         ) -> Result<()> {
-            let mut n_received_during_shutdown_delay = 0;
             let mut ts = Instant::now();
 
             info!("Listening for GPIO events on line {}", line_id);
@@ -140,25 +129,6 @@ pub mod cdev_gpio {
                 }
 
                 trace!("Received GPIO event {:?} on line {}", event, line_id);
-                if cmd == Command::Shutdown {
-                    if let Some(start_time) = self.config.start_time {
-                        let now = Instant::now();
-                        let dt: Duration = now - start_time;
-                        if dt < DELAY_BEFORE_ACCEPTING_SHUTDOWN_COMMANDS {
-                            warn!(
-                                "Ignoring shutdown event (time elapsed since start: {:?})",
-                                dt
-                            );
-                            n_received_during_shutdown_delay += 1;
-                            continue;
-                        }
-                    }
-
-                    if n_received_during_shutdown_delay > 10 {
-                        warn!("Received too many shutdown events right after startup, shutdown functionality has been disabled");
-                        continue;
-                    }
-                }
                 if let Err(err) = self.tx.send(cmd.clone().into()) {
                     error!("Failed to transmit GPIO event: {}", err);
                 }
@@ -205,5 +175,3 @@ impl std::fmt::Display for Error {
 }
 
 impl std::error::Error for Error {}
-
-const DELAY_BEFORE_ACCEPTING_SHUTDOWN_COMMANDS: Duration = Duration::from_secs(10);
