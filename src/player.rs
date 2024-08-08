@@ -1,17 +1,15 @@
-use std::fmt;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
-use anyhow::{Context, Result};
-use crossbeam_channel::{Receiver, Sender};
+use anyhow::Result;
+use crossbeam_channel::Sender;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, error, info};
+use tracing::{error, info};
 
 use crate::components::config::ConfigLoaderHandle;
 use crate::components::rfid::Tag;
 use crate::components::tag_mapper::{TagConf, TagMapperHandle};
 use crate::effects::{Effect, InterpreterState};
-use crate::model::config::Config;
 
 pub use err::*;
 
@@ -169,7 +167,7 @@ impl Player {
                             self.state = Idle;
                             return Err(err);
                         }
-                        Ok(handle) => {
+                        Ok(_) => {
                             self.state = Playing {
                                 playing_since: Instant::now(),
                                 offset: Duration::from_secs(0),
@@ -199,7 +197,7 @@ impl Player {
 
     // External entry point.
     pub fn playback(&mut self, request: PlaybackRequest) -> Result<()> {
-        let mut state = self.state.clone();
+        let state = self.state.clone();
         let res = self.handle_playback_command(request);
         if let Err(err) = res {
             error!(
@@ -243,7 +241,7 @@ impl Player {
                                 error!("Failed to initiate new playback: {}", err);
                                 return Err(err);
                             }
-                            Ok(handle) => {
+                            Ok(_) => {
                                 self.state = Playing {
                                     playing_since: Instant::now(),
                                     offset,
@@ -274,7 +272,7 @@ impl Player {
                                 self.state = Idle;
                                 return Err(err);
                             }
-                            Ok(handle) => {
+                            Ok(_) => {
                                 self.state = Playing {
                                     playing_since: Instant::now(),
                                     offset,
@@ -302,7 +300,7 @@ impl Player {
                                 self.state = Idle;
                                 return Err(err);
                             }
-                            Ok(handle) => {
+                            Ok(_) => {
                                 self.state = Playing {
                                     playing_since: Instant::now(),
                                     offset: Duration::from_secs(0),
@@ -329,7 +327,7 @@ impl Player {
                                     self.state = Idle;
                                     return Err(err);
                                 }
-                                Ok(handle) => {
+                                Ok(_) => {
                                     self.state = Playing {
                                         playing_since: Instant::now(),
                                         offset: Duration::from_secs(0),
@@ -354,7 +352,7 @@ impl Player {
                                     self.state = Idle;
                                     return Err(err);
                                 }
-                                Ok(handle) => {
+                                Ok(_) => {
                                     self.state = Playing {
                                         playing_since: Instant::now(),
                                         offset: Duration::from_secs(0),
@@ -396,7 +394,7 @@ impl Player {
                                 self.state = Idle;
                                 return Err(err);
                             }
-                            Ok(handle) => {
+                            Ok(_) => {
                                 self.state = Playing {
                                     playing_since: Instant::now(),
                                     offset: Duration::from_secs(0),

@@ -5,7 +5,6 @@ use std::convert::From;
 use std::fs::File;
 use std::io::BufReader;
 use std::sync::Arc;
-use std::time::Duration;
 use tracing::{debug, info, warn};
 
 use std::path::{Path, PathBuf};
@@ -14,7 +13,6 @@ use crate::components::config::ConfigLoaderHandle;
 
 pub struct FilePlayer {
     base_dir: PathBuf,
-    config: ConfigLoaderHandle,
     pub sink: Arc<Sink>,
     file_path: Option<PathBuf>,
 }
@@ -45,12 +43,12 @@ impl FilePlayer {
         Ok(())
     }
 
-    fn replay(&self) -> Result<()> {
-        self.sink.stop();
-        self.queue()?;
-        self.sink.play();
-        Ok(())
-    }
+    // fn replay(&self) -> Result<()> {
+    //     self.sink.stop();
+    //     self.queue()?;
+    //     self.sink.play();
+    //     Ok(())
+    // }
 
     fn display_device_info(device: &Device) -> Result<()> {
         let name = device.name().unwrap_or_else(|_| "Unknown".to_string());
@@ -105,7 +103,6 @@ impl FilePlayer {
         let sink = Sink::new(&device);
         let player = FilePlayer {
             base_dir,
-            config: config_loader,
             sink: Arc::new(sink),
             file_path: None,
         };
@@ -141,7 +138,6 @@ impl FilePlayer {
         pause_state: Option<std::time::Duration>,
     ) -> Result<()> {
         info!("Initiating playback for uris {:?}", uris);
-        let config = self.config.get();
 
         if let Some(pause_state) = pause_state {
             warn!("Ignoring pause state: {:?}", pause_state);
