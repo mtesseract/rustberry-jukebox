@@ -30,6 +30,7 @@ impl FilePlayer {
         };
         let file = BufReader::new(File::open(path).unwrap());
         let source = rodio::Decoder::new(BufReader::new(file))?;
+        self.sink.stop();
         self.sink.append(source);
         Ok(())
     }
