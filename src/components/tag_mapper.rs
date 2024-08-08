@@ -3,11 +3,11 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
 use std::sync::{Arc, RwLock};
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 type TagID = String;
 
-#[derive(Default, Eq, Debug, Deserialize, Clone, PartialEq)]
+#[derive(Default, Debug, Deserialize, Clone, Eq, PartialEq)]
 pub struct TagConf {
     pub uris: Vec<String>,
 }
@@ -80,12 +80,12 @@ impl TagMapper {
         Ok(())
     }
 
-    pub fn handle(&self) -> TagMapperHandle {
+    fn handle(&self) -> TagMapperHandle {
         let conf = self.conf.clone();
         TagMapperHandle { conf }
     }
 
-    pub fn new(filename: &str) -> Self {
+    fn new(filename: &str) -> Self {
         let empty_conf = Arc::new(RwLock::new(TagMapperConfiguration::new()));
         let tag_mapper = TagMapper {
             file: filename.to_string(),
@@ -94,10 +94,17 @@ impl TagMapper {
         tag_mapper
     }
 
-    pub fn new_initialized(filename: &str) -> Result<TagMapper> {
+    pub fn new_initialized(filename: &str) -> Result<TagMapperHandle> {
         let mut tag_mapper = Self::new(filename);
         tag_mapper.refresh()?;
-        Ok(tag_mapper)
+        let handle = tag_mapper.handle();
+        let _join_handle = tokio::task::spawn_blocking(move || loop {
+            if let Err(err) = tag_mapper.refresh() {
+                warn!("reloading tag mapper failed: {}", err);
+            }
+            std::thread::sleep(std::time::Duration::from_secs(10));
+        });
+        Ok(handle)
     }
 }
 

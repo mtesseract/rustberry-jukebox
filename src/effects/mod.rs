@@ -1,7 +1,7 @@
 pub mod file_player;
 pub mod led;
 
-use std::sync::{Mutex, Arc};
+use std::sync::{Arc, RwLock};
 
 use crate::components::config::ConfigLoaderHandle;
 use anyhow::Result;
@@ -24,14 +24,14 @@ pub enum Effect {
 
 #[derive(Debug, Clone, Copy)]
 pub struct InterpreterState {
-    pub currently_playing: bool
+    pub currently_playing: bool,
 }
 
 pub struct ProdInterpreter {
     file_player: FilePlayer,
     led_controller: Arc<Box<dyn LedController + 'static + Send + Sync>>,
     pause_state: std::time::Duration,
-    pub interpreter_state: Arc<Mutex<InterpreterState>>,
+    pub interpreter_state: Arc<RwLock<InterpreterState>>,
 }
 
 pub trait Interpreter {
@@ -61,17 +61,17 @@ impl ProdInterpreter {
         let led_controller = Arc::new(Box::new(led::gpio_cdev::GpioCdev::new()?)
             as Box<dyn LedController + 'static + Send + Sync>);
         let file_player = FilePlayer::new(config_loader)?;
-        let interpreter_state = Arc::new(Mutex::new(InterpreterState { currently_playing: false }));
+        let interpreter_state = Arc::new(RwLock::new(InterpreterState {
+            currently_playing: false,
+        }));
         let interpreter_state_copy = interpreter_state.clone();
         let sink = file_player.sink.clone();
-        tokio::task::spawn_blocking(move || {
-            loop {
-                {
-                    let mut state = interpreter_state_copy.lock().unwrap();
-                    state.currently_playing = !sink.empty();
-                }
-                std::thread::sleep(std::time::Duration::from_secs(2));
+        tokio::task::spawn_blocking(move || loop {
+            {
+                let mut state = interpreter_state_copy.write().unwrap();
+                state.currently_playing = !sink.empty();
             }
+            std::thread::sleep(std::time::Duration::from_secs(2));
         });
         Ok(ProdInterpreter {
             file_player,
@@ -88,9 +88,10 @@ impl ProdInterpreter {
     }
 
     fn play(&mut self, tag_conf: TagConf) -> Result<()> {
-        self.file_player.start_playback(&tag_conf.uris, Some(self.pause_state))
+        self.file_player
+            .start_playback(&tag_conf.uris, Some(self.pause_state))
     }
-    
+
     fn stop(&self) -> Result<()> {
         self.file_player.stop()
     }

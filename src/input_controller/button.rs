@@ -3,7 +3,6 @@ use std::time::Instant;
 use anyhow::{Context, Result};
 use crossbeam_channel::{self, Receiver, Sender};
 
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
     VolumeUp,
@@ -43,7 +42,6 @@ pub mod cdev_gpio {
     pub struct CdevGpio<T: Clone> {
         map: HashMap<u32, Command>,
         chip: Arc<RwLock<Chip>>,
-        config: Config,
         tx: Sender<T>,
     }
 
@@ -94,7 +92,6 @@ pub mod cdev_gpio {
             let mut gpio_cdev = Self {
                 map,
                 chip: Arc::new(RwLock::new(chip)),
-                config,
                 tx: input_tx,
             };
 

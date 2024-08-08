@@ -1,5 +1,5 @@
 use std::fmt;
-use std::sync::{RwLock,Arc};
+use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
@@ -7,11 +7,11 @@ use crossbeam_channel::{Receiver, Sender};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error, info};
 
+use crate::components::config::ConfigLoaderHandle;
 use crate::components::rfid::Tag;
 use crate::components::tag_mapper::{TagConf, TagMapperHandle};
-use crate::components::config::ConfigLoaderHandle;
-use crate::model::config::Config;
 use crate::effects::{Effect, InterpreterState};
+use crate::model::config::Config;
 
 pub use err::*;
 
@@ -51,15 +51,6 @@ impl PlayerState {
             },
         }
     }
-
-    pub fn is_playing(&self) -> bool {
-        use PlayerState::*;
-        match self {
-            Idle => false,
-            Playing { .. } => true,
-            Paused { .. } => false,
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -84,10 +75,6 @@ pub struct Player {
     interpreter_state: Arc<RwLock<InterpreterState>>,
 }
 
-pub struct PlayerHandle {
-    player: Player,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum PlaybackRequest {
     Start(Tag),
@@ -97,10 +84,7 @@ pub enum PlaybackRequest {
 pub type PlaybackResource = Tag;
 
 impl Player {
-    fn play_resource(
-        &self,
-        tag_conf: &TagConf,
-    ) -> Result<()> {
+    fn play_resource(&self, tag_conf: &TagConf) -> Result<()> {
         let effect = Effect::Play(tag_conf.clone());
         if let Err(err) = self.effect_tx.send(effect.clone()) {
             error!("Failed to send effect {:?}: {}", effect, err);
@@ -112,7 +96,7 @@ impl Player {
     //     &self,
     //     is_playing: bool,
     // ) -> Result<()> {
-        
+
     //    let effect =if is_playing {
     //     Effect::LedOn
     //     } else {
@@ -123,7 +107,6 @@ impl Player {
     //     }
     //     Ok(())
     // }
-
 
     // External entry point.
     pub fn pause_continue_command(&mut self) -> Result<()> {
@@ -140,22 +123,15 @@ impl Player {
         }
         self.state = state;
         Ok(())
-    } 
+    }
 
-
-    fn handle_pause_continue_command(
-        &mut self,
-    ) -> Result<()> {
-        let mut is_playing = false;
+    fn handle_pause_continue_command(&mut self) -> Result<()> {
         use PlayerState::*;
 
         match self.state.clone() {
             Idle => {}
 
-            Paused {
-                at,
-                prev_tag_conf,
-            } => {
+            Paused { at, prev_tag_conf } => {
                 if let Err(err) = self.effect_tx.send(Effect::PlayContinue(at)) {
                     error!("Failed to continue playback: {}", err);
                     return Err(err.into());
@@ -174,7 +150,7 @@ impl Player {
                 tag_conf,
             } => {
                 let interpreter_state = {
-                    let r = * self.interpreter_state.read().unwrap();
+                    let r = *self.interpreter_state.read().unwrap();
                     r
                 };
                 let is_complete = !interpreter_state.currently_playing;
@@ -237,12 +213,9 @@ impl Player {
         }
         self.state = state;
         Ok(())
-    } 
+    }
 
-    fn handle_playback_command(
-        &mut self,
-        request: PlaybackRequest,
-    ) -> Result<()> {
+    fn handle_playback_command(&mut self, request: PlaybackRequest) -> Result<()> {
         let mut is_playing = false;
         use PlayerState::*;
 
@@ -257,7 +230,10 @@ impl Player {
 
         match request {
             PlaybackRequest::Start(tag) => {
-                let tag_conf = self.tag_mapper.lookup(&tag.uid.to_string()).unwrap_or_default();
+                let tag_conf = self
+                    .tag_mapper
+                    .lookup(&tag.uid.to_string())
+                    .unwrap_or_default();
 
                 match self.state.clone() {
                     Idle => {
@@ -356,7 +332,7 @@ impl Player {
                                 Ok(handle) => {
                                     self.state = Playing {
                                         playing_since: Instant::now(),
-                                                                               offset: Duration::from_secs(0),
+                                        offset: Duration::from_secs(0),
                                         tag_conf,
                                     };
                                 }
@@ -365,17 +341,14 @@ impl Player {
                         is_playing = true;
                     }
 
-                    Paused {
-                        at,
-                        prev_tag_conf,
-                    } if tag_conf == prev_tag_conf => {
+                    Paused { at, prev_tag_conf } if tag_conf == prev_tag_conf => {
                         // Currently paused, last resource is presented again, continue playing.
                         if is_complete {
                             if let Err(err) = self.effect_tx.send(Effect::Stop) {
                                 error!("Failed to stop playback: {}", err);
                                 return Err(err.into());
                             }
-                            match self.play_resource(&tag_conf){
+                            match self.play_resource(&tag_conf) {
                                 Err(err) => {
                                     error!("Failed to initiate new playback: {}", err);
                                     self.state = Idle;
@@ -396,10 +369,7 @@ impl Player {
                             );
                             if let Err(err) = self.effect_tx.send(Effect::Stop) {
                                 error!("Failed to continue playback: {}", err);
-                                self.state = Paused {
-                                    at,
-                                    prev_tag_conf,
-                                };
+                                self.state = Paused { at, prev_tag_conf };
                                 return Err(err.into());
                             }
                             self.state = Playing {
@@ -411,22 +381,16 @@ impl Player {
                         is_playing = true;
                     }
 
-                    Paused {
-                        at,
-                        prev_tag_conf,
-                    } => {
+                    Paused { at, prev_tag_conf } => {
                         // new resource
                         info!("New resource, playing from beginning");
                         if let Err(err) = self.effect_tx.send(Effect::Stop) {
                             error!("Failed to stop playback: {}", err);
-                            self.state = Paused {
-                                at,
-                                prev_tag_conf,
-                            };
+                            self.state = Paused { at, prev_tag_conf };
                             return Err(err.into());
                         }
 
-                        match self.play_resource(&tag_conf){
+                        match self.play_resource(&tag_conf) {
                             Err(err) => {
                                 error!("Failed to initiate new playback: {}", err);
                                 self.state = Idle;
@@ -491,7 +455,7 @@ impl Player {
         config: ConfigLoaderHandle,
         tag_mapper: TagMapperHandle,
         interpreter_state: Arc<RwLock<InterpreterState>>,
-    ) -> Result<PlayerHandle> {
+    ) -> Result<Player> {
         let player = Player {
             effect_tx,
             state: PlayerState::Idle,
@@ -499,7 +463,7 @@ impl Player {
             tag_mapper,
             interpreter_state,
         };
-        Ok(PlayerHandle { player })
+        Ok(player)
     }
 }
 

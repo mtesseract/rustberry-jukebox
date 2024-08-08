@@ -4,8 +4,8 @@ use rodio::{Device, DeviceTrait, Sink};
 use std::convert::From;
 use std::fs::File;
 use std::io::BufReader;
-use std::time::Duration;
 use std::sync::Arc;
+use std::time::Duration;
 use tracing::{debug, info, warn};
 
 use std::path::{Path, PathBuf};
@@ -15,7 +15,7 @@ use crate::components::config::ConfigLoaderHandle;
 pub struct FilePlayer {
     base_dir: PathBuf,
     config: ConfigLoaderHandle,
-    pub sink: Arc<Sink>, 
+    pub sink: Arc<Sink>,
     file_path: Option<PathBuf>,
 }
 
@@ -34,7 +34,7 @@ impl FilePlayer {
         self.sink.append(source);
         Ok(())
     }
-    
+
     pub fn stop(&self) -> Result<()> {
         self.sink.pause();
         Ok(())
@@ -51,7 +51,7 @@ impl FilePlayer {
         self.sink.play();
         Ok(())
     }
-    
+
     fn display_device_info(device: &Device) -> Result<()> {
         let name = device.name().unwrap_or_else(|_| "Unknown".to_string());
         info!("- audio output device: {}", name);
@@ -92,8 +92,10 @@ impl FilePlayer {
         }
         let base_dir = PathBuf::from(base_dir);
         let device = match config.audio_output_device {
-            Some(name) => Self::lookup_device_by_name(&name).with_context(|| "attempting to initiate playback")?,
-            None => rodio::default_output_device().with_context(|| "retrieving default audio output device")?,
+            Some(name) => Self::lookup_device_by_name(&name)
+                .with_context(|| "attempting to initiate playback")?,
+            None => rodio::default_output_device()
+                .with_context(|| "retrieving default audio output device")?,
         };
         debug!(
             "Initiating playback via device: {:?}",
@@ -123,7 +125,9 @@ impl FilePlayer {
     fn lookup_device_by_name(name: &str) -> Result<Device> {
         let devices = rodio::devices().with_context(|| "retrieving list of audio devices")?;
         for device in devices {
-            let device_name = device.name().with_context(|| "retrieving audio device name")?;
+            let device_name = device
+                .name()
+                .with_context(|| "retrieving audio device name")?;
             if device_name == name {
                 return Ok(device);
             }
@@ -153,12 +157,8 @@ impl FilePlayer {
 
         self.file_path = Some(file_path);
 
-        self 
-            .queue()
-            .context("queue method of player handle")?;
-        self 
-            .cont()
-            .context("cont method of player handle")?;
+        self.queue().context("queue method of player handle")?;
+        self.cont().context("cont method of player handle")?;
         Ok(())
     }
 }

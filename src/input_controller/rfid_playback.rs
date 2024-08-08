@@ -31,7 +31,10 @@ pub mod rfid {
     {
         pub fn new(inputs_tx: Sender<T>) -> Result<()> {
             let picc = RfidController::new().context("Creating RfidController")?;
-            let transmitter = Self { picc, tx: inputs_tx };
+            let transmitter = Self {
+                picc,
+                tx: inputs_tx,
+            };
             thread::Builder::new()
                 .name("playback-transmitter".to_string())
                 .spawn(move || {

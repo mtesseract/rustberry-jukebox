@@ -19,6 +19,7 @@ pub struct ConfigLoader {
     reload_handle: reload::Handle<LevelFilter, Registry>,
 }
 
+#[derive(Clone)]
 pub struct ConfigLoaderHandle {
     cfg: Arc<RwLock<model::config::Config>>,
 }
