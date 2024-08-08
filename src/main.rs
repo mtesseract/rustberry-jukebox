@@ -4,7 +4,7 @@ use std::sync::{Arc, RwLock};
 use anyhow::{Context, Result};
 use crossbeam_channel::{self, Receiver, Sender};
 use rustberry::effects::InterpreterState;
-use tracing::{error, info, warn};
+use tracing::{error, debug, info, warn};
 use tracing_subscriber::{filter, fmt, prelude::*, reload};
 
 use rustberry::components::config::ConfigLoader;
@@ -16,9 +16,6 @@ use rustberry::input_controller::{
     rfid_playback::rfid::PlaybackRequestTransmitterRfid,
     Input,
 };
-// use rustberry::led;
-//::{self, Blinker};
-// use rustberry::model::config::Config;
 
 use rustberry::player::Player;
 
@@ -34,6 +31,8 @@ async fn main() -> Result<()> {
         .init();
 
     info!("Starting application");
+
+    info!("Using configuration file: {}", DEFAULT_JUKEBOX_CONFIG_FILE);
     let config_loader = ConfigLoader::new(Path::new(DEFAULT_JUKEBOX_CONFIG_FILE), reload_handle)?;
     let config = config_loader.get();
 
@@ -45,21 +44,14 @@ async fn main() -> Result<()> {
     // Create Effects Channel and Interpreter.
     let mut interpreter =
         ProdInterpreter::new(config_loader.clone()).context("Creating production interpreter")?;
-    // let interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>> =
-    //     Arc::new(Box::new(interpreter));
 
-    // let blinker = Blinker::new(interpreter.clone()).context("Creating blinker")?;
-    // blinker.run_async(led::Cmd::Loop(Box::new(led::Cmd::Many(vec![
-    //     led::Cmd::On(Duration::from_millis(100)),
-    //     led::Cmd::Off(Duration::from_millis(100)),
-    // ]))));
-
+    info!("Waiting for interpreter readiness");
     interpreter
         .wait_until_ready()
         .context("Waiting for interpreter readiness")?;
     let interpreter_state = interpreter.interpreter_state.clone();
 
-    // Prepare input channels.
+    // Prepare input channel.
     let (inputs_tx, inputs_rx) = crossbeam_channel::bounded(10);
 
     info!("Creating Button Controller");
@@ -78,6 +70,7 @@ async fn main() -> Result<()> {
     let (effect_tx, effect_rx) = crossbeam_channel::bounded::<Effect>(50);
     tokio::task::spawn_blocking(move || {
         for effect in effect_rx {
+            debug!("interpreting effect {:?}", effect);
             if let Err(err) = interpreter.interprete(effect.clone()) {
                 error!("interpreting effect {:?} failed: {}", effect, err);
             }
@@ -106,6 +99,7 @@ fn run(
 ) -> Result<()> {
     let mut player = Player::new(effect_tx.clone(), config.clone(), tag_mapper, interpreter_state)?;
     for input_ev in input {
+        debug!("Processing winput event: {:?}", input_ev);
         let res = process_ev(config.clone(), &mut player, input_ev.clone(), effect_tx.clone());
         match res {
             Err(err) => {

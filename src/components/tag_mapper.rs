@@ -56,6 +56,7 @@ impl TagMapperConfiguration {
 
 impl TagMapper {
     fn refresh(&mut self) -> Result<()> {
+        debug!("Refreshing tag mapper");
         let content = match fs::read_to_string(&self.file) {
             Ok(cnt) => cnt,
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
@@ -95,6 +96,7 @@ impl TagMapper {
     }
 
     pub fn new_initialized(filename: &str) -> Result<TagMapperHandle> {
+        info!("Initializing tag mapper, using tag mapper configuration file {}", filename);
         let mut tag_mapper = Self::new(filename);
         tag_mapper.refresh()?;
         let handle = tag_mapper.handle();

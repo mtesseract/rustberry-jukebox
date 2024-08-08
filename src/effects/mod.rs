@@ -58,6 +58,7 @@ impl Interpreter for ProdInterpreter {
 
 impl ProdInterpreter {
     pub fn new(config_loader: ConfigLoaderHandle) -> Result<Self> {
+        info!("Creating production interpreter");
         let led_controller = Arc::new(Box::new(led::gpio_cdev::GpioCdev::new()?)
             as Box<dyn LedController + 'static + Send + Sync>);
         let file_player = FilePlayer::new(config_loader)?;
@@ -81,33 +82,38 @@ impl ProdInterpreter {
         })
     }
 
+    //
     // Effect implementations.
+    //
 
     fn play_continue(&mut self) -> Result<()> {
+        debug!("Interpreter: play/continue");
         self.file_player.cont()
     }
 
     fn play(&mut self, tag_conf: TagConf) -> Result<()> {
+        debug!("Interpreter: play");
         self.file_player
             .start_playback(&tag_conf.uris, Some(self.pause_state))
     }
 
     fn stop(&self) -> Result<()> {
+        debug!("Interpreter: stop");
         self.file_player.stop()
     }
 
     fn led_on(&self) -> Result<()> {
-        debug!("Switching LED on");
+        debug!("Interpreter: LED on");
         self.led_controller.switch_on(Led::Playback)
     }
 
     fn led_off(&self) -> Result<()> {
-        debug!("Switching LED off");
+        debug!("Interpreter: LED off");
         self.led_controller.switch_off(Led::Playback)
     }
 
     pub fn generic_command(&self, cmd: &str) -> Result<()> {
-        debug!("Executing command '{}'", &cmd);
+        debug!("Interpreter: Executing command '{}'", &cmd);
         let res = Command::new("/bin/sh").arg("-c").arg(&cmd).status();
         match res {
             Ok(exit_status) => {

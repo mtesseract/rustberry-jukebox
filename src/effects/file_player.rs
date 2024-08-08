@@ -21,6 +21,7 @@ pub struct FilePlayer {
 
 impl FilePlayer {
     pub fn queue(&self) -> Result<()> {
+        debug!("FilePlayer: queue");
         let path = if let Some(ref file_path) = self.file_path {
             file_path.clone()
         } else {
@@ -34,11 +35,13 @@ impl FilePlayer {
     }
 
     pub fn stop(&self) -> Result<()> {
+        debug!("FilePlayer: stop");
         self.sink.pause();
         Ok(())
     }
 
     pub fn cont(&self) -> Result<()> {
+        debug!("FilePlayer: cont");
         self.sink.play();
         Ok(())
     }
@@ -82,9 +85,9 @@ impl FilePlayer {
     }
 
     pub fn new(config_loader: ConfigLoaderHandle) -> Result<Self> {
+        info!("Creating new FilePlayer...");
         let config = config_loader.get();
         let base_dir = config.audio_base_directory;
-        info!("Creating new FilePlayer...");
         if let Err(err) = Self::display_devices_info() {
             warn!("Failed to list audio devices: {}", err);
         }
@@ -137,7 +140,7 @@ impl FilePlayer {
         uris: &[String],
         pause_state: Option<std::time::Duration>,
     ) -> Result<()> {
-        info!("Initiating playback for uris {:?}", uris);
+        info!("FilePlayer: initiating playback for uris {:?}", uris);
 
         if let Some(pause_state) = pause_state {
             warn!("Ignoring pause state: {:?}", pause_state);
