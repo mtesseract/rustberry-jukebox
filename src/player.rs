@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 use anyhow::Result;
 use crossbeam_channel::Sender;
 use serde::{Deserialize, Serialize};
-use tracing::{error, info};
+use tracing::{error, debug, info};
 
 use crate::components::config::ConfigLoaderHandle;
 use crate::components::rfid::Tag;
@@ -108,6 +108,7 @@ impl Player {
 
     // External entry point.
     pub fn pause_continue_command(&mut self) -> Result<()> {
+        debug!("Player: pause/continue");
         let state = self.state.clone();
         let res = self.handle_pause_continue_command();
         if let Err(err) = res {
@@ -117,9 +118,8 @@ impl Player {
             );
             return Err(err.into());
         } else if self.state.comparable() != state.comparable() {
-            info!("Player State Transition: {:?} -> {:?}", self.state, state);
+            info!("Player State Transition: {:?} -> {:?}", state, self.state);
         }
-        self.state = state;
         Ok(())
     }
 
@@ -197,6 +197,7 @@ impl Player {
 
     // External entry point.
     pub fn playback(&mut self, request: PlaybackRequest) -> Result<()> {
+        debug!("Player: playback");
         let state = self.state.clone();
         let res = self.handle_playback_command(request);
         if let Err(err) = res {
@@ -206,10 +207,9 @@ impl Player {
             );
             return Err(err.into());
         } else if self.state.comparable() != state.comparable() {
-            info!("Player State Transition: {:?} -> {:?}", self.state, state);
+            info!("Player State Transition: {:?} -> {:?}", state, self.state);
             // Self::playing_led(player.interpreter.clone(), state.is_playing());
         }
-        self.state = state;
         Ok(())
     }
 
