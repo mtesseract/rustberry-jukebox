@@ -33,8 +33,17 @@ async fn main() -> Result<()> {
     info!("Starting application");
 
     info!("Using configuration file: {}", DEFAULT_JUKEBOX_CONFIG_FILE);
-    let config_loader = ConfigLoader::new(Path::new(DEFAULT_JUKEBOX_CONFIG_FILE), reload_handle)?;
+    let config_loader = ConfigLoader::new(Path::new(DEFAULT_JUKEBOX_CONFIG_FILE), reload_handle.clone())?;
     let config = config_loader.get();
+
+    let mut fltr = filter::LevelFilter::INFO;
+    if config.debug {
+        fltr = filter::LevelFilter::TRACE;
+    }
+    info!("Updating log level to: {}", fltr);
+    if let Err(err) = reload_handle.modify(|filter| *filter = fltr) {
+        error!("Failed to update log level: {}", err);
+    }
 
     info!("Creating TagMapper");
     let tag_mapper = TagMapper::new_initialized(&config.tag_mapper_configuration_file)
