@@ -50,15 +50,8 @@ async fn main() -> Result<()> {
         .context("Creating tag_mapper")?;
     tag_mapper.debug_dump();
 
-    // Create Effects Channel and Interpreter.
-    let mut interpreter =
-        ProdInterpreter::new(config_loader.clone()).context("Creating production interpreter")?;
-
-    info!("Waiting for interpreter readiness");
-    interpreter
-        .wait_until_ready()
-        .context("Waiting for interpreter readiness")?;
-    let interpreter_state = interpreter.interpreter_state.clone();
+    let interpreter_state = Arc::new(RwLock::new(InterpreterState::new()));
+    let interpreter_state_copy = interpreter_state.clone();
 
     // Prepare input channel.
     let (inputs_tx, inputs_rx) = crossbeam_channel::bounded(10);
@@ -77,7 +70,16 @@ async fn main() -> Result<()> {
 
     // Effect interpreter.
     let (effect_tx, effect_rx) = crossbeam_channel::bounded::<Effect>(50);
+    let config_loader_copy = config_loader.clone();
     tokio::task::spawn_blocking(move || {
+        // Create Effects Channel and Interpreter.
+        let mut interpreter =
+            ProdInterpreter::new(config_loader_copy, interpreter_state_copy).context("Creating production interpreter").unwrap();
+
+        info!("Waiting for interpreter readiness");
+        interpreter
+            .wait_until_ready()
+            .context("Waiting for interpreter readiness").unwrap();
         for effect in effect_rx {
             debug!("interpreting effect {:?}", effect);
             if let Err(err) = interpreter.interprete(effect.clone()) {

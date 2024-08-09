@@ -27,6 +27,14 @@ pub struct InterpreterState {
     pub currently_playing: bool,
 }
 
+impl InterpreterState {
+    pub fn new() -> Self {
+        InterpreterState {
+            currently_playing: false,
+        }
+    }
+}
+
 pub struct ProdInterpreter {
     file_player: FilePlayer,
     led_controller: Arc<Box<dyn LedController + 'static + Send + Sync>>,
@@ -57,14 +65,11 @@ impl Interpreter for ProdInterpreter {
 }
 
 impl ProdInterpreter {
-    pub fn new(config_loader: ConfigLoaderHandle) -> Result<Self> {
+    pub fn new(config_loader: ConfigLoaderHandle, interpreter_state: Arc<RwLock<InterpreterState>>) -> Result<Self> {
         info!("Creating production interpreter");
         let led_controller = Arc::new(Box::new(led::gpio_cdev::GpioCdev::new()?)
             as Box<dyn LedController + 'static + Send + Sync>);
         let file_player = FilePlayer::new(config_loader)?;
-        let interpreter_state = Arc::new(RwLock::new(InterpreterState {
-            currently_playing: false,
-        }));
         let interpreter_state_copy = interpreter_state.clone();
         let sink = file_player.sink.clone();
         tokio::task::spawn_blocking(move || loop {

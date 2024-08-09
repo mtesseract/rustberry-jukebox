@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Context, Result};
 use cpal::traits::HostTrait;
-use rodio::{Device, DeviceTrait, Sink};
+use rodio::{Device, DeviceTrait, OutputStream, OutputStreamHandle, Sink};
 use std::convert::From;
 use std::fs::File;
 use std::io::BufReader;
@@ -15,6 +15,8 @@ pub struct FilePlayer {
     base_dir: PathBuf,
     pub sink: Arc<Sink>,
     file_path: Option<PathBuf>,
+    output_stream: OutputStream,
+    output_stream_handle: OutputStreamHandle,
 }
 
 // const FROM_BEGINNING: Duration = Duration::from_secs(0);
@@ -46,13 +48,6 @@ impl FilePlayer {
         self.sink.play();
         Ok(())
     }
-
-    // fn replay(&self) -> Result<()> {
-    //     self.sink.stop();
-    //     self.queue()?;
-    //     self.sink.play();
-    //     Ok(())
-    // }
 
     fn display_device_info(device: &Device) -> Result<()> {
         let name = device.name().unwrap_or_else(|_| "Unknown".to_string());
@@ -93,22 +88,28 @@ impl FilePlayer {
             warn!("Failed to list audio devices: {}", err);
         }
         let base_dir = PathBuf::from(base_dir);
-        let device = match config.audio_output_device {
-            Some(name) => Self::lookup_device_by_name(&name)
-                .with_context(|| "attempting to initiate playback")?,
-            None => rodio::default_output_device()
-                .with_context(|| "retrieving default audio output device")?,
-        };
-        debug!(
-            "Initiating playback via device: {:?}",
-            device.name().unwrap_or("(unknown)".to_string())
-        );
 
-        let sink = Sink::new(&device);
+        let (stream, stream_handle) = match config.audio_output_device {
+            Some(name) => {
+                let device = Self::lookup_device_by_name(&name)?;
+                debug!(
+                    "Initiating playback via device: {:?}",
+                    device.name().unwrap_or("(unknown)".to_string())
+                );
+                OutputStream::try_from_device(&device)?
+            }
+            None => {
+                OutputStream::try_default().with_context(|| "retrieving default audio output device")?
+            }
+        };
+
+        let sink = Sink::try_new(&stream_handle)?;
         let player = FilePlayer {
             base_dir,
             sink: Arc::new(sink),
             file_path: None,
+            output_stream: stream,
+            output_stream_handle: stream_handle,
         };
 
         Ok(player)
@@ -124,7 +125,8 @@ impl FilePlayer {
     }
 
     fn lookup_device_by_name(name: &str) -> Result<Device> {
-        let devices = rodio::devices().with_context(|| "retrieving list of audio devices")?;
+        let host = cpal::default_host();
+        let devices = host.output_devices().with_context(|| "retrieving list of audio devices")?;
         for device in devices {
             let device_name = device
                 .name()
