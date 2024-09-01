@@ -3,11 +3,11 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
 use std::sync::{Arc, RwLock};
-use tracing::info;
+use tracing::{debug, info, warn};
 
 type TagID = String;
 
-#[derive(Default, Debug, Deserialize, Clone, PartialEq)]
+#[derive(Default, Debug, Deserialize, Clone, Eq, PartialEq)]
 pub struct TagConf {
     pub uris: Vec<String>,
 }
@@ -56,8 +56,20 @@ impl TagMapperConfiguration {
 
 impl TagMapper {
     fn refresh(&mut self) -> Result<()> {
-        let content = fs::read_to_string(&self.file)
-            .with_context(|| format!("Reading tag_mapper configuration at {}", self.file))?;
+        debug!("Refreshing tag mapper");
+        let content = match fs::read_to_string(&self.file) {
+            Ok(cnt) => cnt,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                debug!("No tag mapper configuration found");
+                return Ok(());
+            }
+            Err(err) => {
+                return Err(err).with_context(|| {
+                    format!("Reading tag mapper configuration at '{}'", self.file)
+                });
+            }
+        };
+
         let conf: TagMapperConfiguration = serde_yaml::from_str(&content).with_context(|| {
             format!(
                 "YAML unmarshalling tag_mapper configuration at {}",
@@ -69,12 +81,12 @@ impl TagMapper {
         Ok(())
     }
 
-    pub fn handle(&self) -> TagMapperHandle {
+    fn handle(&self) -> TagMapperHandle {
         let conf = self.conf.clone();
         TagMapperHandle { conf }
     }
 
-    pub fn new(filename: &str) -> Self {
+    fn new(filename: &str) -> Self {
         let empty_conf = Arc::new(RwLock::new(TagMapperConfiguration::new()));
         let tag_mapper = TagMapper {
             file: filename.to_string(),
@@ -83,10 +95,18 @@ impl TagMapper {
         tag_mapper
     }
 
-    pub fn new_initialized(filename: &str) -> Result<TagMapper> {
+    pub fn new_initialized(filename: &str) -> Result<TagMapperHandle> {
+        info!("Initializing tag mapper, using tag mapper configuration file {}", filename);
         let mut tag_mapper = Self::new(filename);
         tag_mapper.refresh()?;
-        Ok(tag_mapper)
+        let handle = tag_mapper.handle();
+        let _join_handle = tokio::task::spawn_blocking(move || loop {
+            if let Err(err) = tag_mapper.refresh() {
+                warn!("reloading tag mapper failed: {}", err);
+            }
+            std::thread::sleep(std::time::Duration::from_secs(10));
+        });
+        Ok(handle)
     }
 }
 

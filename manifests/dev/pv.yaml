@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: jukebox-audio
+spec:
+  storageClassName: hostpath
+  capacity:
+    storage: 2Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: /tmp/jukebox-audio
+  persistentVolumeReclaimPolicy: Retain

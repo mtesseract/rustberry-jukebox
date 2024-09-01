@@ -1,75 +1,115 @@
-use anyhow::{Context, Result};
-use rodio::Sink;
+use anyhow::{anyhow, Context, Result};
+use cpal::traits::HostTrait;
+use rodio::{Device, DeviceTrait, OutputStream, OutputStreamHandle, Sink};
 use std::convert::From;
 use std::fs::File;
 use std::io::BufReader;
 use std::sync::Arc;
-use std::thread::{Builder, JoinHandle};
-use std::time::Duration;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
-use async_trait::async_trait;
-use crossbeam_channel::{self, Sender};
 use std::path::{Path, PathBuf};
-use tokio::runtime::Runtime;
-use tokio::task::spawn_blocking;
 
-use crate::player::{PauseState, PlaybackHandle};
+use crate::components::config::ConfigLoaderHandle;
 
 pub struct FilePlayer {
-    _handle: Option<JoinHandle<()>>,
     base_dir: PathBuf,
+    pub sink: Arc<Sink>,
+    file_path: Option<PathBuf>,
+    output_stream: OutputStream,
+    output_stream_handle: OutputStreamHandle,
 }
 
-pub struct FilePlaybackHandle {
-    _tx: Sender<()>,
-    sink: Arc<Sink>,
-    file_path: PathBuf,
-}
+// const FROM_BEGINNING: Duration = Duration::from_secs(0);
 
-const FROM_BEGINNING: Duration = Duration::from_secs(0);
-
-impl FilePlaybackHandle {
-    pub async fn queue(&self) -> Result<()> {
-        let filename = &self.file_path;
-        let file = BufReader::new(File::open(filename).unwrap());
-        let source =
-            spawn_blocking(move || rodio::Decoder::new(BufReader::new(file)).unwrap()).await?;
+impl FilePlayer {
+    pub fn queue(&self) -> Result<()> {
+        debug!("FilePlayer: queue");
+        let path = if let Some(ref file_path) = self.file_path {
+            file_path.clone()
+        } else {
+            warn!("cannot queue without file name");
+            return Ok(());
+        };
+        let file = BufReader::new(File::open(path).unwrap());
+        let source = rodio::Decoder::new(BufReader::new(file))?;
+        self.sink.stop();
         self.sink.append(source);
         Ok(())
     }
-}
 
-#[async_trait]
-impl PlaybackHandle for FilePlaybackHandle {
-    async fn is_complete(&self) -> Result<bool> {
-        Ok(self.sink.empty())
-    }
-
-    async fn stop(&self) -> Result<()> {
+    pub fn stop(&self) -> Result<()> {
+        debug!("FilePlayer: stop");
         self.sink.pause();
         Ok(())
     }
-    async fn cont(&self, _pause_state: PauseState) -> Result<()> {
+
+    pub fn cont(&self) -> Result<()> {
+        debug!("FilePlayer: cont");
         self.sink.play();
         Ok(())
     }
 
-    async fn replay(&self) -> Result<()> {
-        self.sink.stop();
-        self.queue().await?;
-        self.sink.play();
+    fn display_device_info(device: &Device) -> Result<()> {
+        let name = device.name().unwrap_or_else(|_| "Unknown".to_string());
+        info!("- audio output device: {}", name);
         Ok(())
     }
-}
 
-impl FilePlayer {
-    pub fn new(base_dir: &str) -> Result<Self> {
+    fn display_devices_info() -> Result<()> {
+        info!("Available output devices:");
+        let host = cpal::default_host();
+        let devices = host.output_devices()?;
+        if let Some(device) = host.default_output_device() {
+            if let Err(err) = Self::display_device_info(&device) {
+                warn!(
+                    "Failed to list device info for default device {:?}: {}",
+                    device.name(),
+                    err
+                );
+            }
+        }
+        for device in devices {
+            if let Err(err) = Self::display_device_info(&device) {
+                warn!(
+                    "Failed to list device info for device {:?}: {}",
+                    device.name(),
+                    err
+                );
+            }
+        }
+        Ok(())
+    }
+
+    pub fn new(config_loader: ConfigLoaderHandle) -> Result<Self> {
         info!("Creating new FilePlayer...");
+        let config = config_loader.get();
+        let base_dir = config.audio_base_directory;
+        if let Err(err) = Self::display_devices_info() {
+            warn!("Failed to list audio devices: {}", err);
+        }
         let base_dir = PathBuf::from(base_dir);
+
+        let (stream, stream_handle) = match config.audio_output_device {
+            Some(name) => {
+                let device = Self::lookup_device_by_name(&name)?;
+                debug!(
+                    "Initiating playback via device: {:?}",
+                    device.name().unwrap_or("(unknown)".to_string())
+                );
+                OutputStream::try_from_device(&device)?
+            }
+            None => {
+                OutputStream::try_default().with_context(|| "retrieving default audio output device")?
+            }
+        };
+
+        let sink = Sink::try_new(&stream_handle)?;
         let player = FilePlayer {
-            _handle: None,
             base_dir,
+            sink: Arc::new(sink),
+            file_path: None,
+            output_stream: stream,
+            output_stream_handle: stream_handle,
         };
 
         Ok(player)
@@ -84,16 +124,31 @@ impl FilePlayer {
         Ok(complete_fname)
     }
 
-    pub async fn start_playback(
-        &self,
+    fn lookup_device_by_name(name: &str) -> Result<Device> {
+        let host = cpal::default_host();
+        let devices = host.output_devices().with_context(|| "retrieving list of audio devices")?;
+        for device in devices {
+            let device_name = device
+                .name()
+                .with_context(|| "retrieving audio device name")?;
+            if device_name == name {
+                return Ok(device);
+            }
+        }
+        Err(anyhow!("audio device not found: {}", name))
+    }
+
+    pub fn start_playback(
+        &mut self,
         uris: &[String],
-        pause_state: Option<PauseState>,
-    ) -> Result<FilePlaybackHandle, anyhow::Error> {
-        info!("Initiating playback for uris {:?}", uris);
+        pause_state: Option<std::time::Duration>,
+    ) -> Result<()> {
+        info!("FilePlayer: initiating playback for uris {:?}", uris);
+
         if let Some(pause_state) = pause_state {
             warn!("Ignoring pause state: {:?}", pause_state);
         }
-        let device = rodio::default_output_device().unwrap();
+
         let file_name = match uris.first().cloned() {
             Some(uri) => uri,
             None => return Err(anyhow::Error::msg("TagConf is empty")),
@@ -102,34 +157,10 @@ impl FilePlayer {
             .complete_file_name(Path::new(file_name.as_str()))
             .with_context(|| format!("completing file name {}", file_name))?;
 
-        let (tx, rx) = crossbeam_channel::bounded(1);
-        let sink = Arc::new(Sink::new(&device));
-        let _handle = Builder::new()
-            .name("file-player".to_string())
-            .spawn(move || {
-                let rt = Runtime::new().unwrap();
-                let f = async {
-                    let _msg = rx.recv();
-                };
-                rt.block_on(f);
-            })
-            .unwrap();
+        self.file_path = Some(file_path);
 
-        let handle = FilePlaybackHandle {
-            _tx: tx, // Cancellation mechanism.
-            sink,
-            file_path: file_path,
-        };
-        handle
-            .queue()
-            .await
-            .context("queue method of player handle")?;
-        handle
-            .cont(PauseState {
-                pos: FROM_BEGINNING,
-            })
-            .await
-            .context("cont method of player handle")?;
-        Ok(handle)
+        self.queue().context("queue method of player handle")?;
+        self.cont().context("cont method of player handle")?;
+        Ok(())
     }
 }

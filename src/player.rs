@@ -1,73 +1,17 @@
-// use std::cell::RefCell;
-use std::fmt;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
-use anyhow::{Context, Result};
-use async_trait::async_trait;
-use crossbeam_channel::{Receiver, Sender};
+use anyhow::Result;
+use crossbeam_channel::Sender;
 use serde::{Deserialize, Serialize};
-use tracing::{error, debug, info, trace};
+use tracing::{error, debug, info};
 
+use crate::components::config::ConfigLoaderHandle;
 use crate::components::rfid::Tag;
 use crate::components::tag_mapper::{TagConf, TagMapperHandle};
-use crate::effects::Interpreter;
-use crate::led::Blinker;
+use crate::effects::{Effect, InterpreterState};
 
 pub use err::*;
-
-#[async_trait]
-pub trait PlaybackHandle {
-    async fn stop(&self) -> Result<()>;
-    async fn is_complete(&self) -> Result<bool>;
-    async fn cont(&self, pause_state: PauseState) -> Result<()>;
-    async fn replay(&self) -> Result<()>;
-}
-#[derive(Debug, Clone)]
-pub struct PauseState {
-    pub pos: Duration,
-}
-
-#[derive(Debug, Clone)]
-pub enum PlayerCommand {
-    PlaybackCommand {
-        tx: Sender<Result<bool, anyhow::Error>>,
-        request: PlaybackRequest,
-    },
-    PauseContinue {
-        tx: Sender<Result<bool, anyhow::Error>>,
-    },
-}
-
-// type StopPlayEffect = Box<dyn Fn() -> Result<(), anyhow::Error>>;
-pub type DynPlaybackHandle = Box<dyn PlaybackHandle + Send + Sync + 'static>;
-impl std::fmt::Debug for DynPlaybackHandle {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        write!(f, "DynPlaybackHandle")
-    }
-}
-
-impl fmt::Display for PlayerState {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            PlayerState::Idle => write!(f, "Idle"),
-            PlayerState::Playing {
-                tag_conf, offset, ..
-            } => write!(
-                f,
-                "Playing {{ tag_conf = {:?}, offset = {:?} }}",
-                tag_conf, offset
-            ),
-            PlayerState::Paused {
-                at, prev_tag_conf, ..
-            } => write!(
-                f,
-                "Paused {{ prev_tag_conf = {:?}, at = {:?} }}",
-                prev_tag_conf, at
-            ),
-        }
-    }
-}
 
 #[derive(Debug, Clone)]
 enum PlayerState {
@@ -76,10 +20,8 @@ enum PlayerState {
         tag_conf: TagConf,
         playing_since: std::time::Instant,
         offset: Duration,
-        handle: Arc<DynPlaybackHandle>,
     },
     Paused {
-        handle: Arc<DynPlaybackHandle>,
         at: std::time::Duration,
         prev_tag_conf: TagConf,
     },
@@ -107,15 +49,6 @@ impl PlayerState {
             },
         }
     }
-
-    pub fn is_playing(&self) -> bool {
-        use PlayerState::*;
-        match self {
-            Idle => false,
-            Playing { .. } => true,
-            Paused { .. } => false,
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -133,29 +66,11 @@ enum ComparablePlayerState {
 }
 
 pub struct Player {
-    interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
-    _blinker: Option<Blinker>,
+    effect_tx: Sender<Effect>,
     state: PlayerState,
-    rx: Receiver<PlayerCommand>,
-    config: Config,
+    config: ConfigLoaderHandle,
     tag_mapper: TagMapperHandle,
-}
-
-#[derive(Debug, Clone)]
-pub struct Config {
-    pub trigger_only_mode: bool,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Config {
-            trigger_only_mode: false,
-        }
-    }
-}
-
-pub struct PlayerHandle {
-    tx: Sender<PlayerCommand>,
+    interpreter_state: Arc<RwLock<InterpreterState>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -166,209 +81,177 @@ pub enum PlaybackRequest {
 
 pub type PlaybackResource = Tag;
 
-impl PlayerHandle {
-    pub fn playback(&self, request: PlaybackRequest) -> Result<bool> {
-        // Response channel.
-        let (tx, rx) = crossbeam_channel::bounded(1);
-
-        self.tx
-            .send(PlayerCommand::PlaybackCommand { tx, request })
-            .unwrap();
-        rx.recv()?
-    }
-
-    pub fn pause_continue(&self) -> Result<bool> {
-        let (tx, rx) = crossbeam_channel::bounded(1);
-
-        self.tx.send(PlayerCommand::PauseContinue { tx }).unwrap();
-        rx.recv()?
-    }
-}
-
 impl Player {
-    async fn play_resource(
-        interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
-        tag_conf: &TagConf,
-        pause_state: Option<PauseState>,
-    ) -> Result<Arc<DynPlaybackHandle>, anyhow::Error> {
-        let interpreter = interpreter.clone();
-        interpreter
-            .play(tag_conf.clone(), pause_state)
-            .await
-            .map(Arc::new)
-    }
-
-    fn playing_led(
-        interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
-        is_playing: bool,
-    ) {
-        let res = if is_playing {
-            interpreter.led_on()
-        } else {
-            interpreter.led_off()
-        };
-        if let Err(err) = res {
-            error!(
-                "Failed to switch LED {}: {}",
-                if is_playing { "on" } else { "off" },
-                err
-            );
+    fn play_resource(&self, tag_conf: &TagConf) -> Result<()> {
+        let effect = Effect::Play(tag_conf.clone());
+        if let Err(err) = self.effect_tx.send(effect.clone()) {
+            error!("Failed to send effect {:?}: {}", effect, err);
         }
-    }
-
-    async fn handle_pause_continue_command_tx(
-        interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
-        tx: Sender<Result<bool, anyhow::Error>>,
-        state: &mut PlayerState,
-        config: Arc<Config>,
-        tag_mapper: &TagMapperHandle,
-    ) -> Result<()> {
-        let res = Self::handle_pause_continue_command(interpreter, state, config, tag_mapper).await;
-        tx.send(res)?;
         Ok(())
     }
 
-    async fn handle_pause_continue_command(
-        interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
-        state: &mut PlayerState,
-        _config: Arc<Config>,
-        _tag_mapper: &TagMapperHandle,
-    ) -> Result<bool> {
-        let mut is_playing = false;
+    // fn playing_led(
+    //     &self,
+    //     is_playing: bool,
+    // ) -> Result<()> {
+
+    //    let effect =if is_playing {
+    //     Effect::LedOn
+    //     } else {
+    //         Effect::LedOff
+    //     };
+    //     if let Err(err) = self.effect_tx.send(effect.clone()) {
+    //         error!("Failed to send effect {:?}: {}", effect, err);
+    //     }
+    //     Ok(())
+    // }
+
+    // External entry point.
+    pub fn pause_continue_command(&mut self) -> Result<()> {
+        debug!("Player: pause/continue");
+        let state = self.state.clone();
+        let res = self.handle_pause_continue_command();
+        if let Err(err) = res {
+            error!(
+                "Player State Transition Failure: {}, staying in State {:?}",
+                err, &state
+            );
+            return Err(err.into());
+        } else if self.state.comparable() != state.comparable() {
+            info!("Player State Transition: {:?} -> {:?}", state, self.state);
+        }
+        Ok(())
+    }
+
+    fn handle_pause_continue_command(&mut self) -> Result<()> {
         use PlayerState::*;
 
-        match state.clone() {
+        match self.state.clone() {
             Idle => {}
 
-            Paused {
-                handle,
-                at,
-                prev_tag_conf,
-            } => {
-                let pause_state = PauseState { pos: at };
-
-                if let Err(err) = handle.cont(pause_state).await {
+            Paused { at, prev_tag_conf } => {
+                if let Err(err) = self.effect_tx.send(Effect::PlayContinue(at)) {
                     error!("Failed to continue playback: {}", err);
-                    return Err(err);
+                    return Err(err.into());
                 }
 
-                *state = Playing {
+                self.state = Playing {
                     playing_since: Instant::now(),
                     offset: at,
-                    handle,
                     tag_conf: prev_tag_conf,
                 };
-                is_playing = true;
             }
 
             Playing {
                 playing_since,
                 offset,
                 tag_conf,
-                handle,
             } => {
-                if handle.is_complete().await.unwrap_or(true) {
+                let interpreter_state = {
+                    let r = *self.interpreter_state.read().unwrap();
+                    r
+                };
+                let is_complete = !interpreter_state.currently_playing;
+
+                if is_complete {
                     // playback finished already, event should trigger new playback.
 
-                    if let Err(err) = handle.stop().await {
+                    if let Err(err) = self.effect_tx.send(Effect::Stop) {
                         error!("Failed to stop playback: {}", err);
-                        return Err(err);
+                        return Err(err.into());
                     }
 
-                    drop(handle);
-                    match Self::play_resource(interpreter.clone(), &tag_conf, None).await {
+                    match self.play_resource(&tag_conf) {
                         Err(err) => {
                             error!("Failed to initiate new playback: {}", err);
-                            *state = Idle;
+                            self.state = Idle;
                             return Err(err);
                         }
-                        Ok(handle) => {
-                            *state = Playing {
+                        Ok(_) => {
+                            self.state = Playing {
                                 playing_since: Instant::now(),
-                                handle,
                                 offset: Duration::from_secs(0),
                                 tag_conf,
                             };
-                            is_playing = true;
                         }
                     }
                 } else {
                     let played_pos = offset + playing_since.elapsed();
 
-                    if let Err(err) = handle.stop().await {
+                    if let Err(err) = self.effect_tx.send(Effect::Stop) {
                         error!("Failed to execute playback stop: {}", err);
-                        *state = Idle;
-                        return Err(err);
+                        self.state = Idle;
+                        return Err(err.into());
                     }
 
-                    *state = Paused {
+                    self.state = Paused {
                         prev_tag_conf: tag_conf.clone(),
                         at: played_pos,
-                        handle,
                     };
                 }
             }
         }
 
-        Self::playing_led(interpreter, is_playing);
-        Ok(is_playing)
-    }
-
-    async fn handle_playback_command_tx(
-        interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
-        request: PlaybackRequest,
-        tx: Sender<Result<bool, anyhow::Error>>,
-        state: &mut PlayerState,
-        config: Arc<Config>,
-        tag_mapper: &TagMapperHandle,
-    ) -> Result<()> {
-        let res =
-            Self::handle_playback_command(interpreter, request, state, config, tag_mapper).await;
-        tx.send(res)
-            .context("Sending result of handle_playback_command")?;
         Ok(())
     }
 
-    async fn handle_playback_command(
-        interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
-        request: PlaybackRequest,
-        state: &mut PlayerState,
-        config: Arc<Config>,
-        tag_mapper: &TagMapperHandle,
-    ) -> Result<bool> {
+    // External entry point.
+    pub fn playback(&mut self, request: PlaybackRequest) -> Result<()> {
+        debug!("Player: playback");
+        let state = self.state.clone();
+        let res = self.handle_playback_command(request);
+        if let Err(err) = res {
+            error!(
+                "Player State Transition Failure: {}, staying in State {:?}",
+                err, &state
+            );
+            return Err(err.into());
+        } else if self.state.comparable() != state.comparable() {
+            info!("Player State Transition: {:?} -> {:?}", state, self.state);
+            // Self::playing_led(player.interpreter.clone(), state.is_playing());
+        }
+        Ok(())
+    }
+
+    fn handle_playback_command(&mut self, request: PlaybackRequest) -> Result<()> {
         let mut is_playing = false;
         use PlayerState::*;
 
+        let config = self.config.get();
+        let interpreter_state = self.interpreter_state.read().unwrap();
+        let is_complete = !interpreter_state.currently_playing;
+
         info!(
-            "Player in state {} received playback command {:?}",
-            state, request
+            "Player in state {:?} received playback command {:?}",
+            self.state, request
         );
 
         match request {
             PlaybackRequest::Start(tag) => {
-                let tag_conf = tag_mapper.lookup(&tag.uid.to_string()).unwrap_or_default();
+                let tag_conf = self
+                    .tag_mapper
+                    .lookup(&tag.uid.to_string())
+                    .unwrap_or_default();
 
-                match state.clone() {
+                match self.state.clone() {
                     Idle => {
                         let offset = Duration::from_secs(0);
-                        match Self::play_resource(interpreter.clone(), &tag_conf, None).await {
+                        match self.play_resource(&tag_conf) {
                             Err(err) => {
                                 error!("Failed to initiate new playback: {}", err);
                                 return Err(err);
                             }
-                            Ok(handle) => {
-                                *state = Playing {
+                            Ok(_) => {
+                                self.state = Playing {
                                     playing_since: Instant::now(),
                                     offset,
-                                    handle,
                                     tag_conf,
                                 };
-                                is_playing = true;
                             }
                         }
                     }
 
-                    Playing { handle, .. } if !config.trigger_only_mode => {
+                    Playing { .. } if !config.trigger_only_mode => {
                         // This code path should atually not happen.
                         // It means that the player has received two consecutive Playback-Start-Requests,
                         // i.e. without a Playback-Stop-Request in between. The main application logic should
@@ -378,22 +261,20 @@ impl Player {
                         let offset = Duration::from_secs(0);
 
                         // Stop current playback.
-                        if let Err(err) = handle.stop().await {
+                        if let Err(err) = self.effect_tx.send(Effect::Stop) {
                             error!("Failed to stop playback: {}", err);
-                            return Err(err);
+                            return Err(err.into());
                         }
-                        drop(handle);
 
-                        match Self::play_resource(interpreter.clone(), &tag_conf, None).await {
+                        match self.play_resource(&tag_conf) {
                             Err(err) => {
                                 error!("Failed to initiate new playback: {}", err);
-                                *state = Idle;
+                                self.state = Idle;
                                 return Err(err);
                             }
-                            Ok(handle) => {
-                                *state = Playing {
+                            Ok(_) => {
+                                self.state = Playing {
                                     playing_since: Instant::now(),
-                                    handle,
                                     offset,
                                     tag_conf,
                                 };
@@ -404,56 +285,51 @@ impl Player {
 
                     Playing {
                         tag_conf: current_tag_conf,
-                        handle,
                         ..
                     } if config.trigger_only_mode && current_tag_conf != tag_conf => {
                         // Different RFID tag presented, replace playback.
 
-                        if let Err(err) = handle.stop().await {
+                        if let Err(err) = self.effect_tx.send(Effect::Stop) {
                             error!("Failed to stop playback: {}", err);
-                            return Err(err);
+                            return Err(err.into());
                         }
 
-                        drop(handle);
-                        match Self::play_resource(interpreter.clone(), &tag_conf, None).await {
+                        match self.play_resource(&tag_conf) {
                             Err(err) => {
                                 error!("Failed to initiate new playback: {}", err);
-                                *state = Idle;
+                                self.state = Idle;
                                 return Err(err);
                             }
-                            Ok(handle) => {
-                                *state = Playing {
+                            Ok(_) => {
+                                self.state = Playing {
                                     playing_since: Instant::now(),
-                                    handle,
                                     offset: Duration::from_secs(0),
                                     tag_conf,
                                 };
-                                is_playing = true;
+                                // is_playing = true;
                             }
                         }
                     }
 
-                    Playing { handle, .. } => {
+                    Playing { .. } => {
                         // Same resource presented while playing already, trigger playback if already completed,
                         // otherwise do nothing.
 
-                        if handle.is_complete().await.unwrap_or(true) {
-                            if let Err(err) = handle.stop().await {
+                        if is_complete {
+                            if let Err(err) = self.effect_tx.send(Effect::Stop) {
                                 error!("Failed to stop playback: {}", err);
-                                return Err(err);
+                                return Err(err.into());
                             }
 
-                            drop(handle);
-                            match Self::play_resource(interpreter.clone(), &tag_conf, None).await {
+                            match self.play_resource(&tag_conf) {
                                 Err(err) => {
                                     error!("Failed to initiate new playback: {}", err);
-                                    *state = Idle;
+                                    self.state = Idle;
                                     return Err(err);
                                 }
-                                Ok(handle) => {
-                                    *state = Playing {
+                                Ok(_) => {
+                                    self.state = Playing {
                                         playing_since: Instant::now(),
-                                        handle,
                                         offset: Duration::from_secs(0),
                                         tag_conf,
                                     };
@@ -463,90 +339,67 @@ impl Player {
                         is_playing = true;
                     }
 
-                    Paused {
-                        handle,
-                        at,
-                        prev_tag_conf,
-                    } if tag_conf == prev_tag_conf => {
+                    Paused { at, prev_tag_conf } if tag_conf == prev_tag_conf => {
                         // Currently paused, last resource is presented again, continue playing.
-                        if handle.is_complete().await.unwrap_or(true) {
-                            if let Err(err) = handle.stop().await {
+                        if is_complete {
+                            if let Err(err) = self.effect_tx.send(Effect::Stop) {
                                 error!("Failed to stop playback: {}", err);
-                                return Err(err);
+                                return Err(err.into());
                             }
-                            drop(handle);
-                            match Self::play_resource(interpreter.clone(), &tag_conf, None).await {
+                            match self.play_resource(&tag_conf) {
                                 Err(err) => {
                                     error!("Failed to initiate new playback: {}", err);
-                                    *state = Idle;
+                                    self.state = Idle;
                                     return Err(err);
                                 }
-                                Ok(handle) => {
-                                    *state = Playing {
+                                Ok(_) => {
+                                    self.state = Playing {
                                         playing_since: Instant::now(),
-                                        handle,
                                         offset: Duration::from_secs(0),
                                         tag_conf,
                                     };
                                 }
                             }
                         } else {
-                            let pause_state = PauseState { pos: at };
                             info!(
                                 "Same resource, not completed, continuing with pause state {:?}",
-                                &pause_state
+                                &at
                             );
-                            if let Err(err) = handle.cont(pause_state).await {
+                            if let Err(err) = self.effect_tx.send(Effect::PlayContinue(at)) {
                                 error!("Failed to continue playback: {}", err);
-                                *state = Paused {
-                                    handle,
-                                    at,
-                                    prev_tag_conf,
-                                };
-                                return Err(err);
+                                self.state = Paused { at, prev_tag_conf };
+                                return Err(err.into());
                             }
-                            *state = Playing {
+                            self.state = Playing {
                                 playing_since: Instant::now(),
                                 offset: at,
-                                handle,
                                 tag_conf,
                             };
                         }
                         is_playing = true;
                     }
 
-                    Paused {
-                        handle,
-                        at,
-                        prev_tag_conf,
-                    } => {
+                    Paused { at, prev_tag_conf } => {
                         // new resource
                         info!("New resource, playing from beginning");
-                        if let Err(err) = handle.stop().await {
+                        if let Err(err) = self.effect_tx.send(Effect::Stop) {
                             error!("Failed to stop playback: {}", err);
-                            *state = Paused {
-                                handle,
-                                at,
-                                prev_tag_conf,
-                            };
-                            return Err(err);
+                            self.state = Paused { at, prev_tag_conf };
+                            return Err(err.into());
                         }
 
-                        drop(handle);
-                        match Self::play_resource(interpreter.clone(), &tag_conf, None).await {
+                        match self.play_resource(&tag_conf) {
                             Err(err) => {
                                 error!("Failed to initiate new playback: {}", err);
-                                *state = Idle;
+                                self.state = Idle;
                                 return Err(err);
                             }
-                            Ok(handle) => {
-                                *state = Playing {
+                            Ok(_) => {
+                                self.state = Playing {
                                     playing_since: Instant::now(),
-                                    handle,
                                     offset: Duration::from_secs(0),
                                     tag_conf,
                                 };
-                                is_playing = true;
                             }
                         }
                     }
@@ -556,7 +409,7 @@ impl Player {
             PlaybackRequest::Stop => {
                 // RFID tag removed.
 
-                match state.clone() {
+                match self.state.clone() {
                     Idle => {}
 
                     Paused { .. } => {}
@@ -565,27 +418,24 @@ impl Player {
                         playing_since,
                         offset,
                         tag_conf,
-                        handle,
                     } => {
                         if config.trigger_only_mode {
                             is_playing = true;
                         } else {
-                            let is_completed = handle.is_complete().await.unwrap_or(true);
                             let played_pos = offset + playing_since.elapsed();
 
-                            if let Err(err) = handle.stop().await {
+                            if let Err(err) = self.effect_tx.send(Effect::Stop) {
                                 error!("Failed to execute playback pause: {}", err);
-                                *state = Idle;
-                                return Err(err);
+                                self.state = Idle;
+                                return Err(err.into());
                             }
 
-                            if is_completed {
-                                *state = Idle;
+                            if is_complete {
+                                self.state = Idle;
                             } else {
-                                *state = Paused {
+                                self.state = Paused {
                                     prev_tag_conf: tag_conf.clone(),
                                     at: played_pos,
-                                    handle,
                                 };
                             }
                         }
@@ -594,87 +444,24 @@ impl Player {
             }
         }
 
-        Ok(is_playing)
+        Ok(())
     }
 
-    async fn handle_command(
-        interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
-        cmd: PlayerCommand,
-        state: &mut PlayerState,
-        config: Arc<Config>,
-        tag_mapper: &TagMapperHandle,
-    ) -> Result<()> {
-        debug!("Player handling command {:?}", cmd);
-
-        match cmd {
-            PlayerCommand::PlaybackCommand { request, tx } => {
-                Self::handle_playback_command_tx(
-                    interpreter,
-                    request,
-                    tx,
-                    state,
-                    config,
-                    tag_mapper,
-                )
-                .await
-            }
-
-            PlayerCommand::PauseContinue { tx } => {
-                Self::handle_pause_continue_command_tx(interpreter, tx, state, config, tag_mapper)
-                    .await
-            }
-        }
-    }
-
-    async fn player_loop(mut player: Player) {
-        let config = Arc::new(player.config.clone());
-        let tag_mapper = player.tag_mapper.clone();
-        loop {
-            let command = player.rx.recv().unwrap();
-            debug!("Player command: {:?}", command);
-            let mut state = player.state.clone();
-            let res = Self::handle_command(
-                player.interpreter.clone(),
-                command,
-                &mut state,
-                config.clone(),
-                &tag_mapper,
-            )
-            .await;
-            if let Err(ref err) = res {
-                error!(
-                    "Player State Transition Failure: {}, staying in State {}",
-                    err, &state
-                );
-            } else if player.state.comparable() != state.comparable() {
-                info!("Player State Transition: {} -> {}", player.state, state);
-                Self::playing_led(player.interpreter.clone(), state.is_playing());
-            }
-            player.state = state;
-        }
-    }
-
+    // Creates a new Player object and returns a handle to it.
     pub fn new(
-        blinker: Option<Blinker>,
-        interpreter: Arc<Box<dyn Send + Sync + 'static + Interpreter>>,
-        config: Config,
+        effect_tx: Sender<Effect>,
+        config: ConfigLoaderHandle,
         tag_mapper: TagMapperHandle,
-    ) -> Result<PlayerHandle> {
-        let (tx, rx) = crossbeam_channel::bounded(1);
+        interpreter_state: Arc<RwLock<InterpreterState>>,
+    ) -> Result<Player> {
         let player = Player {
-            _blinker: blinker,
-            interpreter,
+            effect_tx,
             state: PlayerState::Idle,
-            rx,
             config,
             tag_mapper,
+            interpreter_state,
         };
-
-        tokio::spawn(Self::player_loop(player));
-
-        let player_handle = PlayerHandle { tx };
-
-        Ok(player_handle)
+        Ok(player)
     }
 }
 
@@ -706,54 +493,3 @@ pub mod err {
     }
     impl std::error::Error for Error {}
 }
-
-// #[cfg(test)]
-// mod test {
-//     use anyhow::Result;
-//     use tokio::runtime::Runtime;
-
-//     use super::*;
-//     use crate::effects::{test::TestInterpreter, Effects};
-//     use crate::player;
-
-//     #[test]
-//     fn player_plays_resource_on_playback_request() -> Result<()> {
-//         let runtime = runtime::Builder::new_multi_thread()
-//             .enable_all()
-//             .build()
-//             .unwrap();
-//         let (interpreter, effects_rx) = TestInterpreter::new();
-//         let interpreter =
-//             Arc::new(Box::new(interpreter) as Box<dyn Interpreter + Send + Sync + 'static>);
-//         let player_handle = Player::new(
-//             None,
-//             &runtime.handle(),
-//             interpreter,
-//             player::Config::default(),
-//         )
-//         .unwrap();
-//         let playback_requests = vec![
-//             PlaybackRequest::Start(PlaybackResource::SpotifyUri(
-//                 "spotify:track:5j6ZZwA9BnxZi5Bk0Ng4jB".to_string(),
-//             )),
-//             PlaybackRequest::Stop,
-//         ];
-//         let effects_expected = vec![
-//             Effects::PlaySpotify {
-//                 spotify_uri: "spotify:track:5j6ZZwA9BnxZi5Bk0Ng4jB".to_string(),
-//             },
-//             Effects::StopSpotify,
-//         ];
-//         for req in playback_requests.iter() {
-//             player_handle.playback(req.clone()).unwrap();
-//         }
-//         let produced_effects: Vec<_> = effects_rx
-//             .iter()
-//             .filter(|x| x.is_spotify_effect())
-//             .take(2)
-//             .collect();
-
-//         assert_eq!(produced_effects, effects_expected);
-//         Ok(())
-//     }
-// }

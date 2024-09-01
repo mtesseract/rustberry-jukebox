@@ -1,207 +1,165 @@
-use std::sync::Arc;
-use std::time::Duration;
-// use tokio::runtime::{self, };
+use std::path::Path;
+use std::sync::{Arc, RwLock};
 
 use anyhow::{Context, Result};
-use crossbeam_channel::{self, Receiver, Select};
-use tracing::{error, info, warn};
-use tracing_subscriber;
+use crossbeam_channel::{self, Receiver, Sender};
+use rustberry::effects::InterpreterState;
+use tracing::{error, debug, info, warn};
+use tracing_subscriber::{filter, fmt, prelude::*, reload};
 
-use rustberry::components::tag_mapper::TagMapper;
-use rustberry::config::Config;
-use rustberry::effects::{Interpreter, ProdInterpreter};
+use rustberry::components::config::ConfigLoader;
+use rustberry::components::config::ConfigLoaderHandle;
+use rustberry::components::tag_mapper::{TagMapper, TagMapperHandle};
+use rustberry::effects::{Effect, Interpreter, ProdInterpreter};
 use rustberry::input_controller::{
     button::{self, cdev_gpio::CdevGpio},
-    rfid_playback::{self, rfid::PlaybackRequestTransmitterRfid},
+    rfid_playback::rfid::PlaybackRequestTransmitterRfid,
     Input,
 };
-use rustberry::led::{self, Blinker};
-use rustberry::player::{self, Player};
+
+use rustberry::player::Player;
+
+const DEFAULT_JUKEBOX_CONFIG_FILE: &str = "/etc/jukebox/conf.yaml";
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    tracing_subscriber::fmt::init();
-    let config = envy::from_env::<Config>()?;
+    let filter = filter::LevelFilter::INFO;
+    let (filter, reload_handle) = reload::Layer::new(filter);
+    tracing_subscriber::registry()
+        .with(filter)
+        .with(fmt::Layer::default().with_writer(std::io::stderr))
+        .init();
+
     info!("Starting application");
+
+    info!("Using configuration file: {}", DEFAULT_JUKEBOX_CONFIG_FILE);
+    let config_loader = ConfigLoader::new(Path::new(DEFAULT_JUKEBOX_CONFIG_FILE), reload_handle.clone())?;
+    let config = config_loader.get();
+
+    let mut fltr = filter::LevelFilter::INFO;
+    if config.debug {
+        fltr = filter::LevelFilter::TRACE;
+    }
+    info!("Updating log level to: {}", fltr);
+    if let Err(err) = reload_handle.modify(|filter| *filter = fltr) {
+        error!("Failed to update log level: {}", err);
+    }
 
     info!("Creating TagMapper");
     let tag_mapper = TagMapper::new_initialized(&config.tag_mapper_configuration_file)
         .context("Creating tag_mapper")?;
-    let tag_mapper_handle = tag_mapper.handle();
-    tag_mapper_handle.debug_dump();
+    tag_mapper.debug_dump();
 
-    // Create Effects Channel and Interpreter.
-    let interpreter = ProdInterpreter::new(&config).context("Creating production interpreter")?;
-    let interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>> =
-        Arc::new(Box::new(interpreter));
+    let interpreter_state = Arc::new(RwLock::new(InterpreterState::new()));
+    let interpreter_state_copy = interpreter_state.clone();
 
-    let blinker = Blinker::new(interpreter.clone()).context("Creating blinker")?;
-    blinker.run_async(led::Cmd::Loop(Box::new(led::Cmd::Many(vec![
-        led::Cmd::On(Duration::from_millis(100)),
-        led::Cmd::Off(Duration::from_millis(100)),
-    ]))));
+    // Prepare input channel.
+    let (inputs_tx, inputs_rx) = crossbeam_channel::bounded(10);
 
-    interpreter
-        .wait_until_ready()
-        .context("Waiting for interpreter readiness")?;
-
-    // Prepare input channels.
     info!("Creating Button Controller");
-    let button_controller_handle: button::Handle<Input> =
-        CdevGpio::new_from_env().context("Creating button controller")?;
-    info!("Creating PlayBackRequestTransmitter");
-    let playback_controller_handle: rfid_playback::Handle<Input> =
-        PlaybackRequestTransmitterRfid::new().context("Creating playback controller")?;
+    let _button_controller_handle =
+        CdevGpio::new_from_env(inputs_tx.clone()).context("Creating button controller")?;
 
-    // Execute Application Logic, producing Effects.
-    let application = App::new(
-        config,
-        interpreter.clone(),
-        blinker,
-        &[
-            button_controller_handle.channel(),
-            playback_controller_handle.channel(),
-        ],
-        tag_mapper,
-    )
-    .context("Creating application object")?;
+    if config.enable_rfid_controller {
+        info!("Creating PlayBackRequestTransmitter");
+        let _playback_controller_handle = PlaybackRequestTransmitterRfid::new(inputs_tx.clone())
+            .context("Creating playback controller")?;
+    } else {
+        warn!("Skipping creation of PlayBackRequestTransmitter: RFID controller disabled.");
+    }
 
+    // Effect interpreter.
+    let (effect_tx, effect_rx) = crossbeam_channel::bounded::<Effect>(50);
+    let config_loader_copy = config_loader.clone();
+    tokio::task::spawn_blocking(move || {
+        // Create Effects Channel and Interpreter.
+        let mut interpreter =
+            ProdInterpreter::new(config_loader_copy, interpreter_state_copy).context("Creating production interpreter").unwrap();
+
+        info!("Waiting for interpreter readiness");
+        interpreter
+            .wait_until_ready()
+            .context("Waiting for interpreter readiness").unwrap();
+        for effect in effect_rx {
+            debug!("interpreting effect {:?}", effect);
+            if let Err(err) = interpreter.interprete(effect.clone()) {
+                error!("interpreting effect {:?} failed: {}", effect, err);
+            }
+        }
+    });
+
+    // Execute Application Logic.
     info!("Running application");
-    application
-        .run()
-        .context("Jukebox loop terminated, terminating application")?;
+    let _res = run(
+        config_loader,
+        inputs_rx,
+        effect_tx,
+        tag_mapper,
+        interpreter_state,
+    )
+    .unwrap();
     unreachable!();
 }
 
-struct App {
-    config: Config,
-    player: player::PlayerHandle,
-    interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>>,
-    inputs: Vec<Receiver<Input>>,
-    blinker: Blinker,
+fn run(
+    config: ConfigLoaderHandle,
+    input: Receiver<Input>,
+    effect_tx: Sender<Effect>,
+    tag_mapper: TagMapperHandle,
+    interpreter_state: Arc<RwLock<InterpreterState>>,
+) -> Result<()> {
+    let mut player = Player::new(effect_tx.clone(), config.clone(), tag_mapper, interpreter_state)?;
+    for input_ev in input {
+        debug!("Processing winput event: {:?}", input_ev);
+        let res = process_ev(config.clone(), &mut player, input_ev.clone(), effect_tx.clone());
+        match res {
+            Err(err) => {
+                error!("Failed to process input event {:?}: {}", input_ev, err);
+            }
+            Ok(effects) => {
+                for effect in effects {
+                    if let Err(err) = effect_tx.send(effect.clone()) {
+                        error!("Failed to send output effect {:?}: {}", effect, err);
+                    }
+                }
+            }
+        }
+    }
+    unreachable!()
 }
 
-impl App {
-    pub fn new(
-        config: Config,
-        interpreter: Arc<Box<dyn Interpreter + Sync + Send + 'static>>,
-        blinker: Blinker,
-        inputs: &[Receiver<Input>],
-        tag_mapper: TagMapper,
-    ) -> Result<Self> {
-        let player_config = player::Config {
-            trigger_only_mode: config.trigger_only_mode,
-        };
-        info!(
-            "Running in {} mode",
-            if player_config.trigger_only_mode {
-                "trigger-only"
-            } else {
-                "traditional"
+fn process_ev(
+    config_loader: ConfigLoaderHandle,
+    player: &mut Player,
+    input: Input,
+    _output: Sender<Effect>,
+) -> Result<Vec<Effect>> {
+    let config = config_loader.get();
+
+    match input {
+        Input::Button(cmd) => match cmd {
+            button::Command::VolumeUp => {
+                let cmd = config
+                    .volume_up_command
+                    .clone()
+                    .unwrap_or_else(|| "pactl set-sink-volume 0 +10%".to_string());
+                return Ok(vec![Effect::GenericCommand(cmd)]);
             }
-        );
-        let player = Player::new(
-            Some(blinker.clone()),
-            interpreter.clone(),
-            player_config,
-            tag_mapper.handle(),
-        )
-        .context("creating Player")?;
-        let app = Self {
-            config,
-            inputs: inputs.to_vec(),
-            player,
-            interpreter,
-            blinker,
-        };
-
-        Ok(app)
-    }
-
-    // Runs main application logic.
-    pub fn run(self) -> Result<()> {
-        self.blinker.run_async(led::Cmd::Repeat(
-            1,
-            Box::new(led::Cmd::Many(vec![
-                led::Cmd::On(Duration::from_secs(1)),
-                led::Cmd::Off(Duration::from_secs(0)),
-            ])),
-        ));
-        let mut sel = Select::new();
-        for r in &self.inputs {
-            sel.recv(r);
-        }
-
-        // Main loop is an event handler .
-        loop {
-            // Wait until a receive operation becomes ready and handle the event.
-            let index = sel.ready();
-            let res = self.inputs[index].try_recv();
-
-            match res {
-                Err(err) => {
-                    if err.is_empty() {
-                        // If the operation turns out not to be ready, retry.
-                        continue;
-                    } else {
-                        error!(
-                            "Failed to receive input event on channel {}: {}",
-                            index, err
-                        );
-                        // remove the channel.
-                        warn!("Not watching input channel {} any longer", index);
-                        sel.remove(index);
-                    }
-                }
-                Ok(input) => {
-                    self.blinker.stop();
-                    match input {
-                        Input::Button(cmd) => match cmd {
-                            button::Command::Shutdown => {
-                                let cmd = self
-                                    .config
-                                    .shutdown_command
-                                    .clone()
-                                    .unwrap_or_else(|| "sudo shutdown -h now".to_string());
-                                if let Err(err) = self.interpreter.generic_command(&cmd) {
-                                    error!("Failed to execute shutdown command '{}': {}", cmd, err);
-                                }
-                            }
-                            button::Command::VolumeUp => {
-                                let cmd =
-                                    self.config.volume_up_command.clone().unwrap_or_else(|| {
-                                        "pactl set-sink-volume 0 +10%".to_string()
-                                    });
-                                if let Err(err) = self.interpreter.generic_command(&cmd) {
-                                    error!(
-                                        "Failed to increase volume using command {}: {}",
-                                        cmd, err
-                                    );
-                                }
-                            }
-                            button::Command::VolumeDown => {
-                                let cmd =
-                                    self.config.volume_up_command.clone().unwrap_or_else(|| {
-                                        "pactl set-sink-volume 0 -10%".to_string()
-                                    });
-                                if let Err(err) = self.interpreter.generic_command(&cmd) {
-                                    error!("Failed to decrease volume: {}", err);
-                                }
-                            }
-                            button::Command::PauseContinue => {
-                                if let Err(err) = self.player.pause_continue() {
-                                    error!("Failed to execute pause_continue request: {}", err);
-                                }
-                            }
-                        },
-                        Input::Playback(request) => {
-                            if let Err(err) = self.player.playback(request.clone()) {
-                                error!("Failed to execute playback request {:?}: {}", request, err);
-                            }
-                        }
-                    }
-                }
-            };
+            button::Command::VolumeDown => {
+                let cmd = config
+                    .volume_up_command
+                    .clone()
+                    .unwrap_or_else(|| "pactl set-sink-volume 0 -10%".to_string());
+                return Ok(vec![Effect::GenericCommand(cmd)]);
+            }
+            button::Command::PauseContinue => {
+                player.pause_continue_command()?;
+                return Ok(vec![]);
+            }
+        },
+        Input::Playback(request) => {
+            player.playback(request.clone())?;
+            return Ok(vec![]);
         }
     }
 }

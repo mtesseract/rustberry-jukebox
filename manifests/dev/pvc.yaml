@@ -1,14 +1,13 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: jukebox-hotloading
-  namespace: koffer
+  name: jukebox-audio
   annotations:
     volumeType: local
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: 
+  volumeName: jukebox-audio
   resources:
     requests:
-      storage: 50Mi
+      storage: 1Gi
