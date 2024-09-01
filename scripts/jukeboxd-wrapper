@@ -1,9 +1,14 @@
 #!/bin/sh
 
 HOTLOADING_DIR="/var/run/jukeboxd/hotloading"
+LOG_FILE="${LOG_FILE:-}"
 
 if [ -e "${HOTLOADING_DIR}/jukeboxd" ]; then
 	cp "${HOTLOADING_DIR}/jukeboxd" /app/bin
 fi
 
-/app/bin/jukeboxd "$@"
+if [ -n "${LOG_FILE}" ]; then
+	/app/bin/jukeboxd "$@" 2>&1 | tee -a "${LOG_FILE}"
+else
+	/app/bin/jukeboxd "$@" 2>&1
+fi
