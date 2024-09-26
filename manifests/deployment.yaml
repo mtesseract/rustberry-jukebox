@@ -25,8 +25,12 @@ spec:
         - name: RUST_LOG
           value: info 
         volumeMounts:
+          - mountPath: /dev/snd
+            name: dev-snd
           - mountPath: /run/pulse
             name: pulseaudio-run
+          - mountPath: /etc/alsa/conf.d/99-pulseaudio-default.conf
+            name: alsa-etc
           - mountPath: /etc/pulse
             name: pulseaudio-etc
           - mountPath: /etc/jukebox
@@ -34,6 +38,12 @@ spec:
           - mountPath: /mnt/jukebox-audio
             name: jukebox-audio
       volumes:
+        - name: dev-snd
+          hostPath:
+            path: /dev/snd
+        - name: alsa-etc
+          hostPath:
+            path: /etc/alsa/conf.d/99-pulseaudio-default.conf.example
         - name: pulseaudio-etc
           hostPath:
             path: /etc/pulse
