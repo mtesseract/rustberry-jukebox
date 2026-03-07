@@ -1,5 +1,7 @@
+.envrc
+.DS_Store
 target/
-virtualization/
-out/
-Dockerfile*
+.devcontainer/
+.git/
+.github/
 
