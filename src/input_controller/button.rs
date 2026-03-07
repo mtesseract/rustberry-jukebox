@@ -108,7 +108,7 @@ pub mod cdev_gpio {
             info!("Listening for GPIO events on line {}", line_id);
             for event in line
                 .events(
-                    LineRequestFlags::INPUT,
+                    LineRequestFlags::INPUT | LineRequestFlags::BIAS_PULL_UP,
                     EventRequestFlags::FALLING_EDGE,
                     "read-input",
                 )
